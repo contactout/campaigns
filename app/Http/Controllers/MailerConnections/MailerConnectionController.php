@@ -68,7 +68,7 @@ class MailerConnectionController extends Controller
             'settings' => $request->settings(),
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Mailer connection created.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
 
         return back();
     }
@@ -90,7 +90,7 @@ class MailerConnectionController extends Controller
             'settings' => $request->settings(),
         ]);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Mailer connection updated.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
 
         return back();
     }
@@ -106,7 +106,7 @@ class MailerConnectionController extends Controller
 
         $deleteMailerConnection->handle($mailerConnection);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Mailer connection deleted.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection deleted.')]);
 
         return back();
     }
@@ -123,11 +123,11 @@ class MailerConnectionController extends Controller
         $verifyMailerConnection->handle($mailerConnection);
 
         if ($mailerConnection->status === MailerConnectionStatus::Active) {
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Mailer connection verified.')]);
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection verified.')]);
         } else {
             Inertia::flash('toast', [
                 'type' => 'error',
-                'message' => $mailerConnection->exception_data['message'] ?? __('Unable to verify the mailer connection.'),
+                'message' => $mailerConnection->exception_data['message'] ?? __('Unable to verify the connection.'),
             ]);
         }
 

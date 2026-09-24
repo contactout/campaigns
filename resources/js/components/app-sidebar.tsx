@@ -66,7 +66,7 @@ export function AppSidebar() {
             icon: PenLine,
         },
         {
-            title: 'Sending',
+            title: 'Connections',
             href: teamSlug ? mailerConnectionsIndex(teamSlug) : '/',
             icon: Mail,
         },

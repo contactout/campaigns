@@ -101,7 +101,7 @@ test('members can create a mailer connection with encrypted settings', function 
             'from_name' => 'Hello',
         ])
         ->assertRedirect()
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Mailer connection created.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connection created.']);
 
     $connection = MailerConnection::query()->where('team_id', $team->id)->firstOrFail();
 
@@ -155,7 +155,7 @@ test('updating a mailer connection merges settings and preserves a blank passwor
             'from_name' => 'New',
         ])
         ->assertRedirect()
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Mailer connection updated.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connection updated.']);
 
     $connection->refresh();
 
@@ -178,7 +178,7 @@ test('members can delete a mailer connection', function () {
             'mailerConnection' => $connection,
         ]))
         ->assertRedirect()
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Mailer connection deleted.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connection deleted.']);
 
     $this->assertDatabaseMissing('mailer_connections', ['id' => $connection->id]);
 });
@@ -237,7 +237,7 @@ test('verifying a reachable mailer connection marks it active and clears the err
             'mailerConnection' => $connection,
         ]))
         ->assertRedirect()
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Mailer connection verified.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connection verified.']);
 
     $connection->refresh();
 

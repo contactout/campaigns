@@ -73,7 +73,7 @@ export default function CreateCampaignModal({
                                 {mailerConnections.length > 0 ? (
                                     <div className="grid gap-2">
                                         <Label htmlFor="mailer_connection_id">
-                                            Sending connection
+                                            Connection
                                         </Label>
                                         <select
                                             id="mailer_connection_id"

@@ -66,15 +66,15 @@ export default function MailerConnectionsIndex({
 
     return (
         <>
-            <Head title="Sending connections" />
+            <Head title="Connections" />
 
-            <h1 className="sr-only">Sending connections</h1>
+            <h1 className="sr-only">Connections</h1>
 
             <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
-                        title="Sending connections"
+                        title="Connections"
                         description="SMTP, Gmail, or Outlook accounts used to send your campaigns"
                     />
 
@@ -329,7 +329,7 @@ MailerConnectionsIndex.layout = (props: {
 }) => ({
     breadcrumbs: [
         {
-            title: 'Sending connections',
+            title: 'Connections',
             href: props.currentTeam ? index(props.currentTeam.slug) : '/',
         },
     ],

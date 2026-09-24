@@ -165,7 +165,7 @@ test('google callback creates an active gmail connection', function () {
             'state' => 'valid-state',
         ]))
         ->assertRedirect(route('mailer-connections.index', ['current_team' => $team->slug]))
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Mailer connection connected.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connected.']);
 
     $connection = MailerConnection::query()->where('team_id', $team->id)->first();
 
@@ -284,7 +284,7 @@ test('microsoft callback creates an active outlook connection', function () {
             'state' => 'ms-state',
         ]))
         ->assertRedirect(route('mailer-connections.index', ['current_team' => $team->slug]))
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Mailer connection connected.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Connected.']);
 
     $connection = MailerConnection::query()->where('team_id', $team->id)->first();
 

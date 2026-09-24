@@ -91,7 +91,7 @@ class OAuthCallbackController extends Controller
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => __('Mailer connection connected.'),
+            'message' => __('Connected.'),
         ]);
 
         return redirect()->route('mailer-connections.index', ['current_team' => $team->slug]);
