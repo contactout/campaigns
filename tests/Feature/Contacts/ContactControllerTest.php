@@ -296,3 +296,148 @@ test('a contact from another team cannot be updated or deleted', function () {
         ->delete(route('contacts.destroy', ['current_team' => $team->slug, 'contact' => $otherContact]))
         ->assertNotFound();
 });
+
+test('members can update a single contact cell', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $contact = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
+
+    $route = route('contacts.cell', ['current_team' => $team->slug, 'contact' => $contact]);
+
+    $this->actingAs($user)
+        ->patch($route, ['field' => 'name', 'value' => 'Ada Byron'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect($contact->refresh()->name)->toBe('Ada Byron');
+
+    $this->actingAs($user)
+        ->patch($route, ['field' => 'timezone', 'value' => 'Europe/London'])
+        ->assertSessionHasNoErrors();
+
+    expect($contact->refresh()->timezone)->toBe('Europe/London');
+
+    $this->actingAs($user)
+        ->patch($route, ['field' => 'status', 'value' => ContactStatus::Contacted->value])
+        ->assertSessionHasNoErrors();
+
+    expect($contact->refresh()->status)->toBe(ContactStatus::Contacted);
+});
+
+test('members can update contact identity cells', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $contact = Contact::factory()->forTeam($team)->create();
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $contact->id,
+        'identity_type' => ContactIdentityType::Email,
+        'normalized_value' => 'old@example.com',
+    ]);
+
+    $route = route('contacts.cell', ['current_team' => $team->slug, 'contact' => $contact]);
+
+    $this->actingAs($user)
+        ->patch($route, ['field' => 'email', 'value' => 'NEW@Example.com'])
+        ->assertSessionHasNoErrors();
+
+    expect($contact->refresh()->email())->toBe('new@example.com')
+        ->and($contact->identities()->forType(ContactIdentityType::Email)->count())->toBe(1);
+
+    $this->actingAs($user)
+        ->patch($route, ['field' => 'phone', 'value' => '+1 (555) 123-4567'])
+        ->assertSessionHasNoErrors();
+
+    expect($contact->refresh()->phone())->toBe('15551234567')
+        ->and($contact->identities()->forType(ContactIdentityType::Phone)->count())->toBe(1);
+});
+
+test('clearing a contact phone cell deletes the phone identity', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $contact = Contact::factory()->forTeam($team)->create();
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $contact->id,
+        'identity_type' => ContactIdentityType::Phone,
+        'normalized_value' => '15551234567',
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('contacts.cell', ['current_team' => $team->slug, 'contact' => $contact]), [
+            'field' => 'phone',
+            'value' => '',
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect($contact->identities()->forType(ContactIdentityType::Phone)->count())->toBe(0);
+});
+
+test('a cell email must be unique within the team', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $existing = Contact::factory()->forTeam($team)->create();
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $existing->id,
+        'identity_type' => ContactIdentityType::Email,
+        'normalized_value' => 'duplicate@example.com',
+    ]);
+
+    $contact = Contact::factory()->forTeam($team)->create();
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $contact->id,
+        'identity_type' => ContactIdentityType::Email,
+        'normalized_value' => 'own@example.com',
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('contacts.cell', ['current_team' => $team->slug, 'contact' => $contact]), [
+            'field' => 'email',
+            'value' => 'Duplicate@Example.com',
+        ])
+        ->assertSessionHasErrors('value');
+
+    expect($contact->refresh()->email())->toBe('own@example.com');
+});
+
+test('a cell update requires a valid field', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->patch(route('contacts.cell', ['current_team' => $team->slug, 'contact' => $contact]), [
+            'field' => 'nope',
+            'value' => 'whatever',
+        ])
+        ->assertSessionHasErrors('field');
+});
+
+test('non members cannot update a contact cell', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->patch(route('contacts.cell', ['current_team' => $team->slug, 'contact' => $contact]), [
+            'field' => 'name',
+            'value' => 'Hacked',
+        ])
+        ->assertForbidden();
+});
+
+test('a contact from another team cannot have a cell updated', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $otherTeam = Team::factory()->create();
+    $otherContact = Contact::factory()->forTeam($otherTeam)->create();
+
+    $this->actingAs($user)
+        ->patch(route('contacts.cell', ['current_team' => $team->slug, 'contact' => $otherContact]), [
+            'field' => 'name',
+            'value' => 'Hacked',
+        ])
+        ->assertNotFound();
+});

@@ -8,6 +8,7 @@ Route::get('contacts', [ContactController::class, 'index'])->name('contacts.inde
 Route::post('contacts', [ContactController::class, 'store'])->name('contacts.store');
 Route::get('contacts/{contact}', [ContactController::class, 'show'])->name('contacts.show');
 Route::patch('contacts/{contact}', [ContactController::class, 'update'])->name('contacts.update');
+Route::patch('contacts/{contact}/cell', [ContactController::class, 'cell'])->name('contacts.cell');
 Route::delete('contacts/{contact}', [ContactController::class, 'destroy'])->name('contacts.destroy');
 
 Route::post('lists', [ContactListController::class, 'store'])->name('lists.store');

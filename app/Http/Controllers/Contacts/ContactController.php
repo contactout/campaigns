@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Contacts;
 use App\Actions\Contacts\CreateContact;
 use App\Actions\Contacts\DeleteContact;
 use App\Actions\Contacts\UpdateContact;
+use App\Actions\Contacts\UpdateContactCell;
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Contacts\StoreContactRequest;
+use App\Http\Requests\Contacts\UpdateContactCellRequest;
 use App\Http\Requests\Contacts\UpdateContactRequest;
 use App\Models\Contact;
 use App\Models\ContactIdentity;
@@ -19,6 +21,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -187,6 +190,26 @@ class ContactController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Contact updated.')]);
 
         return to_route('contacts.show', ['contact' => $contact]);
+    }
+
+    /**
+     * Update a single field on the given contact.
+     */
+    public function cell(UpdateContactCellRequest $request, Team $currentTeam, Contact $contact, UpdateContactCell $updateCell): RedirectResponse
+    {
+        $contact = Contact::forTeam($currentTeam->id)->findOrFail($contact->id);
+
+        Gate::authorize('update', $contact);
+
+        try {
+            $updateCell->handle($contact, $request->field(), $request->value());
+        } catch (ValidationException $exception) {
+            return back()->withErrors($exception->errors());
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Contact updated.')]);
+
+        return back();
     }
 
     /**

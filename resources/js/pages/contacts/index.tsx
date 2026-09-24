@@ -1,8 +1,9 @@
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import ContactStatusBadge from '@/components/contacts/contact-status-badge';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
+import InlineCell from '@/components/contacts/inline-cell';
+import InlineStatusCell from '@/components/contacts/inline-status-cell';
 import ListTabs from '@/components/contacts/list-tabs';
 import Heading from '@/components/heading';
 import Pagination from '@/components/pagination';
@@ -172,37 +173,59 @@ export default function ContactsIndex({
                                     <th className="border-b px-4 py-2 font-medium">
                                         Lists
                                     </th>
+                                    <th className="border-b px-4 py-2" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {contacts.data.map((contact) => (
                                     <tr
                                         key={contact.id}
-                                        className="cursor-pointer border-b hover:bg-muted/40"
+                                        className="border-b hover:bg-muted/20"
                                         data-test="contact-row"
-                                        onClick={() =>
-                                            router.visit(
-                                                show.url([slug, contact.id]),
-                                            )
-                                        }
                                     >
-                                        <td className="border-r px-4 py-2 font-medium">
-                                            {contact.name}
-                                        </td>
-                                        <td className="border-r px-4 py-2 text-muted-foreground">
-                                            {contact.email}
-                                        </td>
-                                        <td className="border-r px-4 py-2 text-muted-foreground">
-                                            {contact.phone}
-                                        </td>
-                                        <td className="border-r px-4 py-2">
-                                            <ContactStatusBadge
-                                                status={contact.status}
-                                                label={contact.status_label}
+                                        <td className="border-r px-2 py-1 font-medium">
+                                            <InlineCell
+                                                contactId={contact.id}
+                                                field="name"
+                                                value={contact.name}
+                                                placeholder="Add name"
                                             />
                                         </td>
-                                        <td className="px-4 py-2 text-muted-foreground">
+                                        <td className="border-r px-2 py-1 text-muted-foreground">
+                                            <InlineCell
+                                                contactId={contact.id}
+                                                field="email"
+                                                type="email"
+                                                value={contact.email}
+                                                placeholder="Add email"
+                                            />
+                                        </td>
+                                        <td className="border-r px-2 py-1 text-muted-foreground">
+                                            <InlineCell
+                                                contactId={contact.id}
+                                                field="phone"
+                                                value={contact.phone}
+                                                placeholder="Add phone"
+                                            />
+                                        </td>
+                                        <td className="border-r px-2 py-1">
+                                            <InlineStatusCell
+                                                contactId={contact.id}
+                                                status={contact.status}
+                                                label={contact.status_label}
+                                                statuses={statuses}
+                                            />
+                                        </td>
+                                        <td className="border-r px-4 py-1 text-muted-foreground">
                                             {contact.lists_count}
+                                        </td>
+                                        <td className="px-2 py-1 text-right">
+                                            <Link
+                                                href={show([slug, contact.id])}
+                                                className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                                            >
+                                                Open
+                                            </Link>
                                         </td>
                                     </tr>
                                 ))}
