@@ -1,6 +1,7 @@
 <?php
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\SendResult;
 use App\Enums\CampaignStatus;
 use App\Enums\ContactIdentityType;
 use App\Enums\EmailStatus;
@@ -32,13 +33,22 @@ class FakeCampaignMailer implements CampaignMailer
 
     public ?Throwable $exception = null;
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): void
+    public SendResult $result;
+
+    public function __construct(?SendResult $result = null)
+    {
+        $this->result = $result ?? new SendResult;
+    }
+
+    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
         $this->sent[] = compact('connection', 'to', 'subject', 'html');
+
+        return $this->result;
     }
 }
 
@@ -233,4 +243,22 @@ test('marks the email failed and deactivates the connection when sending throws'
         ->and($connection->threw_at)->not->toBeNull();
 
     expect($fake->sent)->toBeEmpty();
+});
+
+test('persists message_id and thread_id when the mailer returns them', function () {
+    $fake = new FakeCampaignMailer(new SendResult(
+        messageId: '<msg-123@example.com>',
+        threadId: 'thread-abc',
+    ));
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Sent)
+        ->and($email->message_id)->toBe('<msg-123@example.com>')
+        ->and($email->thread_id)->toBe('thread-abc');
 });

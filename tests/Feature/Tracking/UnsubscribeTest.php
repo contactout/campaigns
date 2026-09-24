@@ -1,6 +1,7 @@
 <?php
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\SendResult;
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
@@ -155,9 +156,11 @@ test('a subsequent send is skipped after the recipient unsubscribes', function (
         /** @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string}> */
         public array $sent = [];
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html): void
+        public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
         {
             $this->sent[] = compact('connection', 'to', 'subject', 'html');
+
+            return new SendResult;
         }
     };
 
@@ -180,9 +183,11 @@ test('an unsubscribed recipient status fails the email without sending', functio
         /** @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string}> */
         public array $sent = [];
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html): void
+        public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
         {
             $this->sent[] = compact('connection', 'to', 'subject', 'html');
+
+            return new SendResult;
         }
     };
 

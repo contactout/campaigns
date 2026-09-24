@@ -2,6 +2,7 @@
 
 namespace App\Contracts\Mail;
 
+use App\Data\SendResult;
 use App\Models\MailerConnection;
 
 /**
@@ -17,5 +18,5 @@ interface CampaignMailer
      *
      * @throws \Throwable When the provider rejects or cannot send the message.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): void;
+    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult;
 }

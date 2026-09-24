@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\SendResult;
 use App\Models\MailerConnection;
 
 /**
@@ -17,12 +18,21 @@ class RecordingCampaignMailer implements CampaignMailer
 
     public ?\Throwable $exception = null;
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): void
+    public SendResult $result;
+
+    public function __construct(?SendResult $result = null)
+    {
+        $this->result = $result ?? new SendResult;
+    }
+
+    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
         $this->sent[] = compact('connection', 'to', 'subject', 'html');
+
+        return $this->result;
     }
 }

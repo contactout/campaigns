@@ -87,7 +87,7 @@ class SendEmail implements ShouldQueue
         $html = $bodyBuilder->build($email, $html);
 
         try {
-            $mailer->send($connection, $to, $subject, $html);
+            $result = $mailer->send($connection, $to, $subject, $html);
         } catch (Throwable $exception) {
             $this->markFailed($email);
             $this->recordConnectionFailure($connection, $exception);
@@ -97,6 +97,15 @@ class SendEmail implements ShouldQueue
 
         $email->status = EmailStatus::Sent;
         $email->dispatched_at = now();
+
+        if ($result->messageId !== null && $result->messageId !== '') {
+            $email->message_id = $result->messageId;
+        }
+
+        if ($result->threadId !== null && $result->threadId !== '') {
+            $email->thread_id = $result->threadId;
+        }
+
         $email->save();
 
         $email->recipient->last_delivered_at = now();

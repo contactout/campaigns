@@ -35,4 +35,32 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL').'/oauth/google/callback'),
+        'scopes' => [
+            'openid',
+            'email',
+            'profile',
+            'https://www.googleapis.com/auth/gmail.send',
+            'https://www.googleapis.com/auth/gmail.readonly',
+        ],
+    ],
+
+    'microsoft' => [
+        'client_id' => env('MICROSOFT_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
+        'redirect' => env('MICROSOFT_REDIRECT_URI', env('APP_URL').'/oauth/microsoft/callback'),
+        'tenant' => env('MICROSOFT_TENANT', 'common'),
+        'scopes' => [
+            'openid',
+            'offline_access',
+            'profile',
+            'User.Read',
+            'Mail.Send',
+            'Mail.Read',
+        ],
+    ],
+
 ];

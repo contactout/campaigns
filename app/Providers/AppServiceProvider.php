@@ -3,9 +3,11 @@
 namespace App\Providers;
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Contracts\Mail\GmailApi;
 use App\Contracts\Mail\MailboxReader;
-use App\Services\Mail\ImapMailboxReader;
-use App\Services\Mail\SmtpCampaignMailer;
+use App\Services\Mail\CampaignMailerResolver;
+use App\Services\Mail\GoogleGmailApi;
+use App\Services\Mail\MailboxReaderResolver;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +21,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(CampaignMailer::class, SmtpCampaignMailer::class);
-        $this->app->bind(MailboxReader::class, ImapMailboxReader::class);
+        $this->app->bind(CampaignMailer::class, CampaignMailerResolver::class);
+        $this->app->bind(MailboxReader::class, MailboxReaderResolver::class);
+        $this->app->bind(GmailApi::class, GoogleGmailApi::class);
     }
 
     /**

@@ -5,18 +5,44 @@ import ConnectionFormModal from '@/components/mailer-connections/connection-form
 import DeleteConnectionModal from '@/components/mailer-connections/delete-connection-modal';
 import MailerConnectionStatusBadge from '@/components/mailer-connections/status-badge';
 import Heading from '@/components/heading';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { index, verify } from '@/routes/mailer-connections';
+import { redirect as oauthRedirect } from '@/routes/mailer-connections/oauth';
 import type { MailerConnection } from '@/types';
 
 type Props = {
     connections: MailerConnection[];
+    oauth: {
+        gmail: boolean;
+        outlook: boolean;
+    };
     can: {
         create: boolean;
     };
 };
 
-export default function MailerConnectionsIndex({ connections, can }: Props) {
+function isSmtp(connection: MailerConnection): boolean {
+    return connection.mailer_type === 'Smtp';
+}
+
+function serverLabel(connection: MailerConnection): string {
+    if (!isSmtp(connection)) {
+        return connection.mailer_type_label;
+    }
+
+    if (connection.host) {
+        return `${connection.host}:${connection.port ?? ''}`;
+    }
+
+    return '—';
+}
+
+export default function MailerConnectionsIndex({
+    connections,
+    oauth,
+    can,
+}: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
 
@@ -30,6 +56,10 @@ export default function MailerConnectionsIndex({ connections, can }: Props) {
     };
 
     const openEdit = (connection: MailerConnection) => {
+        if (!isSmtp(connection)) {
+            return;
+        }
+
         setEditing(connection);
         setFormOpen(true);
     };
@@ -45,13 +75,50 @@ export default function MailerConnectionsIndex({ connections, can }: Props) {
                     <Heading
                         variant="small"
                         title="Sending connections"
-                        description="SMTP accounts used to send your campaigns"
+                        description="SMTP, Gmail, or Outlook accounts used to send your campaigns"
                     />
 
                     {can.create ? (
-                        <Button onClick={openNew} data-test="connection-new">
-                            <Plus /> New connection
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {oauth.gmail ? (
+                                <Button
+                                    variant="secondary"
+                                    asChild
+                                    data-test="connection-gmail"
+                                >
+                                    <a
+                                        href={oauthRedirect.url([
+                                            slug,
+                                            'gmail',
+                                        ])}
+                                    >
+                                        Connect Gmail
+                                    </a>
+                                </Button>
+                            ) : null}
+                            {oauth.outlook ? (
+                                <Button
+                                    variant="secondary"
+                                    asChild
+                                    data-test="connection-outlook"
+                                >
+                                    <a
+                                        href={oauthRedirect.url([
+                                            slug,
+                                            'outlook',
+                                        ])}
+                                    >
+                                        Connect Outlook
+                                    </a>
+                                </Button>
+                            ) : null}
+                            <Button
+                                onClick={openNew}
+                                data-test="connection-new"
+                            >
+                                <Plus /> New SMTP
+                            </Button>
+                        </div>
                     ) : null}
                 </div>
 
@@ -59,12 +126,39 @@ export default function MailerConnectionsIndex({ connections, can }: Props) {
                     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center">
                         <h3 className="font-semibold">No connections yet</h3>
                         <p className="text-sm text-muted-foreground">
-                            Add an SMTP account to start sending campaigns.
+                            Connect Gmail or Outlook, or add an SMTP account to
+                            start sending campaigns.
                         </p>
                         {can.create ? (
-                            <Button className="mt-2" onClick={openNew}>
-                                <Plus /> New connection
-                            </Button>
+                            <div className="mt-2 flex flex-wrap justify-center gap-2">
+                                {oauth.gmail ? (
+                                    <Button variant="secondary" asChild>
+                                        <a
+                                            href={oauthRedirect.url([
+                                                slug,
+                                                'gmail',
+                                            ])}
+                                        >
+                                            Connect Gmail
+                                        </a>
+                                    </Button>
+                                ) : null}
+                                {oauth.outlook ? (
+                                    <Button variant="secondary" asChild>
+                                        <a
+                                            href={oauthRedirect.url([
+                                                slug,
+                                                'outlook',
+                                            ])}
+                                        >
+                                            Connect Outlook
+                                        </a>
+                                    </Button>
+                                ) : null}
+                                <Button onClick={openNew}>
+                                    <Plus /> New SMTP
+                                </Button>
+                            </div>
                         ) : null}
                     </div>
                 ) : (
@@ -74,6 +168,9 @@ export default function MailerConnectionsIndex({ connections, can }: Props) {
                                 <tr>
                                     <th className="px-4 py-2 font-medium">
                                         Name
+                                    </th>
+                                    <th className="px-4 py-2 font-medium">
+                                        Type
                                     </th>
                                     <th className="px-4 py-2 font-medium">
                                         Server
@@ -100,8 +197,13 @@ export default function MailerConnectionsIndex({ connections, can }: Props) {
                                         <td className="px-4 py-2 font-medium">
                                             {connection.name}
                                         </td>
+                                        <td className="px-4 py-2">
+                                            <Badge variant="outline">
+                                                {connection.mailer_type_label}
+                                            </Badge>
+                                        </td>
                                         <td className="px-4 py-2 text-muted-foreground">
-                                            {connection.host}:{connection.port}
+                                            {serverLabel(connection)}
                                         </td>
                                         <td className="px-4 py-2 text-muted-foreground">
                                             {connection.from_email}
@@ -145,31 +247,49 @@ export default function MailerConnectionsIndex({ connections, can }: Props) {
                                                         </Button>
                                                     )}
                                                 </Form>
+                                                {can.create &&
+                                                !isSmtp(connection) ? (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        asChild
+                                                    >
+                                                        <a
+                                                            href={oauthRedirect.url(
+                                                                [
+                                                                    slug,
+                                                                    connection.mailer_type.toLowerCase(),
+                                                                ],
+                                                            )}
+                                                        >
+                                                            Reconnect
+                                                        </a>
+                                                    </Button>
+                                                ) : null}
+                                                {can.create &&
+                                                isSmtp(connection) ? (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() =>
+                                                            openEdit(connection)
+                                                        }
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                ) : null}
                                                 {can.create ? (
-                                                    <>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() =>
-                                                                openEdit(
-                                                                    connection,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() =>
-                                                                setDeleting(
-                                                                    connection,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() =>
+                                                            setDeleting(
+                                                                connection,
+                                                            )
+                                                        }
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
                                                 ) : null}
                                             </div>
                                         </td>

@@ -12,6 +12,8 @@ use App\Http\Requests\MailerConnections\StoreMailerConnectionRequest;
 use App\Http\Requests\MailerConnections\UpdateMailerConnectionRequest;
 use App\Models\MailerConnection;
 use App\Models\Team;
+use App\Services\OAuth\GoogleOAuthClient;
+use App\Services\OAuth\MicrosoftOAuthClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -23,8 +25,12 @@ class MailerConnectionController extends Controller
     /**
      * Display a listing of the team's mailer connections.
      */
-    public function index(Request $request, Team $currentTeam): Response
-    {
+    public function index(
+        Request $request,
+        Team $currentTeam,
+        GoogleOAuthClient $google,
+        MicrosoftOAuthClient $microsoft,
+    ): Response {
         Gate::authorize('viewAny', [MailerConnection::class, $currentTeam]);
 
         $connections = MailerConnection::query()
@@ -37,6 +43,10 @@ class MailerConnectionController extends Controller
 
         return Inertia::render('mailer-connections/index', [
             'connections' => $connections,
+            'oauth' => [
+                'gmail' => $google->configured(),
+                'outlook' => $microsoft->configured(),
+            ],
             'can' => [
                 'create' => $request->user()->can('create', [MailerConnection::class, $currentTeam]),
             ],
@@ -144,8 +154,8 @@ class MailerConnectionController extends Controller
             'port' => $settings['port'] ?? null,
             'username' => $settings['username'] ?? null,
             'encryption' => $settings['encryption'] ?? null,
-            'from_email' => $settings['from_email'] ?? null,
-            'from_name' => $settings['from_name'] ?? null,
+            'from_email' => $settings['from_email'] ?? $settings['email'] ?? null,
+            'from_name' => $settings['from_name'] ?? $settings['name'] ?? null,
             'imap_host' => $settings['imap_host'] ?? null,
             'imap_port' => $settings['imap_port'] ?? null,
             'imap_username' => $settings['imap_username'] ?? null,

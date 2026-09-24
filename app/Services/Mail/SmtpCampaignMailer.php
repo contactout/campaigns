@@ -3,6 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\SendResult;
 use App\Models\MailerConnection;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\Transport;
@@ -22,7 +23,7 @@ class SmtpCampaignMailer implements CampaignMailer
      *
      * @throws TransportExceptionInterface When the message cannot be sent.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): void
+    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
     {
         $settings = $connection->smtp_setting ?? [];
 
@@ -36,6 +37,8 @@ class SmtpCampaignMailer implements CampaignMailer
             ->html($html);
 
         Transport::fromDsn($this->dsn($settings))->send($email);
+
+        return new SendResult;
     }
 
     /**

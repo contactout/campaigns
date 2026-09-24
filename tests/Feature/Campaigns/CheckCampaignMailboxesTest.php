@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\MailerConnectionStatus;
+use App\Enums\MailerType;
 use App\Jobs\Campaigns\CheckConnectionMailbox;
 use App\Models\MailerConnection;
 use App\Models\Team;
@@ -47,6 +48,42 @@ test('the command dispatches a check for each eligible connection', function () 
     Queue::assertPushed(
         CheckConnectionMailbox::class,
         fn (CheckConnectionMailbox $job): bool => $job->mailerConnection->is($eligible),
+    );
+});
+
+test('the command dispatches active gmail connections without an imap host', function () {
+    Queue::fake();
+
+    $team = Team::factory()->create();
+
+    $gmail = MailerConnection::factory()->forTeam($team)->create([
+        'status' => MailerConnectionStatus::Active,
+        'mailer_type' => MailerType::Gmail,
+        'smtp_setting' => [
+            'email' => 'user@gmail.com',
+            'from_email' => 'user@gmail.com',
+            'access_token' => 'token',
+            'refresh_token' => 'refresh',
+        ],
+    ]);
+
+    MailerConnection::factory()->forTeam($team)->create([
+        'status' => MailerConnectionStatus::Active,
+        'mailer_type' => MailerType::Smtp,
+        'smtp_setting' => [
+            'host' => 'smtp.example.com',
+            'from_email' => 'smtp@example.com',
+        ],
+    ]);
+
+    $this->artisan('campaigns:check-mailboxes')
+        ->expectsOutputToContain('Dispatched 1 mailbox check(s).')
+        ->assertSuccessful();
+
+    Queue::assertPushed(CheckConnectionMailbox::class, 1);
+    Queue::assertPushed(
+        CheckConnectionMailbox::class,
+        fn (CheckConnectionMailbox $job): bool => $job->mailerConnection->is($gmail),
     );
 });
 

@@ -128,25 +128,25 @@ owner is the team; `user_id` on a campaign records who created it.
 
 ## 5. Scope — in / deferred / out
 
-| Area                                                         | Decision      | Notes                                             |
-| ------------------------------------------------------------ | ------------- | ------------------------------------------------- |
-| Campaign CRUD (draft/show/edit/start/stop/archive/duplicate) | **In**        | Core                                              |
-| Campaign steps ("touches") + scheduling/timezone             | **In**        | Core; email steps first                           |
-| Recipients: manual add, CSV import, grid, status             | **In**        | Core                                              |
-| Templates + folders + placeholders + signatures              | **In**        | Core                                              |
-| Mailer connections: **SMTP/IMAP**                            | **In**        | Self-hostable, OSS-friendly                       |
-| Sending engine (jobs, rate limits, scheduling, threads)      | **In**        | Hardest phase                                     |
-| Tracking: open pixel, link click, unsubscribe                | **In**        | Core                                              |
-| Reply/bounce detection (IMAP polling)                        | **In**        | Needs IMAP mailer                                 |
-| Gmail API + Microsoft Graph mailers                          | **Deferred**  | Needs own OAuth apps/creds                        |
-| Contacts + lists CRM subsystem (source "sheets")             | **In**        | Later phase; contacts/identities/properties/lists |
-| Non-email steps (call, LinkedIn, manual)                     | **Out of v1** | Email-only product; model stays email-only        |
-| AI composer / personalization (OpenAI/Prism)                 | **Out of v1** | Optional adapter later, off by default            |
-| Spam-test (provider inboxes)                                 | **Out of v1** | External/paid infra; content scan only            |
-| SMS via Dialer/Telnyx                                        | **Out**       | Proprietary module; not portable                  |
-| Lead/lists/extension "add to campaign"                       | **Out**       | ContactOut ecosystem                              |
-| Admin panel, sales dashboard, feature/billing gates          | **Out**       | Not open-source relevant                          |
-| Marketing static "email campaigns" page                      | **In (last)** | Public-facing, low risk                           |
+| Area                                                         | Decision      | Notes                                                  |
+| ------------------------------------------------------------ | ------------- | ------------------------------------------------------ |
+| Campaign CRUD (draft/show/edit/start/stop/archive/duplicate) | **In**        | Core                                                   |
+| Campaign steps ("touches") + scheduling/timezone             | **In**        | Core; email steps first                                |
+| Recipients: manual add, CSV import, grid, status             | **In**        | Core                                                   |
+| Templates + folders + placeholders + signatures              | **In**        | Core                                                   |
+| Mailer connections: **SMTP/IMAP**                            | **In**        | Self-hostable, OSS-friendly                            |
+| Sending engine (jobs, rate limits, scheduling, threads)      | **In**        | Hardest phase                                          |
+| Tracking: open pixel, link click, unsubscribe                | **In**        | Core                                                   |
+| Reply/bounce detection (IMAP polling)                        | **In**        | Needs IMAP mailer                                      |
+| Gmail API + Microsoft Graph mailers                          | **In**        | BYO OAuth apps via `.env` (`GOOGLE_*` / `MICROSOFT_*`) |
+| Contacts + lists CRM subsystem (source "sheets")             | **In**        | Later phase; contacts/identities/properties/lists      |
+| Non-email steps (call, LinkedIn, manual)                     | **Out of v1** | Email-only product; model stays email-only             |
+| AI composer / personalization (OpenAI/Prism)                 | **Out of v1** | Optional adapter later, off by default                 |
+| Spam-test (provider inboxes)                                 | **Out of v1** | External/paid infra; content scan only                 |
+| SMS via Dialer/Telnyx                                        | **Out**       | Proprietary module; not portable                       |
+| Lead/lists/extension "add to campaign"                       | **Out**       | ContactOut ecosystem                                   |
+| Admin panel, sales dashboard, feature/billing gates          | **Out**       | Not open-source relevant                               |
+| Marketing static "email campaigns" page                      | **In (last)** | Public-facing, low risk                                |
 
 Decisions are recorded in §14.
 
@@ -260,7 +260,7 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 
 ### Phase 5 — Mailer connections + sending engine
 
-- SMTP/IMAP connection CRUD + connectivity check (no Gmail/Outlook yet).
+- SMTP/IMAP connection CRUD + connectivity check; Gmail/Outlook OAuth (BYO apps).
 - Port the send pipeline, simplified: `SendEmail`, `ScheduleStepJob`,
   `ScheduleRecipientStep`, `CheckEmailStatus`, rate limiting/sending limits.
 - Scheduler via `routes/console.php` / `app/Console`.
@@ -283,8 +283,8 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 
 ### Deferred backlog
 
-Gmail API + Microsoft Graph mailers, AI composer, non-email steps (call/LinkedIn/manual),
-spam-test, SMS, additional team roles for campaigns (beyond team tenancy).
+AI composer, non-email steps (call/LinkedIn/manual), spam-test, SMS, additional team
+roles for campaigns (beyond team tenancy).
 
 ---
 
