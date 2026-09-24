@@ -208,12 +208,14 @@ export default function CampaignShow({
                     </Alert>
                 ) : null}
 
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                     <StatCard label="Steps" value={stats.steps_count} />
                     <StatCard
                         label="Recipients"
                         value={stats.recipients_count}
                     />
+                    <StatCard label="Sent" value={stats.emails_sent} />
+                    <StatCard label="Failed" value={stats.emails_failed} />
                     <StatCard label="Timezone" value={campaign.timezone} />
                 </div>
 

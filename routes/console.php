@@ -3,6 +3,8 @@
 use App\Models\TeamInvitation;
 use Illuminate\Support\Facades\Schedule;
 
+Schedule::command('campaigns:dispatch-due')->everyMinute()->withoutOverlapping();
+
 Schedule::call(function () {
     TeamInvitation::query()
         ->whereNotNull('expires_at')

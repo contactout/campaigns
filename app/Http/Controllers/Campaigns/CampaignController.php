@@ -10,6 +10,7 @@ use App\Actions\Campaigns\StartCampaign;
 use App\Actions\Campaigns\StopCampaign;
 use App\Actions\Campaigns\UpdateCampaign;
 use App\Enums\CampaignStatus;
+use App\Enums\EmailStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Campaigns\StoreCampaignRequest;
 use App\Http\Requests\Campaigns\UpdateCampaignRequest;
@@ -224,6 +225,8 @@ class CampaignController extends Controller
             'stats' => [
                 'steps_count' => $campaign->steps->count(),
                 'recipients_count' => $campaign->recipients()->count(),
+                'emails_sent' => $campaign->emails()->where('status', EmailStatus::Sent)->count(),
+                'emails_failed' => $campaign->emails()->where('status', EmailStatus::Failed)->count(),
             ],
             'recipients' => $recipients,
             'availableContacts' => $availableContacts,

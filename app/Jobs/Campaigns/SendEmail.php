@@ -1,0 +1,135 @@
+<?php
+
+namespace App\Jobs\Campaigns;
+
+use App\Contracts\Mail\CampaignMailer;
+use App\Enums\CampaignStatus;
+use App\Enums\EmailStatus;
+use App\Enums\MailerConnectionStatus;
+use App\Models\CampaignEmail;
+use App\Models\MailerConnection;
+use App\Services\Mail\CampaignStepScheduler;
+use App\Services\Mail\PlaceholderRenderer;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+use Throwable;
+
+class SendEmail implements ShouldQueue
+{
+    use Queueable;
+
+    /**
+     * The number of times the job may be attempted.
+     *
+     * Failures are recorded on the email and connection instead of relying on
+     * queue retries.
+     */
+    public int $tries = 1;
+
+    /**
+     * Create a new job instance.
+     */
+    public function __construct(public CampaignEmail $email) {}
+
+    /**
+     * Send the campaign email and advance the recipient to the next step.
+     */
+    public function handle(
+        CampaignStepScheduler $scheduler,
+        PlaceholderRenderer $renderer,
+        CampaignMailer $mailer,
+    ): void {
+        $email = $this->email->load([
+            'campaign.mailerConnection',
+            'step',
+            'recipient.contact.emailIdentity',
+            'recipient.contact.phoneIdentity',
+            'recipient.contact.properties',
+            'mailerConnection',
+        ]);
+
+        if ($email->campaign->status !== CampaignStatus::Active) {
+            return;
+        }
+
+        $connection = $email->mailerConnection ?? $email->campaign->mailerConnection;
+
+        if (! $connection instanceof MailerConnection || $connection->status !== MailerConnectionStatus::Active) {
+            $this->markFailed($email);
+
+            return;
+        }
+
+        if ($this->isRateLimited($connection)) {
+            $email->scheduled_at = now()->addMinutes(15);
+            $email->save();
+
+            $connection->rate_limit_expired_at = now();
+            $connection->save();
+
+            return;
+        }
+
+        $to = (string) ($email->recipient->contact->email() ?? '');
+
+        if ($to === '') {
+            $this->markFailed($email);
+
+            return;
+        }
+
+        $subject = $renderer->render($email->step->subject, $email->recipient);
+        $html = $renderer->render($email->step->body, $email->recipient);
+
+        try {
+            $mailer->send($connection, $to, $subject, $html);
+        } catch (Throwable $exception) {
+            $this->markFailed($email);
+            $this->recordConnectionFailure($connection, $exception);
+
+            return;
+        }
+
+        $email->status = EmailStatus::Sent;
+        $email->dispatched_at = now();
+        $email->save();
+
+        $email->recipient->last_delivered_at = now();
+        $email->recipient->save();
+
+        $connection->increment('sent_count');
+
+        $scheduler->scheduleNextStep($email);
+    }
+
+    /**
+     * Determine whether the connection has hit its sending limit.
+     */
+    private function isRateLimited(MailerConnection $connection): bool
+    {
+        return $connection->sending_limit !== null
+            && $connection->sent_count >= $connection->sending_limit;
+    }
+
+    /**
+     * Mark the email as failed.
+     */
+    private function markFailed(CampaignEmail $email): void
+    {
+        $email->status = EmailStatus::Failed;
+        $email->save();
+    }
+
+    /**
+     * Deactivate the connection and record why it failed.
+     */
+    private function recordConnectionFailure(MailerConnection $connection, Throwable $exception): void
+    {
+        $connection->fill([
+            'status' => MailerConnectionStatus::Deactivated,
+            'exception_type' => $exception::class,
+            'exception_data' => ['message' => $exception->getMessage()],
+            'threw_at' => now(),
+        ])->save();
+    }
+}

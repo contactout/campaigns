@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EmailStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\CampaignEmailFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,11 +25,11 @@ use Illuminate\Support\Carbon;
  * @property EmailStatus $status
  * @property array<string, mixed>|null $data
  * @property int $reply_count
- * @property Carbon|null $scheduled_at
- * @property Carbon|null $dispatched_at
- * @property Carbon|null $delivered_at
- * @property Carbon|null $opened_at
- * @property Carbon|null $replied_at
+ * @property CarbonImmutable|null $scheduled_at
+ * @property CarbonImmutable|null $dispatched_at
+ * @property CarbonImmutable|null $delivered_at
+ * @property CarbonImmutable|null $opened_at
+ * @property CarbonImmutable|null $replied_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Campaign $campaign

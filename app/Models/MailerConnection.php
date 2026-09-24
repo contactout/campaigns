@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
+use Carbon\CarbonImmutable;
 use Database\Factories\MailerConnectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,11 +25,11 @@ use Illuminate\Support\Carbon;
  * @property MailerConnectionStatus $status
  * @property string|null $exception_type
  * @property array<string, mixed>|null $exception_data
- * @property Carbon|null $threw_at
- * @property Carbon|null $rate_limit_expired_at
+ * @property CarbonImmutable|null $threw_at
+ * @property CarbonImmutable|null $rate_limit_expired_at
  * @property int|null $sending_limit
  * @property int $sent_count
- * @property Carbon|null $sending_limit_refreshed_at
+ * @property CarbonImmutable|null $sending_limit_refreshed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team

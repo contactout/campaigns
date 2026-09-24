@@ -43,6 +43,8 @@ export type CampaignStep = {
 export type CampaignStats = {
     steps_count: number;
     recipients_count: number;
+    emails_sent: number;
+    emails_failed: number;
 };
 
 export type CampaignPermissions = {

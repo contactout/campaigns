@@ -3,6 +3,7 @@
 namespace App\Actions\Campaigns;
 
 use App\Enums\CampaignStatus;
+use App\Jobs\Campaigns\SeedCampaignEmails;
 use App\Models\Campaign;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
@@ -10,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 class StartCampaign
 {
     /**
-     * Start the given campaign.
+     * Start the given campaign and queue its first-step emails.
      *
      * @throws ValidationException when the campaign cannot be started.
      */
@@ -25,6 +26,8 @@ class StartCampaign
         $campaign->status = CampaignStatus::Active;
         $campaign->started_at = CarbonImmutable::now();
         $campaign->save();
+
+        SeedCampaignEmails::dispatch($campaign);
 
         return $campaign;
     }

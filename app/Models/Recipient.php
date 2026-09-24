@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\RecipientStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\RecipientFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,9 +23,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $source
  * @property array<string, mixed>|null $placeholders
  * @property int $sequence
- * @property Carbon|null $next_scheduled_at
- * @property Carbon|null $last_responded_at
- * @property Carbon|null $last_delivered_at
+ * @property CarbonImmutable|null $next_scheduled_at
+ * @property CarbonImmutable|null $last_responded_at
+ * @property CarbonImmutable|null $last_delivered_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Campaign $campaign
