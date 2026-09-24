@@ -6,8 +6,11 @@ use App\Contracts\Mail\CampaignMailer;
 use App\Enums\CampaignStatus;
 use App\Enums\EmailStatus;
 use App\Enums\MailerConnectionStatus;
+use App\Enums\RecipientStatus;
 use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
+use App\Models\Unsubscribe;
+use App\Services\Mail\CampaignBodyBuilder;
 use App\Services\Mail\CampaignStepScheduler;
 use App\Services\Mail\PlaceholderRenderer;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,6 +40,7 @@ class SendEmail implements ShouldQueue
     public function handle(
         CampaignStepScheduler $scheduler,
         PlaceholderRenderer $renderer,
+        CampaignBodyBuilder $bodyBuilder,
         CampaignMailer $mailer,
     ): void {
         $email = $this->email->load([
@@ -49,6 +53,14 @@ class SendEmail implements ShouldQueue
         ]);
 
         if ($email->campaign->status !== CampaignStatus::Active) {
+            return;
+        }
+
+        $to = (string) ($email->recipient->contact->email() ?? '');
+
+        if ($to === '' || $this->isUnsubscribed($email, $to)) {
+            $this->markFailed($email);
+
             return;
         }
 
@@ -70,16 +82,9 @@ class SendEmail implements ShouldQueue
             return;
         }
 
-        $to = (string) ($email->recipient->contact->email() ?? '');
-
-        if ($to === '') {
-            $this->markFailed($email);
-
-            return;
-        }
-
         $subject = $renderer->render($email->step->subject, $email->recipient);
         $html = $renderer->render($email->step->body, $email->recipient);
+        $html = $bodyBuilder->build($email, $html);
 
         try {
             $mailer->send($connection, $to, $subject, $html);
@@ -109,6 +114,24 @@ class SendEmail implements ShouldQueue
     {
         return $connection->sending_limit !== null
             && $connection->sent_count >= $connection->sending_limit;
+    }
+
+    /**
+     * Determine whether the recipient has opted out of emails from the team.
+     *
+     * A recipient is skipped when it carries the unsubscribed status or the
+     * team holds an unsubscribe record for its email address.
+     */
+    private function isUnsubscribed(CampaignEmail $email, string $to): bool
+    {
+        if ($email->recipient->status === RecipientStatus::Unsubscribed) {
+            return true;
+        }
+
+        return Unsubscribe::query()
+            ->where('team_id', $email->campaign->team_id)
+            ->where('email', $to)
+            ->exists();
     }
 
     /**

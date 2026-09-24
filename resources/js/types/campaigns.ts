@@ -45,6 +45,9 @@ export type CampaignStats = {
     recipients_count: number;
     emails_sent: number;
     emails_failed: number;
+    opened: number;
+    clicked: number;
+    unsubscribed: number;
 };
 
 export type CampaignPermissions = {

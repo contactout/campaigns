@@ -7,9 +7,11 @@ use Carbon\CarbonImmutable;
 use Database\Factories\CampaignEmailFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -36,6 +38,9 @@ use Illuminate\Support\Carbon;
  * @property-read CampaignStep $step
  * @property-read Recipient $recipient
  * @property-read MailerConnection|null $mailerConnection
+ * @property-read Collection<int, EmailOpen> $opens
+ * @property-read Collection<int, TrackedLink> $trackedLinks
+ * @property-read Collection<int, LinkClick> $clicks
  */
 #[Fillable(['campaign_id', 'campaign_step_id', 'recipient_id', 'mailer_connection_id', 'thread_id', 'message_id', 'reply_to_id', 'tracker', 'status', 'data', 'reply_count', 'scheduled_at', 'dispatched_at', 'delivered_at', 'opened_at', 'replied_at'])]
 class CampaignEmail extends Model
@@ -81,6 +86,36 @@ class CampaignEmail extends Model
     public function mailerConnection(): BelongsTo
     {
         return $this->belongsTo(MailerConnection::class);
+    }
+
+    /**
+     * Get the opens recorded for the email.
+     *
+     * @return HasMany<EmailOpen, $this>
+     */
+    public function opens(): HasMany
+    {
+        return $this->hasMany(EmailOpen::class);
+    }
+
+    /**
+     * Get the tracked links embedded in the email.
+     *
+     * @return HasMany<TrackedLink, $this>
+     */
+    public function trackedLinks(): HasMany
+    {
+        return $this->hasMany(TrackedLink::class);
+    }
+
+    /**
+     * Get the link clicks recorded for the email.
+     *
+     * @return HasMany<LinkClick, $this>
+     */
+    public function clicks(): HasMany
+    {
+        return $this->hasMany(LinkClick::class);
     }
 
     /**

@@ -20,10 +20,12 @@ use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactList;
 use App\Models\EmailTemplate;
+use App\Models\LinkClick;
 use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
+use App\Models\Unsubscribe;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -227,6 +229,12 @@ class CampaignController extends Controller
                 'recipients_count' => $campaign->recipients()->count(),
                 'emails_sent' => $campaign->emails()->where('status', EmailStatus::Sent)->count(),
                 'emails_failed' => $campaign->emails()->where('status', EmailStatus::Failed)->count(),
+                'opened' => $campaign->emails()->whereNotNull('opened_at')->count(),
+                'clicked' => LinkClick::query()
+                    ->whereHas('campaignEmail', fn (Builder $query): Builder => $query->where('campaign_id', $campaign->id))
+                    ->distinct()
+                    ->count('campaign_email_id'),
+                'unsubscribed' => Unsubscribe::query()->where('campaign_id', $campaign->id)->count(),
             ],
             'recipients' => $recipients,
             'availableContacts' => $availableContacts,

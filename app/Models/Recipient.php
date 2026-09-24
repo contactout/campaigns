@@ -31,6 +31,8 @@ use Illuminate\Support\Carbon;
  * @property-read Campaign $campaign
  * @property-read Contact $contact
  * @property-read Collection<int, CampaignEmail> $emails
+ * @property-read Collection<int, EmailOpen> $opens
+ * @property-read Collection<int, LinkClick> $clicks
  */
 #[Fillable(['campaign_id', 'contact_id', 'timezone', 'status', 'source', 'placeholders', 'sequence', 'next_scheduled_at', 'last_responded_at', 'last_delivered_at'])]
 class Recipient extends Model
@@ -66,6 +68,26 @@ class Recipient extends Model
     public function emails(): HasMany
     {
         return $this->hasMany(CampaignEmail::class);
+    }
+
+    /**
+     * Get the email opens recorded for the recipient.
+     *
+     * @return HasMany<EmailOpen, $this>
+     */
+    public function opens(): HasMany
+    {
+        return $this->hasMany(EmailOpen::class);
+    }
+
+    /**
+     * Get the link clicks recorded for the recipient.
+     *
+     * @return HasMany<LinkClick, $this>
+     */
+    public function clicks(): HasMany
+    {
+        return $this->hasMany(LinkClick::class);
     }
 
     /**

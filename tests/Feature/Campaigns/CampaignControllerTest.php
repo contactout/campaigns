@@ -1,15 +1,20 @@
 <?php
 
 use App\Enums\CampaignStatus;
+use App\Enums\EmailStatus;
 use App\Enums\MailerConnectionStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
+use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\ContactField;
 use App\Models\EmailTemplate;
+use App\Models\LinkClick;
 use App\Models\MailerConnection;
 use App\Models\Signature;
 use App\Models\Team;
+use App\Models\TrackedLink;
+use App\Models\Unsubscribe;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -151,6 +156,40 @@ test('members can view a campaign with its steps and stats', function () {
             ->where('stats.steps_count', 1)
             ->where('stats.recipients_count', 0)
             ->has('can'));
+});
+
+test('the campaign stats count opens clicks and unsubscribes', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $email = CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'status' => EmailStatus::Opened,
+        'opened_at' => now(),
+    ]);
+
+    $link = TrackedLink::factory()->create(['campaign_email_id' => $email->id]);
+
+    LinkClick::factory()->create([
+        'tracked_link_id' => $link->id,
+        'campaign_email_id' => $email->id,
+        'recipient_id' => $email->recipient_id,
+    ]);
+
+    Unsubscribe::factory()->forTeam($team)->create([
+        'campaign_id' => $campaign->id,
+        'recipient_id' => $email->recipient_id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('stats.opened', 1)
+            ->where('stats.clicked', 1)
+            ->where('stats.unsubscribed', 1));
 });
 
 test('members can update a campaign', function () {

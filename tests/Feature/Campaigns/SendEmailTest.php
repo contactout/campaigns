@@ -139,7 +139,8 @@ test('sends the rendered email and schedules the next step', function () {
     expect($fake->sent)->toHaveCount(1)
         ->and($fake->sent[0]['to'])->toBe('ada@example.com')
         ->and($fake->sent[0]['subject'])->toBe('Hello Ada Lovelace')
-        ->and($fake->sent[0]['html'])->toBe('<p>ada@example.com / Analytical Engines / </p>');
+        ->and($fake->sent[0]['html'])->toStartWith('<p>ada@example.com / Analytical Engines / </p>')
+        ->and($fake->sent[0]['html'])->toContain('width="1" height="1"');
 
     $next = CampaignEmail::query()
         ->where('recipient_id', $fixture['recipient']->id)
