@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\ContactFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property ContactStatus $status
  * @property string|null $timezone
  * @property Carbon|null $last_contacted_at
- * @property Carbon|null $last_responded_at
+ * @property CarbonImmutable|null $last_responded_at
  * @property Carbon|null $do_not_contact_at
  * @property int|null $do_not_contact_by
  * @property Carbon|null $created_at

@@ -27,6 +27,13 @@ const encryptionOptions = [
     { value: 'none', label: 'None (25)' },
 ];
 
+const imapEncryptionOptions = [
+    { value: 'ssl', label: 'SSL/TLS' },
+    { value: 'tls', label: 'TLS' },
+    { value: 'starttls', label: 'STARTTLS' },
+    { value: 'none', label: 'None' },
+];
+
 export default function ConnectionFormModal({
     connection,
     open,
@@ -200,6 +207,123 @@ export default function ConnectionFormModal({
                                         <InputError
                                             message={errors.from_name}
                                         />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 rounded-md border p-4">
+                                    <div>
+                                        <p className="text-sm font-medium">
+                                            Inbox (IMAP)
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Optional. Used to detect replies and
+                                            bounces.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid gap-4 sm:grid-cols-3">
+                                        <div className="grid gap-2 sm:col-span-2">
+                                            <Label htmlFor="imap_host">
+                                                IMAP host
+                                            </Label>
+                                            <Input
+                                                id="imap_host"
+                                                name="imap_host"
+                                                defaultValue={
+                                                    connection?.imap_host ?? ''
+                                                }
+                                                placeholder="imap.example.com"
+                                            />
+                                            <InputError
+                                                message={errors.imap_host}
+                                            />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="imap_port">
+                                                Port
+                                            </Label>
+                                            <Input
+                                                id="imap_port"
+                                                name="imap_port"
+                                                type="number"
+                                                defaultValue={
+                                                    connection?.imap_port ?? 993
+                                                }
+                                            />
+                                            <InputError
+                                                message={errors.imap_port}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="imap_encryption">
+                                            Encryption
+                                        </Label>
+                                        <select
+                                            id="imap_encryption"
+                                            name="imap_encryption"
+                                            defaultValue={
+                                                connection?.imap_encryption ??
+                                                'ssl'
+                                            }
+                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+                                        >
+                                            {imapEncryptionOptions.map(
+                                                (option) => (
+                                                    <option
+                                                        key={option.value}
+                                                        value={option.value}
+                                                    >
+                                                        {option.label}
+                                                    </option>
+                                                ),
+                                            )}
+                                        </select>
+                                        <InputError
+                                            message={errors.imap_encryption}
+                                        />
+                                    </div>
+
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="imap_username">
+                                                Username
+                                            </Label>
+                                            <Input
+                                                id="imap_username"
+                                                name="imap_username"
+                                                defaultValue={
+                                                    connection?.imap_username ??
+                                                    ''
+                                                }
+                                                autoComplete="off"
+                                            />
+                                            <InputError
+                                                message={errors.imap_username}
+                                            />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="imap_password">
+                                                Password
+                                            </Label>
+                                            <Input
+                                                id="imap_password"
+                                                name="imap_password"
+                                                type="password"
+                                                autoComplete="new-password"
+                                                placeholder={
+                                                    connection
+                                                        ? 'Leave blank to keep current'
+                                                        : ''
+                                                }
+                                            />
+                                            <InputError
+                                                message={errors.imap_password}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>

@@ -127,9 +127,9 @@ class MailerConnectionController extends Controller
     /**
      * Map a mailer connection to the safe payload exposed to the client.
      *
-     * SMTP credentials (including the password) are never serialized.
+     * SMTP/IMAP credentials (including both passwords) are never serialized.
      *
-     * @return array{id: int, name: string, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, last_error: string|null, created_at: string|null}
+     * @return array{id: int, name: string, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, last_error: string|null, created_at: string|null}
      */
     protected function connectionSummary(MailerConnection $connection): array
     {
@@ -146,6 +146,10 @@ class MailerConnectionController extends Controller
             'encryption' => $settings['encryption'] ?? null,
             'from_email' => $settings['from_email'] ?? null,
             'from_name' => $settings['from_name'] ?? null,
+            'imap_host' => $settings['imap_host'] ?? null,
+            'imap_port' => $settings['imap_port'] ?? null,
+            'imap_username' => $settings['imap_username'] ?? null,
+            'imap_encryption' => $settings['imap_encryption'] ?? null,
             'status' => $connection->status->value,
             'status_label' => $connection->status->label(),
             'sent_count' => $connection->sent_count,

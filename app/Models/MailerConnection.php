@@ -30,13 +30,14 @@ use Illuminate\Support\Carbon;
  * @property int|null $sending_limit
  * @property int $sent_count
  * @property CarbonImmutable|null $sending_limit_refreshed_at
+ * @property CarbonImmutable|null $last_checked_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Team $team
  * @property-read User|null $user
  * @property-read Collection<int, Campaign> $campaigns
  */
-#[Fillable(['team_id', 'user_id', 'name', 'mailer_type', 'smtp_setting', 'status', 'exception_type', 'exception_data', 'threw_at', 'rate_limit_expired_at', 'sending_limit', 'sent_count', 'sending_limit_refreshed_at'])]
+#[Fillable(['team_id', 'user_id', 'name', 'mailer_type', 'smtp_setting', 'status', 'exception_type', 'exception_data', 'threw_at', 'rate_limit_expired_at', 'sending_limit', 'sent_count', 'sending_limit_refreshed_at', 'last_checked_at'])]
 class MailerConnection extends Model
 {
     /** @use HasFactory<MailerConnectionFactory> */
@@ -99,6 +100,7 @@ class MailerConnection extends Model
             'threw_at' => 'datetime',
             'rate_limit_expired_at' => 'datetime',
             'sending_limit_refreshed_at' => 'datetime',
+            'last_checked_at' => 'datetime',
         ];
     }
 }

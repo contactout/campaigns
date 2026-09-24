@@ -58,7 +58,7 @@ class SendEmail implements ShouldQueue
 
         $to = (string) ($email->recipient->contact->email() ?? '');
 
-        if ($to === '' || $this->isUnsubscribed($email, $to)) {
+        if ($to === '' || $this->isSuppressed($email, $to)) {
             $this->markFailed($email);
 
             return;
@@ -117,14 +117,19 @@ class SendEmail implements ShouldQueue
     }
 
     /**
-     * Determine whether the recipient has opted out of emails from the team.
+     * Determine whether the recipient should no longer receive campaign email.
      *
-     * A recipient is skipped when it carries the unsubscribed status or the
-     * team holds an unsubscribe record for its email address.
+     * A recipient is skipped when it carries a terminal status (unsubscribed,
+     * replied or bounced) or the team holds an unsubscribe record for its email
+     * address.
      */
-    private function isUnsubscribed(CampaignEmail $email, string $to): bool
+    private function isSuppressed(CampaignEmail $email, string $to): bool
     {
-        if ($email->recipient->status === RecipientStatus::Unsubscribed) {
+        if (in_array($email->recipient->status, [
+            RecipientStatus::Unsubscribed,
+            RecipientStatus::Replied,
+            RecipientStatus::Bounced,
+        ], true)) {
             return true;
         }
 

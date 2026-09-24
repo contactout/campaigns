@@ -15,6 +15,10 @@ export type MailerConnection = {
     encryption: string | null;
     from_email: string | null;
     from_name: string | null;
+    imap_host: string | null;
+    imap_port: number | null;
+    imap_username: string | null;
+    imap_encryption: string | null;
     status: string;
     status_label: string;
     sent_count: number;
