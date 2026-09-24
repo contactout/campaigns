@@ -116,16 +116,12 @@ Conventions to obey (from `AGENTS.md` + starter kit):
 
 > `.ai/rules/` does **not** exist in this repo. Rules above come from `AGENTS.md`.
 
-### 4.1 Ownership model (decision needed)
+### 4.1 Ownership model — DECIDED: team-owned
 
-Source scopes campaigns to `user_id` + `company_id` with paid feature gates. MMOS has
-teams. Options:
-
-- **A. User-owned** (simplest OSS story): `user_id` FK. Teams ignored for campaigns.
-- **B. Team-owned**: `team_id` FK, reuse `EnsureTeamMembership` + `SetTeamUrlDefaults`,
-  URL prefix `{current_team}`. More consistent with where MMOS is heading.
-
-**Recommendation: B**, so the feature composes with the existing team-prefixed dashboard.
+Campaigns are scoped to a team via `team_id` FK. Reuse `EnsureTeamMembership` +
+`SetTeamUrlDefaults` and the `{current_team}` URL prefix so campaigns compose with the
+existing team-prefixed dashboard. No `company_id` / paid-gate concept — a campaign's
+owner is the team; `user_id` on a campaign records who created it.
 
 ---
 
@@ -142,16 +138,16 @@ teams. Options:
 | Tracking: open pixel, link click, unsubscribe | **In** | Core |
 | Reply/bounce detection (IMAP polling) | **In** | Needs IMAP mailer |
 | Gmail API + Microsoft Graph mailers | **Deferred** | Needs own OAuth apps/creds |
-| Tasks / non-email steps (call, LinkedIn, manual) | **Deferred** | Data model kept, UI later |
-| AI composer / personalization (OpenAI/Prism) | **Deferred** | Optional adapter, off by default |
+| Contacts + sheets CRM subsystem | **In** | Later phase; contacts/identities/properties/sheets |
+| Non-email steps (call, LinkedIn, manual) | **Out of v1** | Email-only product; model stays email-only |
+| AI composer / personalization (OpenAI/Prism) | **Out of v1** | Optional adapter later, off by default |
 | Spam-test (provider inboxes) | **Out of v1** | External/paid infra; content scan only |
 | SMS via Dialer/Telnyx | **Out** | Proprietary module; not portable |
-| Contacts/sheets CRM subsystem | **Out of v1** | Large; revisit later |
 | Lead/lists/extension "add to campaign" | **Out** | ContactOut ecosystem |
 | Admin panel, sales dashboard, feature/billing gates | **Out** | Not open-source relevant |
 | Marketing static "email campaigns" page | **In (last)** | Public-facing, low risk |
 
-Open questions for the owner are listed in §14.
+Decisions are recorded in §14.
 
 ---
 
@@ -166,13 +162,13 @@ Open questions for the owner are listed in §14.
 | `Models\MailerConnection` | `App\Models\MailerConnection` |
 | `Actions\Campaign\StartCampaignAction` | `App\Actions\Campaigns\StartCampaign` |
 | `Http\Controllers\Api\CampaignController` | `App\Http\Controllers\Campaigns\CampaignController` |
-| `routes/api.php` `/api/email/...` | JSON routes in `routes/campaigns.php`, or Inertia v3 `useHttp` against Wayfinder routes |
+| `routes/api.php` `/api/email/...` | Inertia-only: `useHttp` / `<Form>` against Wayfinder routes (no public JSON API in v1) |
 | `resources/assets/js/dashboard/mail-merge/**` | `resources/js/pages/campaigns/**` + `resources/js/components/campaigns/**` |
 | `campaign-index.tsx` | `pages/campaigns/index.tsx` |
 | `campaign-edit-v2.tsx` | `pages/campaigns/edit.tsx` |
 | `styled.tsx` primitives | shadcn/ui + shared `components/campaigns/*` |
 | `api/*.ts` (axios) | `useHttp` / `router` + Wayfinder functions |
-| TinyMCE editor | TBD: Tiptap (recommended, MIT) or keep TinyMCE |
+| TinyMCE editor | Tiptap (MIT) |
 | `humps` decamelize | drop; standardise camelCase JSON props |
 | Feature gates / `campaigns bonus` | drop |
 
@@ -255,8 +251,10 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Open pixel, link redirect, unsubscribe; IMAP reply/bounce polling; thread ids.
 - Exit: opens/clicks/replies/unsubscribes recorded and shown in the UI.
 
-### Phase 6 — Tasks & remaining step types
-- Tasks (call/LinkedIn/manual) + task dashboard; expand step drawer to all types.
+### Phase 6 — Contacts & sheets CRM
+- Contacts, contact identities, contact properties, sheets + contact pivots.
+- Recipient ↔ contact linking; import/export; activity history.
+- Exit: manage reusable contacts in sheets and add them to campaigns.
 
 ### Phase 7 — Onboarding + polish
 - Campaign/recipient onboarding (replace Joyride with a maintained lib or custom),
@@ -266,8 +264,8 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Port `resources/views/static/features/email-campaigns` concept into an MMOS landing page.
 
 ### Deferred backlog
-Gmail API + Microsoft Graph, AI composer, spam-test, contacts/sheets CRM, SMS, multi-user
-team roles for campaigns (if not already covered by team tenancy).
+Gmail API + Microsoft Graph mailers, AI composer, non-email steps (call/LinkedIn/manual),
+spam-test, SMS, additional team roles for campaigns (beyond team tenancy).
 
 ---
 
@@ -276,21 +274,22 @@ team roles for campaigns (if not already covered by team tenancy).
 Recreate from `database/schema/mysql-schema.sql` (base migrations were squashed). Suggested
 core tables (renames in parentheses):
 
-- `campaigns` — id, team_id/user_id, name, status, timezone, mailer_connection_id,
-  settings(json), type, started_at, interrupted_reason, timestamps.
-- `campaign_steps` (source `mm_touches`) — campaign_id, sequence, type, subtype, subject,
-  body, day, time, is_threaded, setting(json).
-- `recipients` — campaign_id, email, phone(nullable), timezone, status, source,
+- `campaigns` — id, team_id, user_id (creator), name, status, timezone,
+  mailer_connection_id, settings(json), type, started_at, interrupted_reason, timestamps.
+- `campaign_steps` (source `mm_touches`) — campaign_id, sequence, subject, body, day,
+  time, is_threaded, setting(json). **Email-only** (no `type`/channel column in v1).
+- `recipients` — campaign_id, contact_id(nullable), email, timezone, status, source,
   placeholders(json), sequence, next_scheduled_at, interaction timestamps.
 - `campaign_emails` (source `mm_emails`) — campaign_id, step_id, recipient_id,
   mailer_connection_id, thread_id, message_id, tracker, status, data(json), timestamps.
-- `mailer_connections` — user/team, name, mailer_type, encrypted smtp settings, status,
-  rate-limit/limit counters.
+- `mailer_connections` — team_id, user_id, name, mailer_type, encrypted smtp settings,
+  status, rate-limit/limit counters.
 - `email_templates`, `template_folders`, `signatures`, `placeholders`, `attachments`,
   `email_opens`, `tracked_links`, `link_clicks`, `unsubscribes`, `campaign_settings`.
+- CRM: `contacts`, `contact_identities`, `contact_properties`, `sheets`, `contact_sheet`.
 
 Drop on port: `mm_leads`, `mm_reports`, `mm_prompts`, `spam_test_*`, `sending_domains`,
-CRM tables. Keep `mm_activities` only if we keep an activity feed.
+`mm_activities`, `mm_tasks`, `mm_sms_messages`. Keep an activity feed only if needed later.
 
 Queue columns / jobs tables come from the starter kit.
 
@@ -359,17 +358,17 @@ Queue columns / jobs tables come from the starter kit.
 
 ---
 
-## 14. Open decisions (owner input needed)
+## 14. Decisions (locked)
 
-1. **Ownership**: user-owned vs team-owned campaigns (§4.1). Recommend team-owned.
-2. **Queue default**: database (zero-infra OSS) vs Redis. Recommend database default,
-   Redis optional.
-3. **Public API**: keep a JSON `v1/campaigns` API (for integrations) or Inertia-only.
-   Recommend Inertia-only for v1, API later.
-4. **Rich-text editor**: Tiptap (MIT) vs retain TinyMCE. Recommend Tiptap.
-5. **Step naming**: rename "touch" → "step" in code/UI, or keep "touch"? Recommend "step".
-6. **Contacts/sheets CRM**: ever in scope, or permanently out? Affects migration design.
-7. **Non-email steps** (call/LinkedIn/manual): keep the data model from day one?
+| # | Decision | Choice |
+|---|---|---|
+| 1 | Ownership | **Team-owned** (`team_id`, `{current_team}` prefix) |
+| 2 | Queue driver | **Database** (Redis optional, not required) |
+| 3 | Public API | **Inertia-only** in v1 (no separate JSON `v1/campaigns`) |
+| 4 | Rich-text editor | **Tiptap** (MIT) |
+| 5 | Step naming | Rename "touch" → **"step"** (`CampaignStep`) |
+| 6 | Contacts / sheets CRM | **In scope** (Phase 6) |
+| 7 | Non-email steps | **Email-only** in v1 (no call/LinkedIn/manual/SMS) |
 
 ---
 
