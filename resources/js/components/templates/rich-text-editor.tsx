@@ -15,19 +15,28 @@ import { Button } from '@/components/ui/button';
 type Props = {
     name: string;
     value: string;
+    labelledBy?: string;
+    readOnly?: boolean;
 };
 
-export default function RichTextEditor({ name, value }: Props) {
+export default function RichTextEditor({
+    name,
+    value,
+    labelledBy,
+    readOnly = false,
+}: Props) {
     const [html, setHtml] = useState(value);
 
     const editor = useEditor({
         extensions: [StarterKit],
         content: value,
+        editable: !readOnly,
         immediatelyRender: false,
         onUpdate: ({ editor }) => setHtml(editor.getHTML()),
         editorProps: {
             attributes: {
-                class: 'min-h-72 max-w-none px-3 py-2 text-sm focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+                class: 'min-h-72 max-w-none px-4 py-3 text-sm leading-relaxed focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+                'aria-labelledby': labelledBy ?? '',
             },
         },
     });
@@ -83,21 +92,27 @@ export default function RichTextEditor({ name, value }: Props) {
     ];
 
     return (
-        <div className="rounded-md border">
-            <div className="flex flex-wrap items-center gap-1 border-b p-1">
-                {actions.map((action) => (
-                    <Button
-                        key={action.label}
-                        type="button"
-                        variant={action.isActive() ? 'secondary' : 'ghost'}
-                        size="icon"
-                        aria-label={action.label}
-                        onClick={action.run}
-                    >
-                        <action.icon className="h-4 w-4" />
-                    </Button>
-                ))}
-            </div>
+        <div className="overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-ring">
+            {!readOnly && (
+                <div
+                    role="toolbar"
+                    aria-label="Text formatting"
+                    className="flex flex-wrap items-center gap-1 border-b bg-muted/30 p-1.5"
+                >
+                    {actions.map((action) => (
+                        <Button
+                            key={action.label}
+                            type="button"
+                            variant={action.isActive() ? 'secondary' : 'ghost'}
+                            size="icon"
+                            aria-label={action.label}
+                            onClick={action.run}
+                        >
+                            <action.icon className="h-4 w-4" />
+                        </Button>
+                    ))}
+                </div>
+            )}
 
             <EditorContent editor={editor} />
 

@@ -1,11 +1,12 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FileText, FolderClosed, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import CreateTemplateModal from '@/components/templates/create-template-modal';
 import DeleteFolderModal from '@/components/templates/delete-folder-modal';
 import DeleteTemplateModal from '@/components/templates/delete-template-modal';
 import FolderFormModal from '@/components/templates/folder-form-modal';
 import Heading from '@/components/heading';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { index, show } from '@/routes/templates';
 import type { EmailTemplateSummary, TemplateFolder } from '@/types';
@@ -59,12 +60,12 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
 
             <h1 className="sr-only">Templates</h1>
 
-            <div className="flex flex-col space-y-6">
-                <div className="flex items-center justify-between">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
                         title="Templates"
-                        description="Reusable emails for your campaigns"
+                        description="Organize reusable emails for your campaigns"
                     />
 
                     {can.create ? (
@@ -76,19 +77,28 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                     ) : null}
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-[220px_1fr]">
-                    <aside className="space-y-1">
+                <div className="grid min-w-0 gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
+                    <aside
+                        aria-label="Template folders"
+                        className="min-w-0 space-y-1 rounded-xl border bg-card p-2 md:self-start"
+                    >
                         <button
                             type="button"
                             onClick={() => setSelectedFolder(null)}
-                            className={`w-full rounded-md px-3 py-2 text-left text-sm ${
+                            aria-current={
+                                selectedFolder === null ? 'page' : undefined
+                            }
+                            className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
                                 selectedFolder === null
                                     ? 'bg-muted font-medium'
                                     : 'hover:bg-muted/60'
                             }`}
                         >
-                            All templates
-                            <span className="ml-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-2">
+                                <FileText className="size-4 text-muted-foreground" />{' '}
+                                All templates
+                            </span>
+                            <span className="text-xs text-muted-foreground">
                                 {templates.length}
                             </span>
                         </button>
@@ -96,7 +106,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                         {folders.map((folder) => (
                             <div
                                 key={folder.id}
-                                className={`group flex items-center justify-between rounded-md px-3 py-2 text-sm ${
+                                className={`group flex min-w-0 items-center justify-between rounded-md px-3 py-1 text-sm transition-colors ${
                                     selectedFolder === folder.id
                                         ? 'bg-muted font-medium'
                                         : 'hover:bg-muted/60'
@@ -105,18 +115,30 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => setSelectedFolder(folder.id)}
-                                    className="flex flex-1 items-center gap-2 text-left"
+                                    aria-current={
+                                        selectedFolder === folder.id
+                                            ? 'page'
+                                            : undefined
+                                    }
+                                    className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                 >
-                                    {folder.name}
-                                    <span className="text-xs text-muted-foreground">
+                                    <FolderClosed className="size-4 shrink-0 text-muted-foreground" />
+                                    <span
+                                        className="truncate"
+                                        title={folder.name}
+                                    >
+                                        {folder.name}
+                                    </span>
+                                    <span className="ml-auto text-xs text-muted-foreground">
                                         {folder.templates_count}
                                     </span>
                                 </button>
                                 {can.create ? (
-                                    <span className="flex items-center opacity-0 group-hover:opacity-100">
+                                    <span className="flex shrink-0 items-center sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
                                         <Button
                                             variant="ghost"
                                             size="icon"
+                                            aria-label={`Rename ${folder.name}`}
                                             onClick={() =>
                                                 openEditFolder(folder)
                                             }
@@ -126,6 +148,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
+                                            aria-label={`Delete ${folder.name}`}
                                             onClick={() =>
                                                 setDeletingFolder(folder)
                                             }
@@ -149,29 +172,55 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                         ) : null}
                     </aside>
 
-                    <div>
+                    <section aria-label="Templates" className="min-w-0">
                         {filtered.length === 0 ? (
-                            <p className="py-8 text-center text-muted-foreground">
-                                No templates here yet.
-                            </p>
+                            <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center">
+                                <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
+                                    <FileText className="size-6 text-muted-foreground" />
+                                </span>
+                                <h2 className="mt-4 font-semibold">
+                                    {selectedFolder === null
+                                        ? 'No templates yet'
+                                        : 'This folder is empty'}
+                                </h2>
+                                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                                    {selectedFolder === null
+                                        ? 'Create a template to reuse your best emails.'
+                                        : 'Move a template here or create a new one.'}
+                                </p>
+                                {can.create && (
+                                    <CreateTemplateModal folders={folders}>
+                                        <Button className="mt-5">
+                                            <Plus /> New template
+                                        </Button>
+                                    </CreateTemplateModal>
+                                )}
+                            </div>
                         ) : (
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-3">
                                 {filtered.map((template) => (
                                     <div
                                         key={template.id}
-                                        className="flex items-center justify-between gap-3 rounded-lg border p-4"
+                                        className="flex items-center justify-between gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-muted/20 sm:p-5"
                                         data-test="template-row"
                                     >
                                         <Link
                                             href={show([slug, template.id])}
-                                            className="flex flex-1 items-center gap-3"
+                                            className="flex min-w-0 flex-1 items-center gap-4 rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                         >
-                                            <FileText className="h-4 w-4 text-muted-foreground" />
-                                            <span className="flex flex-col">
-                                                <span className="font-medium">
+                                            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                                                <FileText className="size-5 text-muted-foreground" />
+                                            </span>
+                                            <span className="flex min-w-0 flex-col gap-0.5">
+                                                <span className="flex flex-wrap items-center gap-2 font-semibold">
                                                     {template.name}
+                                                    {template.is_draft && (
+                                                        <Badge variant="secondary">
+                                                            Draft
+                                                        </Badge>
+                                                    )}
                                                 </span>
-                                                <span className="text-sm text-muted-foreground">
+                                                <span className="truncate text-sm text-muted-foreground">
                                                     {template.subject ||
                                                         'No subject'}
                                                 </span>
@@ -182,6 +231,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
+                                                aria-label={`Delete ${template.name}`}
                                                 onClick={() =>
                                                     setDeletingTemplate(
                                                         template,
@@ -195,7 +245,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                 ))}
                             </div>
                         )}
-                    </div>
+                    </section>
                 </div>
             </div>
 

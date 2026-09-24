@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, PenLine, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import DeleteSignatureModal from '@/components/signatures/delete-signature-modal';
 import SignatureFormModal from '@/components/signatures/signature-form-modal';
@@ -37,8 +37,8 @@ export default function SignaturesIndex({ signatures, can }: Props) {
 
             <h1 className="sr-only">Signatures</h1>
 
-            <div className="flex flex-col space-y-6">
-                <div className="flex items-center justify-between">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
                         title="Signatures"
@@ -53,20 +53,34 @@ export default function SignaturesIndex({ signatures, can }: Props) {
                 </div>
 
                 {signatures.length === 0 ? (
-                    <p className="py-8 text-center text-muted-foreground">
-                        No signatures yet.
-                    </p>
+                    <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center">
+                        <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
+                            <PenLine className="size-6 text-muted-foreground" />
+                        </span>
+                        <h2 className="mt-4 font-semibold">
+                            No signatures yet
+                        </h2>
+                        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                            Create a signature to close your emails
+                            consistently.
+                        </p>
+                        {can.create && (
+                            <Button className="mt-5" onClick={openNew}>
+                                <Plus /> New signature
+                            </Button>
+                        )}
+                    </div>
                 ) : (
                     <div className="flex flex-col gap-3">
                         {signatures.map((signature) => (
                             <div
                                 key={signature.id}
-                                className="flex items-start justify-between gap-4 rounded-lg border p-4"
+                                className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-card p-5 sm:flex-nowrap sm:p-6"
                                 data-test="signature-row"
                             >
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-medium">
+                                <div className="min-w-0 space-y-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="font-semibold">
                                             {signature.name}
                                         </span>
                                         {signature.is_default ? (
@@ -75,16 +89,17 @@ export default function SignaturesIndex({ signatures, can }: Props) {
                                             </Badge>
                                         ) : null}
                                     </div>
-                                    <p className="max-w-2xl text-sm whitespace-pre-line text-muted-foreground">
+                                    <p className="max-w-2xl border-l-2 pl-3 text-sm leading-relaxed break-words whitespace-pre-line text-muted-foreground">
                                         {signature.body}
                                     </p>
                                 </div>
 
                                 {can.create ? (
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex shrink-0 items-center gap-1">
                                         <Button
                                             variant="ghost"
                                             size="icon"
+                                            aria-label={`Edit ${signature.name}`}
                                             onClick={() => openEdit(signature)}
                                         >
                                             <Pencil className="h-4 w-4" />
@@ -92,6 +107,7 @@ export default function SignaturesIndex({ signatures, can }: Props) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
+                                            aria-label={`Delete ${signature.name}`}
                                             onClick={() =>
                                                 setDeleting(signature)
                                             }

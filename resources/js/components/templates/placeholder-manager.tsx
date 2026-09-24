@@ -24,124 +24,138 @@ const typeOptions = [
 type Props = {
     templateId: number;
     placeholders: TemplatePlaceholder[];
+    canManage: boolean;
 };
 
 export default function PlaceholderManager({
     templateId,
     placeholders,
+    canManage,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const [type, setType] = useState('Text');
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-5">
             {placeholders.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                    No placeholders yet. Use them as {'{{name}}'} in the body.
+                <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                    No placeholders yet. Use them as{' '}
+                    <code className="rounded bg-muted px-1 py-0.5 text-foreground">
+                        {'{{name}}'}
+                    </code>{' '}
+                    in the body.
                 </p>
             ) : (
-                <ul className="divide-y rounded-md border">
+                <ul className="divide-y overflow-hidden rounded-lg border">
                     {placeholders.map((placeholder) => (
                         <li
                             key={placeholder.id}
-                            className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                            className="flex items-center justify-between gap-2 px-3 py-3 text-sm"
                         >
-                            <div>
-                                <span className="font-medium">
+                            <div className="min-w-0 break-words">
+                                <code className="rounded bg-muted px-1.5 py-1 font-medium text-foreground">
                                     {`{{${placeholder.name}}}`}
-                                </span>
-                                <span className="ml-2 text-muted-foreground">
+                                </code>
+                                <span className="mt-1 block text-xs text-muted-foreground">
                                     {placeholder.type_label}
                                     {placeholder.fallback
                                         ? ` · fallback: ${placeholder.fallback}`
                                         : ''}
                                 </span>
                             </div>
-                            <Form {...destroy.form([slug, placeholder.id])}>
-                                {({ processing }) => (
-                                    <Button
-                                        type="submit"
-                                        variant="ghost"
-                                        size="icon"
-                                        disabled={processing}
-                                        aria-label={`Delete ${placeholder.name}`}
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                )}
-                            </Form>
+                            {canManage && (
+                                <Form {...destroy.form([slug, placeholder.id])}>
+                                    {({ processing }) => (
+                                        <Button
+                                            type="submit"
+                                            variant="ghost"
+                                            size="icon"
+                                            disabled={processing}
+                                            aria-label={`Delete ${placeholder.name}`}
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </Form>
+                            )}
                         </li>
                     ))}
                 </ul>
             )}
 
-            <Form
-                {...store.form([slug, templateId])}
-                className="flex flex-wrap items-end gap-2"
-                options={{ preserveScroll: true }}
-                onSuccess={() => setType('Text')}
-            >
-                {({ errors, processing, recentlySuccessful }) => (
-                    <>
-                        <div className="grid gap-2">
-                            <Label htmlFor="placeholder-name">Name</Label>
-                            <Input
-                                id="placeholder-name"
-                                name="name"
-                                placeholder="first_name"
-                                required
-                            />
-                            <InputError message={errors.name} />
-                        </div>
+            {canManage && (
+                <Form
+                    {...store.form([slug, templateId])}
+                    className="grid gap-3 border-t pt-5 sm:grid-cols-2 lg:grid-cols-1"
+                    options={{ preserveScroll: true }}
+                    onSuccess={() => setType('Text')}
+                >
+                    {({ errors, processing, recentlySuccessful }) => (
+                        <>
+                            <div className="grid min-w-0 gap-2">
+                                <Label htmlFor="placeholder-name">Name</Label>
+                                <Input
+                                    id="placeholder-name"
+                                    name="name"
+                                    placeholder="first_name"
+                                    required
+                                />
+                                <InputError message={errors.name} />
+                            </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="placeholder-fallback">
-                                Fallback
-                            </Label>
-                            <Input
-                                id="placeholder-fallback"
-                                name="fallback"
-                                placeholder="there"
-                            />
-                            <InputError message={errors.fallback} />
-                        </div>
+                            <div className="grid min-w-0 gap-2">
+                                <Label htmlFor="placeholder-fallback">
+                                    Fallback
+                                </Label>
+                                <Input
+                                    id="placeholder-fallback"
+                                    name="fallback"
+                                    placeholder="there"
+                                />
+                                <InputError message={errors.fallback} />
+                            </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="placeholder-type">Type</Label>
-                            <Select
-                                name="type"
-                                value={type}
-                                onValueChange={setType}
+                            <div className="grid min-w-0 gap-2">
+                                <Label htmlFor="placeholder-type">Type</Label>
+                                <Select
+                                    name="type"
+                                    value={type}
+                                    onValueChange={setType}
+                                >
+                                    <SelectTrigger
+                                        id="placeholder-type"
+                                        className="w-full"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {typeOptions.map((option) => (
+                                            <SelectItem
+                                                key={option.value}
+                                                value={option.value}
+                                            >
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <InputError message={errors.type} />
+                            </div>
+
+                            <Button
+                                type="submit"
+                                variant="secondary"
+                                disabled={processing}
+                                className="sm:self-end"
                             >
-                                <SelectTrigger className="w-32">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {typeOptions.map((option) => (
-                                        <SelectItem
-                                            key={option.value}
-                                            value={option.value}
-                                        >
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <InputError message={errors.type} />
-                        </div>
-
-                        <Button
-                            type="submit"
-                            variant="secondary"
-                            disabled={processing}
-                        >
-                            <Plus /> Add
-                            {recentlySuccessful ? ' (added)' : ''}
-                        </Button>
-                    </>
-                )}
-            </Form>
+                                <Plus /> Add
+                                {recentlySuccessful ? ' (added)' : ''}
+                            </Button>
+                        </>
+                    )}
+                </Form>
+            )}
         </div>
     );
 }
