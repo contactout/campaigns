@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\CampaignStatus;
+use App\Enums\MailerConnectionStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
 use App\Models\CampaignStep;
@@ -325,4 +326,38 @@ test('the campaign show page exposes templates signatures and placeholders', fun
             ->where('signatures.0.name', 'Work')
             ->has('placeholders', 4)
             ->where('placeholders.3.name', 'company'));
+});
+
+test('the campaign index and show pages expose the teams mailer connections', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'Primary',
+        'status' => MailerConnectionStatus::Active,
+    ]);
+    MailerConnection::factory()->forTeam($team)->create(['name' => 'Backup']);
+
+    MailerConnection::factory()->create(['name' => 'Hidden']);
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->get(route('campaigns.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/index')
+            ->has('mailerConnections', 2)
+            ->where('mailerConnections.0.name', 'Backup')
+            ->where('mailerConnections.0.status', MailerConnectionStatus::Pending->value)
+            ->where('mailerConnections.1.name', 'Primary')
+            ->where('mailerConnections.1.status_label', 'Active')
+            ->missing('mailerConnections.0.smtp_setting'));
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('mailerConnections', 2)
+            ->where('mailerConnections.0.name', 'Backup'));
 });

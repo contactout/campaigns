@@ -4,6 +4,7 @@ import {
     FileText,
     FolderGit2,
     LayoutGrid,
+    Mail,
     PenLine,
     Send,
     Users,
@@ -25,6 +26,7 @@ import {
 import { dashboard } from '@/routes';
 import { index as campaignsIndex } from '@/routes/campaigns';
 import { index as contactsIndex } from '@/routes/contacts';
+import { index as mailerConnectionsIndex } from '@/routes/mailer-connections';
 import { index as signaturesIndex } from '@/routes/signatures';
 import { index as templatesIndex } from '@/routes/templates';
 import type { NavItem } from '@/types';
@@ -62,6 +64,11 @@ export function AppSidebar() {
             title: 'Signatures',
             href: teamSlug ? signaturesIndex(teamSlug) : '/',
             icon: PenLine,
+        },
+        {
+            title: 'Sending',
+            href: teamSlug ? mailerConnectionsIndex(teamSlug) : '/',
+            icon: Mail,
         },
     ];
 

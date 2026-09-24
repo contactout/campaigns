@@ -32,12 +32,27 @@ class MailerConnectionFactory extends Factory
                 'username' => fake()->userName(),
                 'password' => 'secret',
                 'encryption' => 'tls',
+                'from_email' => fake()->safeEmail(),
+                'from_name' => fake()->name(),
             ],
             'status' => MailerConnectionStatus::Pending,
+            'exception_type' => null,
+            'exception_data' => null,
+            'threw_at' => null,
             'rate_limit_expired_at' => null,
             'sending_limit' => null,
             'sent_count' => 0,
             'sending_limit_refreshed_at' => null,
         ];
+    }
+
+    /**
+     * Indicate that the mailer connection belongs to the given team.
+     */
+    public function forTeam(Team $team): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'team_id' => $team->id,
+        ]);
     }
 }

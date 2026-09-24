@@ -15,7 +15,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { index, show } from '@/routes/campaigns';
-import type { CampaignSummary, Paginated, StatusOption } from '@/types';
+import type {
+    CampaignSummary,
+    MailerConnectionOption,
+    Paginated,
+    StatusOption,
+} from '@/types';
 
 type Props = {
     campaigns: Paginated<CampaignSummary>;
@@ -24,6 +29,7 @@ type Props = {
         status: string | null;
     };
     statuses: StatusOption[];
+    mailerConnections: MailerConnectionOption[];
     can: {
         create: boolean;
     };
@@ -33,6 +39,7 @@ export default function CampaignsIndex({
     campaigns,
     filters,
     statuses,
+    mailerConnections,
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -65,7 +72,9 @@ export default function CampaignsIndex({
                     />
 
                     {can.create ? (
-                        <CreateCampaignModal>
+                        <CreateCampaignModal
+                            mailerConnections={mailerConnections}
+                        >
                             <Button data-test="campaigns-new-button">
                                 <Plus /> New campaign
                             </Button>
@@ -138,7 +147,9 @@ export default function CampaignsIndex({
                                 : 'Create your first sequence to start reaching out.'}
                         </p>
                         {can.create && !filters.q && !filters.status && (
-                            <CreateCampaignModal>
+                            <CreateCampaignModal
+                                mailerConnections={mailerConnections}
+                            >
                                 <Button className="mt-5">
                                     <Plus /> New campaign
                                 </Button>

@@ -34,6 +34,7 @@ import type {
     CampaignStats,
     CampaignStep,
     CampaignTemplateOption,
+    MailerConnectionOption,
     MergePlaceholder,
     Paginated,
     RecipientSummary,
@@ -49,6 +50,7 @@ type Props = {
     templates: CampaignTemplateOption[];
     signatures: CampaignSignatureOption[];
     placeholders: MergePlaceholder[];
+    mailerConnections: MailerConnectionOption[];
     can: CampaignPermissions;
 };
 
@@ -62,6 +64,7 @@ export default function CampaignShow({
     templates,
     signatures,
     placeholders,
+    mailerConnections,
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -440,6 +443,7 @@ export default function CampaignShow({
 
             <EditCampaignModal
                 campaign={campaign}
+                mailerConnections={mailerConnections}
                 open={editOpen}
                 onOpenChange={setEditOpen}
             />

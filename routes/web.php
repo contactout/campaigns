@@ -15,6 +15,7 @@ Route::prefix('{current_team}')
         require __DIR__.'/contacts.php';
         require __DIR__.'/campaigns.php';
         require __DIR__.'/templates.php';
+        require __DIR__.'/mailer-connections.php';
     });
 
 Route::middleware(['auth'])->group(function () {

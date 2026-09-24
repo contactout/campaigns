@@ -6,6 +6,7 @@ use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
 use Database\Factories\MailerConnectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,9 @@ use Illuminate\Support\Carbon;
  * @property MailerType $mailer_type
  * @property array<string, mixed>|null $smtp_setting
  * @property MailerConnectionStatus $status
+ * @property string|null $exception_type
+ * @property array<string, mixed>|null $exception_data
+ * @property Carbon|null $threw_at
  * @property Carbon|null $rate_limit_expired_at
  * @property int|null $sending_limit
  * @property int $sent_count
@@ -31,7 +35,7 @@ use Illuminate\Support\Carbon;
  * @property-read User|null $user
  * @property-read Collection<int, Campaign> $campaigns
  */
-#[Fillable(['team_id', 'user_id', 'name', 'mailer_type', 'smtp_setting', 'status', 'rate_limit_expired_at', 'sending_limit', 'sent_count', 'sending_limit_refreshed_at'])]
+#[Fillable(['team_id', 'user_id', 'name', 'mailer_type', 'smtp_setting', 'status', 'exception_type', 'exception_data', 'threw_at', 'rate_limit_expired_at', 'sending_limit', 'sent_count', 'sending_limit_refreshed_at'])]
 class MailerConnection extends Model
 {
     /** @use HasFactory<MailerConnectionFactory> */
@@ -68,6 +72,17 @@ class MailerConnection extends Model
     }
 
     /**
+     * Scope a query to only include mailer connections owned by the given team.
+     *
+     * @param  Builder<MailerConnection>  $query
+     * @return Builder<MailerConnection>
+     */
+    public function scopeForTeam(Builder $query, int $teamId): Builder
+    {
+        return $query->where('team_id', $teamId);
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -79,6 +94,8 @@ class MailerConnection extends Model
             // SMTP credentials are encrypted at rest; the column is a text type.
             'smtp_setting' => 'encrypted:array',
             'status' => MailerConnectionStatus::class,
+            'exception_data' => 'array',
+            'threw_at' => 'datetime',
             'rate_limit_expired_at' => 'datetime',
             'sending_limit_refreshed_at' => 'datetime',
         ];

@@ -15,10 +15,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { store } from '@/routes/campaigns';
+import type { MailerConnectionOption } from '@/types';
 
 export default function CreateCampaignModal({
+    mailerConnections = [],
     children,
 }: {
+    mailerConnections?: MailerConnectionOption[];
     children: React.ReactNode;
 }) {
     const [open, setOpen] = useState(false);
@@ -66,6 +69,39 @@ export default function CreateCampaignModal({
                                     />
                                     <InputError message={errors.timezone} />
                                 </div>
+
+                                {mailerConnections.length > 0 ? (
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="mailer_connection_id">
+                                            Sending connection
+                                        </Label>
+                                        <select
+                                            id="mailer_connection_id"
+                                            name="mailer_connection_id"
+                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+                                            defaultValue=""
+                                        >
+                                            <option value="">
+                                                Choose later
+                                            </option>
+                                            {mailerConnections.map(
+                                                (connection) => (
+                                                    <option
+                                                        key={connection.id}
+                                                        value={connection.id}
+                                                    >
+                                                        {connection.name}
+                                                    </option>
+                                                ),
+                                            )}
+                                        </select>
+                                        <InputError
+                                            message={
+                                                errors.mailer_connection_id
+                                            }
+                                        />
+                                    </div>
+                                ) : null}
                             </div>
 
                             <DialogFooter className="gap-2">

@@ -19,6 +19,7 @@ use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactList;
 use App\Models\EmailTemplate;
+use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
@@ -75,6 +76,7 @@ class CampaignController extends Controller
             'can' => [
                 'create' => $user->can('create', [Campaign::class, $currentTeam]),
             ],
+            'mailerConnections' => $this->mailerConnectionOptions($currentTeam),
         ]);
     }
 
@@ -237,6 +239,7 @@ class CampaignController extends Controller
                 'archive' => $request->user()->can('archive', $campaign),
                 'duplicate' => $request->user()->can('duplicate', $campaign),
             ],
+            'mailerConnections' => $this->mailerConnectionOptions($currentTeam),
         ]);
     }
 
@@ -345,6 +348,27 @@ class CampaignController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign duplicated.')]);
 
         return to_route('campaigns.show', ['campaign' => $copy]);
+    }
+
+    /**
+     * Map the team's mailer connections to the compact options payload used by campaign modals.
+     *
+     * @return array<int, array{id: int, name: string, status: string, status_label: string}>
+     */
+    protected function mailerConnectionOptions(Team $team): array
+    {
+        return MailerConnection::query()
+            ->forTeam($team->id)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (MailerConnection $connection): array => [
+                'id' => $connection->id,
+                'name' => $connection->name,
+                'status' => $connection->status->value,
+                'status_label' => $connection->status->label(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
