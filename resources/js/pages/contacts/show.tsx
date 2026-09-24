@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { index } from '@/routes/contacts';
 import type {
     ContactDetail,
+    ContactField,
     ContactRecipient,
     ListOption,
     StatusOption,
@@ -21,6 +22,8 @@ type Props = {
     lists: ListOption[];
     list_ids: number[];
     allLists: ListOption[];
+    fields: ContactField[];
+    properties: Record<string, string>;
     recipients: ContactRecipient[];
     statuses: StatusOption[];
 };
@@ -30,6 +33,8 @@ export default function ContactShow({
     lists,
     list_ids,
     allLists,
+    fields,
+    properties,
     recipients,
     statuses,
 }: Props) {
@@ -86,6 +91,23 @@ export default function ContactShow({
                         />
                     </CardContent>
                 </Card>
+
+                {fields.length > 0 ? (
+                    <Card className="shadow-sm">
+                        <CardHeader>
+                            <CardTitle>Custom fields</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-4 sm:grid-cols-2">
+                            {fields.map((field) => (
+                                <Detail
+                                    key={field.id}
+                                    label={field.name}
+                                    value={properties[field.id] ?? null}
+                                />
+                            ))}
+                        </CardContent>
+                    </Card>
+                ) : null}
 
                 <Card className="shadow-sm">
                     <CardHeader>

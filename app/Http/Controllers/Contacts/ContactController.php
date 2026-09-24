@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Contacts;
 
 use App\Actions\Contacts\CreateContact;
 use App\Actions\Contacts\DeleteContact;
+use App\Actions\Contacts\SaveContactProperty;
 use App\Actions\Contacts\UpdateContact;
 use App\Actions\Contacts\UpdateContactCell;
 use App\Enums\ContactIdentityType;
@@ -11,10 +12,13 @@ use App\Enums\ContactStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Contacts\StoreContactRequest;
 use App\Http\Requests\Contacts\UpdateContactCellRequest;
+use App\Http\Requests\Contacts\UpdateContactPropertyRequest;
 use App\Http\Requests\Contacts\UpdateContactRequest;
 use App\Models\Contact;
+use App\Models\ContactField;
 use App\Models\ContactIdentity;
 use App\Models\ContactList;
+use App\Models\ContactProperty;
 use App\Models\Recipient;
 use App\Models\Team;
 use Illuminate\Database\Eloquent\Builder;
@@ -44,7 +48,7 @@ class ContactController extends Controller
         $contacts = Contact::query()
             ->forTeam($currentTeam->id)
             ->withCount('lists')
-            ->with(['emailIdentity', 'phoneIdentity'])
+            ->with(['emailIdentity', 'phoneIdentity', 'properties'])
             ->when($filters['q'], function (Builder $query, string $search): void {
                 $query->where(function (Builder $query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
@@ -63,6 +67,7 @@ class ContactController extends Controller
         return Inertia::render('contacts/index', [
             'contacts' => $contacts,
             'filters' => $filters,
+            'fields' => $this->teamFields($currentTeam),
             'lists' => $currentTeam->contactLists()
                 ->withCount('contacts')
                 ->orderBy('name')
@@ -113,7 +118,7 @@ class ContactController extends Controller
 
         Gate::authorize('view', $contact);
 
-        $contact->load(['emailIdentity', 'identities', 'lists']);
+        $contact->load(['emailIdentity', 'identities', 'lists', 'properties']);
 
         $phoneIdentity = $contact->identities
             ->first(fn (ContactIdentity $identity): bool => $identity->identity_type === ContactIdentityType::Phone);
@@ -153,6 +158,8 @@ class ContactController extends Controller
                 ->values()
                 ->all(),
             'list_ids' => $contact->lists->pluck('id')->values()->all(),
+            'fields' => $this->teamFields($currentTeam),
+            'properties' => $this->contactProperties($contact),
             'allLists' => $currentTeam->contactLists()
                 ->orderBy('name')
                 ->get()
@@ -213,6 +220,26 @@ class ContactController extends Controller
     }
 
     /**
+     * Update a single custom field value on the given contact.
+     */
+    public function property(UpdateContactPropertyRequest $request, Team $currentTeam, Contact $contact, SaveContactProperty $saveContactProperty): RedirectResponse
+    {
+        $contact = Contact::forTeam($currentTeam->id)->findOrFail($contact->id);
+
+        Gate::authorize('update', $contact);
+
+        $field = ContactField::forTeam($currentTeam->id)->findOrFail((int) $request->input('contact_field_id'));
+
+        $value = $request->input('value');
+
+        $saveContactProperty->handle($contact, $field, is_string($value) ? $value : null);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Contact updated.')]);
+
+        return back();
+    }
+
+    /**
      * Delete the given contact.
      */
     public function destroy(Team $currentTeam, Contact $contact, DeleteContact $deleteContact): RedirectResponse
@@ -231,7 +258,7 @@ class ContactController extends Controller
     /**
      * Map a contact to the summary payload used by the index page.
      *
-     * @return array{id: int, name: string, email: string|null, phone: string|null, status: string, status_label: string, lists_count: int, created_at: string|null}
+     * @return array{id: int, name: string, email: string|null, phone: string|null, status: string, status_label: string, lists_count: int, properties: array<int, string>, created_at: string|null}
      */
     protected function contactSummary(Contact $contact): array
     {
@@ -243,7 +270,43 @@ class ContactController extends Controller
             'status' => $contact->status->value,
             'status_label' => $contact->status->label(),
             'lists_count' => (int) $contact->getAttribute('lists_count'),
+            'properties' => $this->contactProperties($contact),
             'created_at' => $contact->created_at?->toISOString(),
         ];
+    }
+
+    /**
+     * Map the team's custom contact fields to the spreadsheet column payload.
+     *
+     * @return array<int, array{id: int, name: string, type: string, type_label: string, fallback: string|null}>
+     */
+    protected function teamFields(Team $team): array
+    {
+        return $team->contactFields()
+            ->orderBy('position')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (ContactField $field): array => [
+                'id' => $field->id,
+                'name' => $field->name,
+                'type' => $field->type->value,
+                'type_label' => $field->type->label(),
+                'fallback' => $field->fallback,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Map the contact's stored property values keyed by contact field id.
+     *
+     * @return array<int, string>
+     */
+    protected function contactProperties(Contact $contact): array
+    {
+        return $contact->properties
+            ->filter(fn (ContactProperty $property): bool => $property->value !== null)
+            ->mapWithKeys(fn (ContactProperty $property): array => [$property->contact_field_id => (string) $property->value])
+            ->all();
     }
 }

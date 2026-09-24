@@ -39,6 +39,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, ContactIdentity> $identities
  * @property-read Collection<int, ContactList> $lists
  * @property-read Collection<int, Recipient> $recipients
+ * @property-read Collection<int, ContactProperty> $properties
  * @property-read ContactIdentity|null $emailIdentity
  * @property-read ContactIdentity|null $phoneIdentity
  */
@@ -128,6 +129,28 @@ class Contact extends Model
     public function recipients(): HasMany
     {
         return $this->hasMany(Recipient::class);
+    }
+
+    /**
+     * Get the custom field property values for the contact.
+     *
+     * @return HasMany<ContactProperty, $this>
+     */
+    public function properties(): HasMany
+    {
+        return $this->hasMany(ContactProperty::class);
+    }
+
+    /**
+     * Get the stored value for the given contact field, if any.
+     */
+    public function propertyValue(int $fieldId): ?string
+    {
+        $property = $this->relationLoaded('properties')
+            ? $this->properties->first(fn (ContactProperty $property): bool => $property->contact_field_id === $fieldId)
+            : $this->properties()->where('contact_field_id', $fieldId)->first();
+
+        return $property?->value;
     }
 
     /**

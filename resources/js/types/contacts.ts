@@ -41,7 +41,16 @@ export type ContactSummary = {
     status: string;
     status_label: string;
     lists_count: number;
+    properties: Record<string, string>;
     created_at: string | null;
+};
+
+export type ContactField = {
+    id: number;
+    name: string;
+    type: string;
+    type_label: string;
+    fallback: string | null;
 };
 
 export type ContactDetail = {

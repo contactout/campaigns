@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, User> $members
  * @property-read Collection<int, Contact> $contacts
  * @property-read Collection<int, ContactList> $contactLists
+ * @property-read Collection<int, ContactField> $contactFields
  */
 #[Fillable(['name', 'slug', 'is_personal'])]
 class Team extends Model
@@ -115,6 +116,16 @@ class Team extends Model
     public function contactLists(): HasMany
     {
         return $this->hasMany(ContactList::class);
+    }
+
+    /**
+     * Get all custom contact fields for this team.
+     *
+     * @return HasMany<ContactField, $this>
+     */
+    public function contactFields(): HasMany
+    {
+        return $this->hasMany(ContactField::class);
     }
 
     /**
