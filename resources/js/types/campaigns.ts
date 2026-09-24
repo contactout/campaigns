@@ -69,3 +69,22 @@ export type CampaignListOption = {
     name: string;
     contacts_count: number;
 };
+
+export type CampaignTemplateOption = {
+    id: number;
+    name: string;
+    subject: string;
+    body: string;
+};
+
+export type CampaignSignatureOption = {
+    id: number;
+    name: string;
+    body: string;
+    is_default: boolean;
+};
+
+export type MergePlaceholder = {
+    name: string;
+    label: string;
+};

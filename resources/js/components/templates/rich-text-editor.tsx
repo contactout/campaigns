@@ -9,12 +9,13 @@ import {
     Strikethrough,
     Undo2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 type Props = {
     name: string;
     value: string;
+    onChange?: (html: string) => void;
     labelledBy?: string;
     readOnly?: boolean;
 };
@@ -22,6 +23,7 @@ type Props = {
 export default function RichTextEditor({
     name,
     value,
+    onChange,
     labelledBy,
     readOnly = false,
 }: Props) {
@@ -32,14 +34,33 @@ export default function RichTextEditor({
         content: value,
         editable: !readOnly,
         immediatelyRender: false,
-        onUpdate: ({ editor }) => setHtml(editor.getHTML()),
+        onUpdate: ({ editor }) => {
+            const next = editor.getHTML();
+            setHtml(next);
+            onChange?.(next);
+        },
         editorProps: {
             attributes: {
-                class: 'min-h-72 max-w-none px-4 py-3 text-sm leading-relaxed focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
                 'aria-labelledby': labelledBy ?? '',
+                class: 'min-h-72 max-w-none px-3 py-2 text-sm focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
             },
         },
     });
+
+    useEffect(() => {
+        editor?.setEditable(!readOnly);
+    }, [editor, readOnly]);
+
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        if (value !== editor.getHTML()) {
+            editor.commands.setContent(value, { emitUpdate: false });
+            setHtml(value);
+        }
+    }, [editor, value]);
 
     const actions: Array<{
         icon: typeof Bold;
@@ -92,13 +113,9 @@ export default function RichTextEditor({
     ];
 
     return (
-        <div className="overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-ring">
-            {!readOnly && (
-                <div
-                    role="toolbar"
-                    aria-label="Text formatting"
-                    className="flex flex-wrap items-center gap-1 border-b bg-muted/30 p-1.5"
-                >
+        <div className="rounded-md border">
+            {!readOnly ? (
+                <div className="flex flex-wrap items-center gap-1 border-b p-1">
                     {actions.map((action) => (
                         <Button
                             key={action.label}
@@ -112,7 +129,7 @@ export default function RichTextEditor({
                         </Button>
                     ))}
                 </div>
-            )}
+            ) : null}
 
             <EditorContent editor={editor} />
 

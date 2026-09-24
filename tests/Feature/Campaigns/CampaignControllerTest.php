@@ -4,7 +4,10 @@ use App\Enums\CampaignStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
 use App\Models\CampaignStep;
+use App\Models\ContactField;
+use App\Models\EmailTemplate;
 use App\Models\MailerConnection;
+use App\Models\Signature;
 use App\Models\Team;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -301,4 +304,25 @@ test('a campaign from another team is not found', function () {
     $this->actingAs($user)
         ->post(route('campaigns.start', ['current_team' => $team->slug, 'campaign' => $otherCampaign]))
         ->assertNotFound();
+});
+
+test('the campaign show page exposes templates signatures and placeholders', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    EmailTemplate::factory()->forTeam($team)->create(['name' => 'Intro', 'subject' => 'Hi', 'body' => '<p>Hello</p>']);
+    Signature::factory()->forTeam($team)->create(['name' => 'Work']);
+    ContactField::factory()->forTeam($team)->create(['name' => 'company']);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('templates', 1)
+            ->where('templates.0.name', 'Intro')
+            ->has('signatures', 1)
+            ->where('signatures.0.name', 'Work')
+            ->has('placeholders', 4)
+            ->where('placeholders.3.name', 'company'));
 });

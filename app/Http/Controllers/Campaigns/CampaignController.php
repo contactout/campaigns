@@ -16,8 +16,11 @@ use App\Http\Requests\Campaigns\UpdateCampaignRequest;
 use App\Models\Campaign;
 use App\Models\CampaignStep;
 use App\Models\Contact;
+use App\Models\ContactField;
 use App\Models\ContactList;
+use App\Models\EmailTemplate;
 use App\Models\Recipient;
+use App\Models\Signature;
 use App\Models\Team;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -146,6 +149,50 @@ class CampaignController extends Controller
             ->values()
             ->all();
 
+        $templates = EmailTemplate::query()
+            ->forTeam($currentTeam->id)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (EmailTemplate $template): array => [
+                'id' => $template->id,
+                'name' => $template->name,
+                'subject' => $template->subject,
+                'body' => $template->body,
+            ])
+            ->values()
+            ->all();
+
+        $signatures = Signature::query()
+            ->forTeam($currentTeam->id)
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Signature $signature): array => [
+                'id' => $signature->id,
+                'name' => $signature->name,
+                'body' => $signature->body,
+                'is_default' => $signature->is_default,
+            ])
+            ->values()
+            ->all();
+
+        $placeholders = collect([
+            ['name' => 'name', 'label' => 'Full name'],
+            ['name' => 'email', 'label' => 'Email'],
+            ['name' => 'phone', 'label' => 'Phone'],
+        ])
+            ->merge(
+                $currentTeam->contactFields()
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn (ContactField $field): array => [
+                        'name' => $field->name,
+                        'label' => $field->name,
+                    ]),
+            )
+            ->values()
+            ->all();
+
         return Inertia::render('campaigns/show', [
             'campaign' => [
                 'id' => $campaign->id,
@@ -179,6 +226,9 @@ class CampaignController extends Controller
             'recipients' => $recipients,
             'availableContacts' => $availableContacts,
             'lists' => $lists,
+            'templates' => $templates,
+            'signatures' => $signatures,
+            'placeholders' => $placeholders,
             'can' => [
                 'update' => $request->user()->can('update', $campaign),
                 'delete' => $request->user()->can('delete', $campaign),

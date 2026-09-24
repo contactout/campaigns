@@ -30,8 +30,11 @@ import type {
     CampaignDetail,
     CampaignListOption,
     CampaignPermissions,
+    CampaignSignatureOption,
     CampaignStats,
     CampaignStep,
+    CampaignTemplateOption,
+    MergePlaceholder,
     Paginated,
     RecipientSummary,
 } from '@/types';
@@ -43,6 +46,9 @@ type Props = {
     recipients: Paginated<RecipientSummary>;
     availableContacts: AvailableContact[];
     lists: CampaignListOption[];
+    templates: CampaignTemplateOption[];
+    signatures: CampaignSignatureOption[];
+    placeholders: MergePlaceholder[];
     can: CampaignPermissions;
 };
 
@@ -53,6 +59,9 @@ export default function CampaignShow({
     recipients,
     availableContacts,
     lists,
+    templates,
+    signatures,
+    placeholders,
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -442,6 +451,9 @@ export default function CampaignShow({
             <StepFormModal
                 campaignId={campaign.id}
                 step={editingStep}
+                templates={templates}
+                signatures={signatures}
+                placeholders={placeholders}
                 open={stepModalOpen}
                 onOpenChange={setStepModalOpen}
             />
