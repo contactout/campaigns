@@ -35,7 +35,7 @@ export default function TeamsIndex({ teams }: Props) {
             <h1 className="sr-only">Teams</h1>
 
             <div className="flex flex-col space-y-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
                         title="Teams"
@@ -58,12 +58,12 @@ export default function TeamsIndex({ teams }: Props) {
                             <div
                                 key={team.id}
                                 data-test="team-row"
-                                className="flex items-center justify-between gap-4 rounded-lg border p-4"
+                                className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4 transition-colors hover:bg-muted/20"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex min-w-0 items-center gap-4">
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <span className="font-medium">
+                                            <span className="font-semibold break-words">
                                                 {team.name}
                                             </span>
                                             {team.isPersonal ? (
@@ -87,6 +87,7 @@ export default function TeamsIndex({ teams }: Props) {
                                                         variant="ghost"
                                                         size="sm"
                                                         data-test="team-leave-button"
+                                                        aria-label={`Leave ${team.name}`}
                                                         onClick={() =>
                                                             openLeaveTeamDialog(
                                                                 team,
@@ -109,6 +110,7 @@ export default function TeamsIndex({ teams }: Props) {
                                                         variant="ghost"
                                                         size="sm"
                                                         data-test="team-view-button"
+                                                        aria-label={`View ${team.name}`}
                                                         asChild
                                                     >
                                                         <Link
@@ -131,6 +133,7 @@ export default function TeamsIndex({ teams }: Props) {
                                                         variant="ghost"
                                                         size="sm"
                                                         data-test="team-edit-button"
+                                                        aria-label={`Edit ${team.name}`}
                                                         asChild
                                                     >
                                                         <Link
@@ -154,9 +157,17 @@ export default function TeamsIndex({ teams }: Props) {
                     })}
 
                     {teams.length === 0 ? (
-                        <p className="py-8 text-center text-muted-foreground">
-                            You don't belong to any teams yet.
-                        </p>
+                        <div className="rounded-xl border border-dashed px-6 py-12 text-center">
+                            <p className="font-semibold">No teams yet</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Create a team to start working together.
+                            </p>
+                            <CreateTeamModal>
+                                <Button className="mt-5">
+                                    <Plus /> New team
+                                </Button>
+                            </CreateTeamModal>
+                        </div>
                     ) : null}
                 </div>
             </div>

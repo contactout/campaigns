@@ -15,6 +15,9 @@ use App\Http\Requests\Campaigns\StoreCampaignRequest;
 use App\Http\Requests\Campaigns\UpdateCampaignRequest;
 use App\Models\Campaign;
 use App\Models\CampaignStep;
+use App\Models\Contact;
+use App\Models\ContactList;
+use App\Models\Recipient;
 use App\Models\Team;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -100,6 +103,49 @@ class CampaignController extends Controller
 
         $campaign->load('steps');
 
+        $recipients = $campaign->recipients()
+            ->with('contact.emailIdentity')
+            ->latest()
+            ->paginate(25, ['*'], 'recipients_page')
+            ->withQueryString()
+            ->through(fn (Recipient $recipient): array => [
+                'id' => $recipient->id,
+                'contact_id' => $recipient->contact_id,
+                'name' => $recipient->contact->name,
+                'email' => $recipient->contact->emailIdentity?->normalized_value,
+                'status' => $recipient->status->value,
+                'status_label' => $recipient->status->label(),
+                'created_at' => $recipient->created_at?->toISOString(),
+            ]);
+
+        $availableContacts = Contact::query()
+            ->forTeam($currentTeam->id)
+            ->whereNotIn('id', $campaign->recipients()->select('contact_id'))
+            ->with('emailIdentity')
+            ->orderBy('name')
+            ->limit(200)
+            ->get()
+            ->map(fn (Contact $contact): array => [
+                'id' => $contact->id,
+                'name' => $contact->name,
+                'email' => $contact->emailIdentity?->normalized_value,
+            ])
+            ->values()
+            ->all();
+
+        $lists = ContactList::query()
+            ->forTeam($currentTeam->id)
+            ->withCount('contacts')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (ContactList $list): array => [
+                'id' => $list->id,
+                'name' => $list->name,
+                'contacts_count' => (int) $list->getAttribute('contacts_count'),
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('campaigns/show', [
             'campaign' => [
                 'id' => $campaign->id,
@@ -130,6 +176,9 @@ class CampaignController extends Controller
                 'steps_count' => $campaign->steps->count(),
                 'recipients_count' => $campaign->recipients()->count(),
             ],
+            'recipients' => $recipients,
+            'availableContacts' => $availableContacts,
+            'lists' => $lists,
             'can' => [
                 'update' => $request->user()->can('update', $campaign),
                 'delete' => $request->user()->can('delete', $campaign),

@@ -12,6 +12,7 @@ type Props = {
     type?: string;
     placeholder?: string;
     className?: string;
+    columnLabel?: string;
 };
 
 export default function InlineCell({
@@ -21,6 +22,7 @@ export default function InlineCell({
     type = 'text',
     placeholder = '—',
     className,
+    columnLabel = field,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
@@ -29,6 +31,8 @@ export default function InlineCell({
     const [draft, setDraft] = useState(value ?? '');
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const savingRef = useRef(false);
 
     useEffect(() => {
         if (editing) {
@@ -44,12 +48,17 @@ export default function InlineCell({
     };
 
     const save = () => {
+        if (savingRef.current) {
+            return;
+        }
+
         if (draft === (value ?? '')) {
             setEditing(false);
 
             return;
         }
 
+        savingRef.current = true;
         router.patch(
             cell.url([slug, contactId]),
             { field, value: draft },
@@ -57,12 +66,15 @@ export default function InlineCell({
                 preserveScroll: true,
                 preserveState: true,
                 onSuccess: () => {
+                    savingRef.current = false;
                     setError(null);
                     setEditing(false);
+                    requestAnimationFrame(() => buttonRef.current?.focus());
                 },
                 onError: (errors) => {
+                    savingRef.current = false;
                     setError(errors.value ?? 'Invalid value');
-                    setEditing(false);
+                    inputRef.current?.focus();
                 },
             },
         );
@@ -71,11 +83,18 @@ export default function InlineCell({
     if (!editing) {
         return (
             <button
+                ref={buttonRef}
                 type="button"
-                onClick={() => setEditing(true)}
+                onClick={() => {
+                    setDraft(value ?? '');
+                    setError(null);
+                    setEditing(true);
+                }}
+                data-grid-cell
+                aria-label={`${columnLabel}: ${value || placeholder}. Click to edit`}
                 title={error ?? undefined}
                 className={cn(
-                    'block w-full rounded px-1 py-0.5 text-left hover:bg-muted',
+                    'block min-h-11 w-full truncate px-3 text-left outline-none hover:bg-muted/60 focus-visible:bg-primary/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
                     error && 'bg-destructive/10 text-destructive',
                     className,
                 )}
@@ -93,6 +112,9 @@ export default function InlineCell({
         <input
             ref={inputRef}
             type={type}
+            aria-label={`Edit ${columnLabel}`}
+            aria-invalid={Boolean(error)}
+            title={error ?? undefined}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={save}
@@ -108,7 +130,8 @@ export default function InlineCell({
                 }
             }}
             className={cn(
-                'w-full rounded border border-input bg-background px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-ring',
+                'min-h-11 w-full border-0 bg-background px-3 text-sm ring-2 ring-primary outline-none ring-inset',
+                error && 'ring-destructive',
                 className,
             )}
         />

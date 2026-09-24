@@ -12,30 +12,49 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
+import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
 import DeleteCampaignModal from '@/components/campaigns/delete-campaign-modal';
 import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
 import StepFormModal from '@/components/campaigns/step-form-modal';
 import Heading from '@/components/heading';
+import Pagination from '@/components/pagination';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { archive, duplicate, index, start, stop } from '@/routes/campaigns';
+import { destroy as destroyRecipient } from '@/routes/campaigns/recipients';
 import { destroy as destroyStep, reorder } from '@/routes/campaigns/steps';
 import type {
+    AvailableContact,
     CampaignDetail,
+    CampaignListOption,
     CampaignPermissions,
     CampaignStats,
     CampaignStep,
+    Paginated,
+    RecipientSummary,
 } from '@/types';
 
 type Props = {
     campaign: CampaignDetail;
     steps: CampaignStep[];
     stats: CampaignStats;
+    recipients: Paginated<RecipientSummary>;
+    availableContacts: AvailableContact[];
+    lists: CampaignListOption[];
     can: CampaignPermissions;
 };
 
-export default function CampaignShow({ campaign, steps, stats, can }: Props) {
+export default function CampaignShow({
+    campaign,
+    steps,
+    stats,
+    recipients,
+    availableContacts,
+    lists,
+    can,
+}: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const errors = usePage().props.errors as Record<string, string>;
@@ -43,6 +62,7 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [stepModalOpen, setStepModalOpen] = useState(false);
+    const [recipientsOpen, setRecipientsOpen] = useState(false);
     const [editingStep, setEditingStep] = useState<CampaignStep | null>(null);
 
     const canStart =
@@ -83,9 +103,9 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
 
             <h1 className="sr-only">{campaign.name}</h1>
 
-            <div className="flex flex-col space-y-6">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         <Heading variant="small" title={campaign.name} />
                         <CampaignStatusBadge
                             status={campaign.status}
@@ -185,6 +205,98 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                     <StatCard label="Timezone" value={campaign.timezone} />
                 </div>
 
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold">Recipients</h2>
+                        {can.update ? (
+                            <Button
+                                variant="secondary"
+                                onClick={() => setRecipientsOpen(true)}
+                                data-test="campaign-add-recipients-button"
+                            >
+                                <Plus /> Add recipients
+                            </Button>
+                        ) : null}
+                    </div>
+
+                    {recipients.data.length === 0 ? (
+                        <div className="rounded-xl border border-dashed px-6 py-12 text-center">
+                            <h3 className="font-semibold">No recipients yet</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Add contacts or lists to start this campaign.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                                <thead className="bg-muted/50 text-left">
+                                    <tr>
+                                        <th className="px-4 py-2 font-medium">
+                                            Name
+                                        </th>
+                                        <th className="px-4 py-2 font-medium">
+                                            Email
+                                        </th>
+                                        <th className="px-4 py-2 font-medium">
+                                            Status
+                                        </th>
+                                        <th className="px-4 py-2" />
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {recipients.data.map((recipient) => (
+                                        <tr
+                                            key={recipient.id}
+                                            className="border-t"
+                                            data-test="campaign-recipient-row"
+                                        >
+                                            <td className="px-4 py-2 font-medium">
+                                                {recipient.name}
+                                            </td>
+                                            <td className="px-4 py-2 text-muted-foreground">
+                                                {recipient.email}
+                                            </td>
+                                            <td className="px-4 py-2">
+                                                <Badge variant="secondary">
+                                                    {recipient.status_label}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-4 py-2 text-right">
+                                                {can.update ? (
+                                                    <Form
+                                                        {...destroyRecipient.form(
+                                                            [
+                                                                slug,
+                                                                campaign.id,
+                                                                recipient.id,
+                                                            ],
+                                                        )}
+                                                    >
+                                                        {({ processing }) => (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                type="submit"
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                            >
+                                                                Remove
+                                                            </Button>
+                                                        )}
+                                                    </Form>
+                                                ) : null}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    <Pagination links={recipients.links} />
+                </div>
+
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold">Steps</h2>
                     {can.update ? (
@@ -199,19 +311,31 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                 </div>
 
                 {steps.length === 0 ? (
-                    <p className="py-8 text-center text-muted-foreground">
-                        No steps yet. Add your first email step.
-                    </p>
+                    <div className="rounded-xl border border-dashed px-6 py-12 text-center">
+                        <h3 className="font-semibold">No steps yet</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            Add your first email step to build this sequence.
+                        </p>
+                        {can.update && (
+                            <Button
+                                variant="outline"
+                                className="mt-5"
+                                onClick={openNewStep}
+                            >
+                                <Plus /> Add step
+                            </Button>
+                        )}
+                    </div>
                 ) : (
                     <div className="flex flex-col gap-3">
                         {steps.map((step, index) => (
                             <Card key={step.id} data-test="campaign-step-row">
-                                <CardContent className="flex items-start justify-between gap-4">
-                                    <div className="flex gap-4">
+                                <CardContent className="flex flex-wrap items-start justify-between gap-4 sm:flex-nowrap">
+                                    <div className="flex min-w-0 gap-4">
                                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium">
                                             {step.sequence}
                                         </span>
-                                        <div className="space-y-1">
+                                        <div className="min-w-0 space-y-1">
                                             <p className="font-medium">
                                                 {step.subject || '(no subject)'}
                                             </p>
@@ -230,7 +354,7 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 sm:shrink-0">
                                         {can.update ? (
                                             <>
                                                 <Button
@@ -240,6 +364,7 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                                                     onClick={() =>
                                                         moveStep(index, -1)
                                                     }
+                                                    aria-label={`Move step ${step.sequence} up`}
                                                 >
                                                     <ArrowUp className="h-4 w-4" />
                                                 </Button>
@@ -253,6 +378,7 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                                                     onClick={() =>
                                                         moveStep(index, 1)
                                                     }
+                                                    aria-label={`Move step ${step.sequence} down`}
                                                 >
                                                     <ArrowDown className="h-4 w-4" />
                                                 </Button>
@@ -262,6 +388,7 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                                                     onClick={() =>
                                                         openEditStep(step)
                                                     }
+                                                    aria-label={`Edit step ${step.sequence}`}
                                                 >
                                                     <Pencil className="h-4 w-4" />
                                                 </Button>
@@ -280,6 +407,7 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                                                             disabled={
                                                                 processing
                                                             }
+                                                            aria-label={`Delete step ${step.sequence}`}
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
@@ -316,6 +444,13 @@ export default function CampaignShow({ campaign, steps, stats, can }: Props) {
                 step={editingStep}
                 open={stepModalOpen}
                 onOpenChange={setStepModalOpen}
+            />
+            <AddRecipientsModal
+                campaignId={campaign.id}
+                availableContacts={availableContacts}
+                lists={lists}
+                open={recipientsOpen}
+                onOpenChange={setRecipientsOpen}
             />
         </>
     );

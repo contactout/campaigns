@@ -94,7 +94,7 @@ export default function TeamEdit({
 
             <h1 className="sr-only">{pageTitle}</h1>
 
-            <div className="flex flex-col space-y-10">
+            <div className="flex flex-col gap-10">
                 <div className="space-y-6">
                     {permissions.canUpdateTeam ? (
                         <>
@@ -106,7 +106,7 @@ export default function TeamEdit({
 
                             <Form
                                 {...update.form(team.slug)}
-                                className="space-y-6"
+                                className="max-w-xl space-y-6 rounded-xl border bg-card p-5 sm:p-6"
                             >
                                 {({ errors, processing }) => (
                                     <>
@@ -145,7 +145,7 @@ export default function TeamEdit({
                 </div>
 
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
                         <Heading
                             variant="small"
                             title="Team members"
@@ -171,9 +171,9 @@ export default function TeamEdit({
                             <div
                                 key={member.id}
                                 data-test="member-row"
-                                className="flex items-center justify-between rounded-lg border p-4"
+                                className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex min-w-0 items-center gap-4">
                                     <Avatar className="h-10 w-10">
                                         {member.avatar ? (
                                             <AvatarImage
@@ -185,11 +185,11 @@ export default function TeamEdit({
                                             {getInitials(member.name)}
                                         </AvatarFallback>
                                     </Avatar>
-                                    <div>
+                                    <div className="min-w-0">
                                         <div className="font-medium">
                                             {member.name}
                                         </div>
-                                        <div className="text-sm text-muted-foreground">
+                                        <div className="text-sm break-all text-muted-foreground">
                                             {member.email}
                                         </div>
                                     </div>
@@ -241,6 +241,7 @@ export default function TeamEdit({
                                                         variant="ghost"
                                                         size="sm"
                                                         data-test="member-remove-button"
+                                                        aria-label={`Remove ${member.name}`}
                                                         onClick={() =>
                                                             confirmRemoveMember(
                                                                 member,
@@ -275,14 +276,14 @@ export default function TeamEdit({
                                 <div
                                     key={invitation.code}
                                     data-test="invitation-row"
-                                    className="flex items-center justify-between rounded-lg border p-4"
+                                    className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card p-4"
                                 >
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex min-w-0 items-center gap-4">
                                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                                             <Mail className="h-5 w-5 text-muted-foreground" />
                                         </div>
-                                        <div>
-                                            <div className="font-medium">
+                                        <div className="min-w-0">
+                                            <div className="font-medium break-all">
                                                 {invitation.email}
                                             </div>
                                             <div className="text-sm text-muted-foreground">
@@ -299,6 +300,7 @@ export default function TeamEdit({
                                                         variant="ghost"
                                                         size="sm"
                                                         data-test="invitation-cancel-button"
+                                                        aria-label={`Cancel invitation for ${invitation.email}`}
                                                         onClick={() =>
                                                             confirmCancelInvitation(
                                                                 invitation,

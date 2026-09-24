@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { Plus, Search, Send } from 'lucide-react';
 import { useState } from 'react';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
 import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
@@ -56,8 +56,8 @@ export default function CampaignsIndex({
 
             <h1 className="sr-only">Campaigns</h1>
 
-            <div className="flex flex-col space-y-6">
-                <div className="flex items-center justify-between">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
                         title="Campaigns"
@@ -74,18 +74,23 @@ export default function CampaignsIndex({
                 </div>
 
                 <form
-                    className="flex flex-wrap items-center gap-2"
+                    role="search"
+                    className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3 sm:p-4"
                     onSubmit={(event) => {
                         event.preventDefault();
                         navigate({ q: search });
                     }}
                 >
-                    <Input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search campaigns"
-                        className="max-w-xs"
-                    />
+                    <div className="relative min-w-48 flex-1 sm:max-w-xs">
+                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            aria-label="Search campaigns"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Search campaigns"
+                            className="pl-9"
+                        />
+                    </div>
 
                     <Select
                         value={filters.status ?? 'all'}
@@ -93,7 +98,10 @@ export default function CampaignsIndex({
                             navigate({ status: value === 'all' ? '' : value })
                         }
                     >
-                        <SelectTrigger className="w-48">
+                        <SelectTrigger
+                            aria-label="Filter campaigns by status"
+                            className="w-44 sm:w-48"
+                        >
                             <SelectValue placeholder="All statuses" />
                         </SelectTrigger>
                         <SelectContent>
@@ -115,11 +123,30 @@ export default function CampaignsIndex({
                 </form>
 
                 {campaigns.data.length === 0 ? (
-                    <p className="py-8 text-center text-muted-foreground">
-                        No campaigns yet.
-                    </p>
+                    <div className="flex flex-col items-center rounded-xl border border-dashed px-6 py-16 text-center">
+                        <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
+                            <Send className="size-6 text-muted-foreground" />
+                        </span>
+                        <h2 className="mt-4 font-semibold">
+                            {filters.q || filters.status
+                                ? 'No matching campaigns'
+                                : 'No campaigns yet'}
+                        </h2>
+                        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                            {filters.q || filters.status
+                                ? 'Try another search or change your filters.'
+                                : 'Create your first sequence to start reaching out.'}
+                        </p>
+                        {can.create && !filters.q && !filters.status && (
+                            <CreateCampaignModal>
+                                <Button className="mt-5">
+                                    <Plus /> New campaign
+                                </Button>
+                            </CreateCampaignModal>
+                        )}
+                    </div>
                 ) : (
-                    <div className="overflow-x-auto rounded-lg border">
+                    <div className="overflow-x-auto rounded-xl border bg-card">
                         <table className="w-full text-sm">
                             <thead className="bg-muted/50 text-left">
                                 <tr>
@@ -142,7 +169,7 @@ export default function CampaignsIndex({
                                 {campaigns.data.map((campaign) => (
                                     <tr
                                         key={campaign.id}
-                                        className="border-t"
+                                        className="border-t transition-colors hover:bg-muted/30"
                                         data-test="campaign-row"
                                     >
                                         <td className="px-4 py-3 font-medium">

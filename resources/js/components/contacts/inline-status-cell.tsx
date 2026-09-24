@@ -40,7 +40,11 @@ export default function InlineStatusCell({
 
     return (
         <Select value={status} onValueChange={update}>
-            <SelectTrigger className="h-auto w-fit border-0 bg-transparent p-0 shadow-none focus:ring-0">
+            <SelectTrigger
+                data-grid-cell
+                aria-label={`Status: ${label}`}
+                className="h-11 w-full justify-start rounded-none border-0 bg-transparent px-3 shadow-none focus:ring-2 focus:ring-primary focus:ring-inset"
+            >
                 <SelectValue>
                     <ContactStatusBadge status={status} label={label} />
                 </SelectValue>

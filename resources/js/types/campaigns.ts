@@ -53,3 +53,19 @@ export type CampaignPermissions = {
     archive: boolean;
     duplicate: boolean;
 };
+
+export type RecipientSummary = {
+    id: number;
+    contact_id: number;
+    name: string;
+    email: string | null;
+    status: string;
+    status_label: string;
+    created_at: string | null;
+};
+
+export type CampaignListOption = {
+    id: number;
+    name: string;
+    contacts_count: number;
+};

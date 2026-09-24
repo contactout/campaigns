@@ -1,5 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { ArrowUpRight, Plus, Search } from 'lucide-react';
+import type { KeyboardEvent } from 'react';
 import { useState } from 'react';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
 import InlineCell from '@/components/contacts/inline-cell';
@@ -73,18 +74,63 @@ export default function ContactsIndex({
         );
     };
 
+    const handleGridKeyDown = (event: KeyboardEvent<HTMLTableElement>) => {
+        if (
+            !(event.target instanceof HTMLElement) ||
+            !event.target.matches('[data-grid-cell]')
+        ) {
+            return;
+        }
+
+        const column = Number(event.target.closest('td')?.dataset.gridColumn);
+        const row = Number(event.target.closest('tr')?.dataset.gridRow);
+
+        // Leave status dropdown arrows to the select component.
+        if (column === 3) {
+            return;
+        }
+
+        const nextColumn =
+            column +
+            (event.key === 'ArrowRight'
+                ? 1
+                : event.key === 'ArrowLeft'
+                  ? -1
+                  : 0);
+        const nextRow =
+            row +
+            (event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0);
+
+        if (
+            !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(
+                event.key,
+            )
+        ) {
+            return;
+        }
+
+        const next = event.currentTarget.querySelector<HTMLElement>(
+            `tr[data-grid-row="${nextRow}"] td[data-grid-column="${nextColumn}"] [data-grid-cell]`,
+        );
+
+        if (next) {
+            event.preventDefault();
+            next.focus();
+        }
+    };
+
     return (
         <>
             <Head title="Contacts" />
 
             <h1 className="sr-only">Contacts</h1>
 
-            <div className="flex flex-col space-y-4">
-                <div className="flex items-center justify-between">
+            <div className="flex w-full min-w-0 flex-col gap-5 px-4 py-6 sm:px-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
                         title="Contacts"
-                        description="People you reach out to"
+                        description={`${contacts.total} ${contacts.total === 1 ? 'contact' : 'contacts'} in your workspace`}
                     />
 
                     {can.create ? (
@@ -102,25 +148,24 @@ export default function ContactsIndex({
                     ) : null}
                 </div>
 
-                <ListTabs
-                    lists={lists}
-                    activeListId={filters.list}
-                    canCreate={can.create}
-                />
-
                 <form
+                    role="search"
                     className="flex flex-wrap items-center gap-2"
                     onSubmit={(event) => {
                         event.preventDefault();
                         navigate({ q: search });
                     }}
                 >
-                    <Input
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
-                        placeholder="Search by name or email"
-                        className="max-w-xs"
-                    />
+                    <div className="relative min-w-48 flex-1 sm:max-w-xs">
+                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            aria-label="Search contacts"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Search by name or email"
+                            className="pl-9"
+                        />
+                    </div>
 
                     <Select
                         value={filters.status ?? 'all'}
@@ -128,7 +173,10 @@ export default function ContactsIndex({
                             navigate({ status: value === 'all' ? '' : value })
                         }
                     >
-                        <SelectTrigger className="w-48">
+                        <SelectTrigger
+                            aria-label="Filter contacts by status"
+                            className="w-44 sm:w-48"
+                        >
                             <SelectValue placeholder="All statuses" />
                         </SelectTrigger>
                         <SelectContent>
@@ -149,66 +197,123 @@ export default function ContactsIndex({
                     </Button>
                 </form>
 
-                {contacts.data.length === 0 ? (
-                    <p className="py-8 text-center text-muted-foreground">
-                        No contacts yet.
-                    </p>
-                ) : (
-                    <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full border-collapse text-sm">
-                            <thead className="bg-muted/50 text-left">
-                                <tr>
-                                    <th className="border-b px-4 py-2 font-medium">
+                <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+                    <div className="max-h-[min(640px,65svh)] min-h-72 overflow-auto overscroll-x-contain">
+                        <table
+                            onKeyDown={handleGridKeyDown}
+                            className="w-full min-w-[1000px] table-fixed border-separate border-spacing-0 text-sm"
+                            aria-label="Contacts spreadsheet"
+                        >
+                            <colgroup>
+                                <col className="w-12" />
+                                <col className="w-60" />
+                                <col className="w-72" />
+                                <col className="w-48" />
+                                <col className="w-44" />
+                                <col className="w-24" />
+                                <col className="w-24" />
+                            </colgroup>
+                            <thead className="sticky top-0 z-20 bg-muted text-left text-muted-foreground">
+                                <tr className="h-11">
+                                    <th
+                                        scope="col"
+                                        className="sticky left-0 z-30 border-r border-b bg-muted text-center font-normal"
+                                    >
+                                        #
+                                    </th>
+                                    <th
+                                        scope="col"
+                                        className="sticky left-12 z-30 border-r border-b bg-muted px-3 font-medium"
+                                    >
                                         Name
                                     </th>
-                                    <th className="border-b px-4 py-2 font-medium">
+                                    <th
+                                        scope="col"
+                                        className="border-r border-b px-3 font-medium"
+                                    >
                                         Email
                                     </th>
-                                    <th className="border-b px-4 py-2 font-medium">
+                                    <th
+                                        scope="col"
+                                        className="border-r border-b px-3 font-medium"
+                                    >
                                         Phone
                                     </th>
-                                    <th className="border-b px-4 py-2 font-medium">
+                                    <th
+                                        scope="col"
+                                        className="border-r border-b px-3 font-medium"
+                                    >
                                         Status
                                     </th>
-                                    <th className="border-b px-4 py-2 font-medium">
+                                    <th
+                                        scope="col"
+                                        className="border-r border-b px-3 font-medium"
+                                    >
                                         Lists
                                     </th>
-                                    <th className="border-b px-4 py-2" />
+                                    <th
+                                        scope="col"
+                                        className="border-b px-3 font-medium"
+                                    >
+                                        Details
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {contacts.data.map((contact) => (
+                                {contacts.data.map((contact, row) => (
                                     <tr
                                         key={contact.id}
-                                        className="border-b hover:bg-muted/20"
+                                        data-grid-row={row}
                                         data-test="contact-row"
+                                        className="group h-11 hover:bg-muted/30"
                                     >
-                                        <td className="border-r px-2 py-1 font-medium">
+                                        <th
+                                            scope="row"
+                                            className="sticky left-0 z-10 border-r border-b bg-muted/60 text-center text-xs font-normal text-muted-foreground group-hover:bg-muted"
+                                        >
+                                            {(contacts.from ?? 1) + row}
+                                        </th>
+                                        <td
+                                            data-grid-column={0}
+                                            className="sticky left-12 z-10 border-r border-b bg-card font-medium group-hover:bg-muted/30"
+                                        >
                                             <InlineCell
                                                 contactId={contact.id}
                                                 field="name"
+                                                columnLabel="Name"
                                                 value={contact.name}
                                                 placeholder="Add name"
                                             />
                                         </td>
-                                        <td className="border-r px-2 py-1 text-muted-foreground">
+                                        <td
+                                            data-grid-column={1}
+                                            className="border-r border-b text-muted-foreground"
+                                        >
                                             <InlineCell
                                                 contactId={contact.id}
                                                 field="email"
+                                                columnLabel="Email"
                                                 type="email"
                                                 value={contact.email}
                                                 placeholder="Add email"
                                             />
                                         </td>
-                                        <td className="border-r px-2 py-1 text-muted-foreground">
+                                        <td
+                                            data-grid-column={2}
+                                            className="border-r border-b text-muted-foreground"
+                                        >
                                             <InlineCell
                                                 contactId={contact.id}
                                                 field="phone"
+                                                columnLabel="Phone"
                                                 value={contact.phone}
                                                 placeholder="Add phone"
                                             />
                                         </td>
-                                        <td className="border-r px-2 py-1">
+                                        <td
+                                            data-grid-column={3}
+                                            className="border-r border-b"
+                                        >
                                             <InlineStatusCell
                                                 contactId={contact.id}
                                                 status={contact.status}
@@ -216,24 +321,90 @@ export default function ContactsIndex({
                                                 statuses={statuses}
                                             />
                                         </td>
-                                        <td className="border-r px-4 py-1 text-muted-foreground">
+                                        <td className="border-r border-b px-3 text-muted-foreground">
                                             {contact.lists_count}
                                         </td>
-                                        <td className="px-2 py-1 text-right">
+                                        <td className="border-b px-3">
                                             <Link
                                                 href={show([slug, contact.id])}
-                                                className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                                                aria-label={`Open ${contact.name}`}
+                                                className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                             >
-                                                Open
+                                                Open{' '}
+                                                <ArrowUpRight className="size-3.5" />
                                             </Link>
                                         </td>
                                     </tr>
                                 ))}
+                                {contacts.data.length === 0 && (
+                                    <tr>
+                                        <td
+                                            colSpan={7}
+                                            className="h-40 border-b text-center"
+                                        >
+                                            <p className="font-medium">
+                                                {filters.q ||
+                                                filters.status ||
+                                                filters.list
+                                                    ? 'No matching contacts'
+                                                    : 'No contacts yet'}
+                                            </p>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                {filters.q ||
+                                                filters.status ||
+                                                filters.list
+                                                    ? 'Try another search or change your filters.'
+                                                    : 'Add your first contact to start filling this sheet.'}
+                                            </p>
+                                        </td>
+                                    </tr>
+                                )}
+                                {Array.from(
+                                    {
+                                        length: Math.max(
+                                            0,
+                                            8 - contacts.data.length,
+                                        ),
+                                    },
+                                    (_, row) => (
+                                        <tr
+                                            key={`blank-${row}`}
+                                            aria-hidden="true"
+                                            className="h-11 text-muted-foreground/60"
+                                        >
+                                            <td className="sticky left-0 border-r border-b bg-muted/60 text-center text-xs">
+                                                {(contacts.from ?? 1) +
+                                                    contacts.data.length +
+                                                    row}
+                                            </td>
+                                            <td className="sticky left-12 border-r border-b bg-card" />
+                                            <td className="border-r border-b" />
+                                            <td className="border-r border-b" />
+                                            <td className="border-r border-b" />
+                                            <td className="border-r border-b" />
+                                            <td className="border-b" />
+                                        </tr>
+                                    ),
+                                )}
                             </tbody>
                         </table>
                     </div>
-                )}
-
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
+                        <span>
+                            {contacts.total === 0
+                                ? '0 contacts'
+                                : `Showing ${contacts.from}–${contacts.to} of ${contacts.total} contacts`}
+                        </span>
+                        <span>
+                            Click a cell to edit · Use arrow keys to move
+                        </span>
+                    </div>
+                    <ListTabs
+                        lists={lists}
+                        activeListId={filters.list}
+                        canCreate={can.create}
+                    />
+                </div>
                 <Pagination links={contacts.links} />
             </div>
         </>

@@ -43,9 +43,9 @@ export default function ContactShow({
 
             <h1 className="sr-only">{contact.name}</h1>
 
-            <div className="flex flex-col space-y-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
                         <Heading variant="small" title={contact.name} />
                         <ContactStatusBadge
                             status={contact.status}
@@ -53,7 +53,7 @@ export default function ContactShow({
                         />
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             variant="secondary"
                             onClick={() => setEditOpen(true)}
@@ -71,7 +71,7 @@ export default function ContactShow({
                     </div>
                 </div>
 
-                <Card>
+                <Card className="shadow-sm">
                     <CardHeader>
                         <CardTitle>Details</CardTitle>
                     </CardHeader>
@@ -87,7 +87,7 @@ export default function ContactShow({
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="shadow-sm">
                     <CardHeader>
                         <CardTitle>Lists</CardTitle>
                     </CardHeader>
@@ -106,7 +106,7 @@ export default function ContactShow({
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="shadow-sm">
                     <CardHeader>
                         <CardTitle>Campaigns</CardTitle>
                     </CardHeader>
@@ -120,7 +120,7 @@ export default function ContactShow({
                                 {recipients.map((recipient) => (
                                     <li
                                         key={recipient.id}
-                                        className="flex items-center justify-between py-2 text-sm"
+                                        className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
                                     >
                                         <span>{recipient.campaign}</span>
                                         <span className="text-muted-foreground">
