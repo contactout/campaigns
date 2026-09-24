@@ -1,5 +1,13 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid, Send, Users } from 'lucide-react';
+import {
+    BookOpen,
+    FileText,
+    FolderGit2,
+    LayoutGrid,
+    PenLine,
+    Send,
+    Users,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -17,6 +25,8 @@ import {
 import { dashboard } from '@/routes';
 import { index as campaignsIndex } from '@/routes/campaigns';
 import { index as contactsIndex } from '@/routes/contacts';
+import { index as signaturesIndex } from '@/routes/signatures';
+import { index as templatesIndex } from '@/routes/templates';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
@@ -42,6 +52,16 @@ export function AppSidebar() {
             title: 'Contacts',
             href: teamSlug ? contactsIndex(teamSlug) : '/',
             icon: Users,
+        },
+        {
+            title: 'Templates',
+            href: teamSlug ? templatesIndex(teamSlug) : '/',
+            icon: FileText,
+        },
+        {
+            title: 'Signatures',
+            href: teamSlug ? signaturesIndex(teamSlug) : '/',
+            icon: PenLine,
         },
     ];
 

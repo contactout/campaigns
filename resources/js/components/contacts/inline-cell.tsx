@@ -67,9 +67,13 @@ export default function InlineCell({
                 preserveState: true,
                 onSuccess: () => {
                     savingRef.current = false;
+                    const shouldRestoreFocus =
+                        document.activeElement === inputRef.current;
                     setError(null);
                     setEditing(false);
-                    requestAnimationFrame(() => buttonRef.current?.focus());
+                    if (shouldRestoreFocus) {
+                        requestAnimationFrame(() => buttonRef.current?.focus());
+                    }
                 },
                 onError: (errors) => {
                     savingRef.current = false;

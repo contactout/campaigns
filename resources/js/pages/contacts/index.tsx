@@ -1,7 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowUpRight, Plus, Search } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
 import InlineCell from '@/components/contacts/inline-cell';
 import InlineStatusCell from '@/components/contacts/inline-status-cell';
@@ -49,6 +49,29 @@ export default function ContactsIndex({
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const [search, setSearch] = useState(filters.q ?? '');
+    const gridViewportRef = useRef<HTMLDivElement>(null);
+    const [visibleRows, setVisibleRows] = useState(8);
+
+    useEffect(() => {
+        const viewport = gridViewportRef.current;
+
+        if (!viewport) {
+            return;
+        }
+
+        const updateRows = () => {
+            setVisibleRows(
+                Math.max(8, Math.ceil((viewport.clientHeight - 44) / 44)),
+            );
+        };
+
+        updateRows();
+
+        const observer = new ResizeObserver(updateRows);
+        observer.observe(viewport);
+
+        return () => observer.disconnect();
+    }, []);
 
     const listOptions = lists.map((list) => ({
         id: list.id,
@@ -125,12 +148,12 @@ export default function ContactsIndex({
 
             <h1 className="sr-only">Contacts</h1>
 
-            <div className="flex w-full min-w-0 flex-col gap-5 px-4 py-6 sm:px-6">
+            <div className="flex h-[calc(100svh-4rem)] min-h-[28rem] w-full min-w-0 flex-col gap-5 px-4 py-6 sm:px-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading
                         variant="small"
                         title="Contacts"
-                        description={`${contacts.total} ${contacts.total === 1 ? 'contact' : 'contacts'} in your workspace`}
+                        description={`${contacts.total} ${contacts.total === 1 ? 'contact' : 'contacts'} in this view`}
                     />
 
                     {can.create ? (
@@ -197,8 +220,11 @@ export default function ContactsIndex({
                     </Button>
                 </form>
 
-                <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
-                    <div className="max-h-[min(640px,65svh)] min-h-72 overflow-auto overscroll-x-contain">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+                    <div
+                        ref={gridViewportRef}
+                        className="min-h-0 flex-1 overflow-auto overscroll-x-contain"
+                    >
                         <table
                             onKeyDown={handleGridKeyDown}
                             className="w-full min-w-[1000px] table-fixed border-separate border-spacing-0 text-sm"
@@ -363,7 +389,11 @@ export default function ContactsIndex({
                                     {
                                         length: Math.max(
                                             0,
-                                            8 - contacts.data.length,
+                                            visibleRows -
+                                                contacts.data.length -
+                                                (contacts.data.length === 0
+                                                    ? 4
+                                                    : 0),
                                         ),
                                     },
                                     (_, row) => (
