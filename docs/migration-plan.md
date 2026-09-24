@@ -211,35 +211,41 @@ in the plan where it aids traceability.
 
 Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and demoable.
 
-### Phase 0 — Foundation
-- Confirm ownership model (§4.1) and queue driver.
-- Reconstruct base migrations from source `mysql-schema.sql` (campaigns, campaign_steps,
-  recipients, campaign_emails, mailer_connections, templates, folders, signatures,
-  placeholders, attachments, email_opens, links, link_clicks, unsubscribes, settings).
-- Port enums (`app/Enums`), DTOs (`app/Data`), models + factories + policies.
-- `routes/campaigns.php` skeleton + dashboard nav entry.
-- Tests: model relationship/cast/scope tests; migration tests.
-- Exit: models migrate + factories + `CampaignPolicy` + tests green.
+### Phase 0 — Data foundation (DONE)
+- Team-owned base tables: `campaigns`, `campaign_steps`, `recipients`, `campaign_emails`,
+  `mailer_connections`.
+- Enums, models, factories, `CampaignPolicy`. Tests green.
+- Recipient table is **reworked in Phase 1** to reference a contact (see below).
 
-### Phase 1 — Campaign core vertical (UI)
+### Phase 1 — Contacts & sheets (PRIORITY)
+- Contacts + contact identities + sheets + contact↔sheet pivot, team-owned.
+- `Contact`, `ContactIdentity`, `Sheet` models, enums (`ContactStatus`,
+  `ContactIdentityType`), factories, policies.
+- **Rework `recipients`**: replace embedded `email` with `contact_id` FK; unique
+  `[campaign_id, contact_id]`; keep per-campaign state (`status`, `source`, `placeholders`,
+  `sequence`, scheduling/interaction timestamps). Recipients are always created *from*
+  contacts.
+- Contact properties (custom fields) deferred to Phase 4 (needs placeholders).
+- Exit: create contacts, group them in sheets, add them to a campaign as recipients.
+
+### Phase 2 — Campaign core vertical (UI)
 - `CampaignController` (index/store/show/update/destroy) + start/stop/archive/duplicate.
-- Form Requests, Actions, `CampaignResource` (if a JSON API is kept).
-- Pages: campaign list, campaign show, campaign editor shell (steps list, no sending yet).
+- Form Requests + Actions.
+- Pages: campaign list, campaign show, campaign editor shell (email steps, no sending yet).
 - Wayfinder routes; shadcn-based list/summary/tabs; create-campaign modal.
-- Tests: controller/feature tests + Inertia assertions; component tests (Vitest).
 - Exit: create/edit/duplicate/delete a campaign end to end in the browser.
 
-### Phase 2 — Recipients
-- Add/remove recipients, CSV import, recipient grid (TanStack table + virtual),
-  recipient statuses, placeholder resolution per recipient.
-- Tests: import validation, grid model, status transitions.
-- Exit: import a CSV, see recipients, edit cells, remove.
+### Phase 3 — Recipient management UI
+- Add contacts to a campaign, remove, recipient grid (TanStack table + virtual),
+  recipient statuses, CSV/manual contact import.
+- Exit: pick contacts/sheets, add as recipients, manage statuses.
 
-### Phase 3 — Templates, folders, signatures, placeholders
-- Template CRUD + editor shell, folders, signature manager, campaign placeholders.
+### Phase 4 — Templates, folders, signatures, placeholders
+- Template CRUD + editor shell (Tiptap), folders, signature manager, placeholders,
+  contact properties (custom fields).
 - Exit: save/apply a template and signature in a campaign step.
 
-### Phase 4 — Mailer connections + sending engine
+### Phase 5 — Mailer connections + sending engine
 - SMTP/IMAP connection CRUD + connectivity check (no Gmail/Outlook yet).
 - Port the send pipeline, simplified: `SendEmail`, `ScheduleStepJob`,
   `ScheduleRecipientStep`, `CheckEmailStatus`, rate limiting/sending limits.
@@ -247,14 +253,9 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Exit: create SMTP connection, start campaign, emails actually send on schedule
   (against Mailpit/Mailhog in dev), state transitions correct.
 
-### Phase 5 — Tracking + replies + bounces
+### Phase 6 — Tracking + replies + bounces
 - Open pixel, link redirect, unsubscribe; IMAP reply/bounce polling; thread ids.
 - Exit: opens/clicks/replies/unsubscribes recorded and shown in the UI.
-
-### Phase 6 — Contacts & sheets CRM
-- Contacts, contact identities, contact properties, sheets + contact pivots.
-- Recipient ↔ contact linking; import/export; activity history.
-- Exit: manage reusable contacts in sheets and add them to campaigns.
 
 ### Phase 7 — Onboarding + polish
 - Campaign/recipient onboarding (replace Joyride with a maintained lib or custom),
@@ -278,15 +279,22 @@ core tables (renames in parentheses):
   mailer_connection_id, settings(json), type, started_at, interrupted_reason, timestamps.
 - `campaign_steps` (source `mm_touches`) — campaign_id, sequence, subject, body, day,
   time, is_threaded, setting(json). **Email-only** (no `type`/channel column in v1).
-- `recipients` — campaign_id, contact_id(nullable), email, timezone, status, source,
-  placeholders(json), sequence, next_scheduled_at, interaction timestamps.
-- `campaign_emails` (source `mm_emails`) — campaign_id, step_id, recipient_id,
+- `recipients` — campaign↔contact membership: campaign_id, **contact_id**, status, source,
+  placeholders(json, per-campaign overrides), sequence, next_scheduled_at, interaction
+  timestamps. Unique `[campaign_id, contact_id]`. **No embedded email** — the address comes
+  from the contact's email identity.
+- `campaign_emails` (source `mm_emails`) — campaign_id, campaign_step_id, recipient_id,
   mailer_connection_id, thread_id, message_id, tracker, status, data(json), timestamps.
 - `mailer_connections` — team_id, user_id, name, mailer_type, encrypted smtp settings,
   status, rate-limit/limit counters.
 - `email_templates`, `template_folders`, `signatures`, `placeholders`, `attachments`,
   `email_opens`, `tracked_links`, `link_clicks`, `unsubscribes`, `campaign_settings`.
-- CRM: `contacts`, `contact_identities`, `contact_properties`, `sheets`, `contact_sheet`.
+- CRM (Phase 1): `contacts` (team_id, name, source, avatar_url, status, timezone,
+  last_contacted_at, last_responded_at, do_not_contact_at/by, softDeletes),
+  `contact_identities` (contact_id, identity_type email|phone, normalized_value; unique
+  `[team_id, identity_type, normalized_value]`), `sheets` (team_id, name, is_default,
+  settings), `contact_sheet` pivot (unique `[sheet_id, contact_id]`).
+  `contact_properties` (custom fields, FK to placeholders) deferred to Phase 4.
 
 Drop on port: `mm_leads`, `mm_reports`, `mm_prompts`, `spam_test_*`, `sending_domains`,
 `mm_activities`, `mm_tasks`, `mm_sms_messages`. Keep an activity feed only if needed later.
