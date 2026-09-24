@@ -1,4 +1,5 @@
 export type * from './auth';
+export type * from './campaigns';
 export type * from './contacts';
 export type * from './navigation';
 export type * from './teams';

@@ -29,4 +29,14 @@ class CampaignStepFactory extends Factory
             'setting' => null,
         ];
     }
+
+    /**
+     * Indicate that the step belongs to the given campaign.
+     */
+    public function forCampaign(Campaign $campaign): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'campaign_id' => $campaign->id,
+        ]);
+    }
 }

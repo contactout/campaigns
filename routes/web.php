@@ -13,6 +13,7 @@ Route::prefix('{current_team}')
         Route::get('dashboard', DashboardController::class)->name('dashboard');
 
         require __DIR__.'/contacts.php';
+        require __DIR__.'/campaigns.php';
     });
 
 Route::middleware(['auth'])->group(function () {

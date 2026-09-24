@@ -47,4 +47,36 @@ class CampaignPolicy
     {
         return $user->belongsToTeam($campaign->team);
     }
+
+    /**
+     * Determine whether the user can start the campaign.
+     */
+    public function start(User $user, Campaign $campaign): bool
+    {
+        return $user->belongsToTeam($campaign->team);
+    }
+
+    /**
+     * Determine whether the user can stop the campaign.
+     */
+    public function stop(User $user, Campaign $campaign): bool
+    {
+        return $user->belongsToTeam($campaign->team);
+    }
+
+    /**
+     * Determine whether the user can archive the campaign.
+     */
+    public function archive(User $user, Campaign $campaign): bool
+    {
+        return $user->belongsToTeam($campaign->team);
+    }
+
+    /**
+     * Determine whether the user can duplicate the campaign.
+     */
+    public function duplicate(User $user, Campaign $campaign): bool
+    {
+        return $user->belongsToTeam($campaign->team);
+    }
 }

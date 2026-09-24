@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CampaignStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\CampaignFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string $timezone
  * @property int|null $mailer_connection_id
  * @property array<string, mixed>|null $settings
- * @property Carbon|null $started_at
+ * @property CarbonImmutable|null $started_at
  * @property string|null $interrupted_reason
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -119,6 +120,20 @@ class Campaign extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', CampaignStatus::Active);
+    }
+
+    /**
+     * Determine whether the campaign can be started.
+     *
+     * A campaign needs at least one step and must be in the draft or stopped state.
+     */
+    public function canBeStarted(): bool
+    {
+        if (! in_array($this->status, [CampaignStatus::Draft, CampaignStatus::Stopped], true)) {
+            return false;
+        }
+
+        return $this->steps()->exists();
     }
 
     /**

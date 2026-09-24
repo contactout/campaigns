@@ -34,6 +34,16 @@ class CampaignFactory extends Factory
     }
 
     /**
+     * Indicate that the campaign belongs to the given team.
+     */
+    public function forTeam(Team $team): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'team_id' => $team->id,
+        ]);
+    }
+
+    /**
      * Indicate that the campaign is active.
      */
     public function active(): static
