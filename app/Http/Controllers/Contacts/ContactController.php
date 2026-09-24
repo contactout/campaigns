@@ -41,7 +41,7 @@ class ContactController extends Controller
         $contacts = Contact::query()
             ->forTeam($currentTeam->id)
             ->withCount('lists')
-            ->with('emailIdentity')
+            ->with(['emailIdentity', 'phoneIdentity'])
             ->when($filters['q'], function (Builder $query, string $search): void {
                 $query->where(function (Builder $query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
@@ -61,11 +61,14 @@ class ContactController extends Controller
             'contacts' => $contacts,
             'filters' => $filters,
             'lists' => $currentTeam->contactLists()
+                ->withCount('contacts')
                 ->orderBy('name')
                 ->get()
                 ->map(fn (ContactList $list): array => [
                     'id' => $list->id,
                     'name' => $list->name,
+                    'is_default' => $list->is_default,
+                    'contacts_count' => (int) $list->getAttribute('contacts_count'),
                 ])
                 ->all(),
             'can' => [
@@ -203,9 +206,9 @@ class ContactController extends Controller
     }
 
     /**
-     * Map a contact to the summary payload used by the index and list pages.
+     * Map a contact to the summary payload used by the index page.
      *
-     * @return array{id: int, name: string, email: string|null, status: string, status_label: string, lists_count: int, created_at: string|null}
+     * @return array{id: int, name: string, email: string|null, phone: string|null, status: string, status_label: string, lists_count: int, created_at: string|null}
      */
     protected function contactSummary(Contact $contact): array
     {
@@ -213,6 +216,7 @@ class ContactController extends Controller
             'id' => $contact->id,
             'name' => $contact->name,
             'email' => $contact->emailIdentity?->normalized_value,
+            'phone' => $contact->phoneIdentity?->normalized_value,
             'status' => $contact->status->value,
             'status_label' => $contact->status->label(),
             'lists_count' => (int) $contact->getAttribute('lists_count'),

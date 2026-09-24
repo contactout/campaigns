@@ -28,6 +28,7 @@ import type { ListOption, StatusOption } from '@/types';
 type Props = {
     lists: ListOption[];
     statuses: StatusOption[];
+    defaultListIds?: number[];
     children: React.ReactNode;
 };
 
@@ -36,6 +37,7 @@ const defaultStatus = 'NotContacted';
 export default function CreateContactModal({
     lists,
     statuses,
+    defaultListIds = [],
     children,
 }: Props) {
     const [open, setOpen] = useState(false);
@@ -155,6 +157,9 @@ export default function CreateContactModal({
                                                     <Checkbox
                                                         name="lists[]"
                                                         value={String(list.id)}
+                                                        defaultChecked={defaultListIds.includes(
+                                                            list.id,
+                                                        )}
                                                     />
                                                     {list.name}
                                                 </label>

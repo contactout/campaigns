@@ -37,6 +37,7 @@ export type ContactSummary = {
     id: number;
     name: string;
     email: string | null;
+    phone: string | null;
     status: string;
     status_label: string;
     lists_count: number;

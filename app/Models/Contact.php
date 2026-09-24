@@ -40,6 +40,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, ContactList> $lists
  * @property-read Collection<int, Recipient> $recipients
  * @property-read ContactIdentity|null $emailIdentity
+ * @property-read ContactIdentity|null $phoneIdentity
  */
 #[Fillable(['team_id', 'user_id', 'name', 'source', 'avatar_url', 'status', 'timezone', 'last_contacted_at', 'last_responded_at', 'do_not_contact_at', 'do_not_contact_by'])]
 class Contact extends Model
@@ -99,6 +100,17 @@ class Contact extends Model
     }
 
     /**
+     * Get the primary phone identity for the contact.
+     *
+     * @return HasOne<ContactIdentity, $this>
+     */
+    public function phoneIdentity(): HasOne
+    {
+        return $this->hasOne(ContactIdentity::class)
+            ->where('identity_type', ContactIdentityType::Phone->value);
+    }
+
+    /**
      * Get the lists the contact belongs to.
      *
      * @return BelongsToMany<ContactList, $this>
@@ -124,6 +136,14 @@ class Contact extends Model
     public function email(): ?string
     {
         return $this->emailIdentity?->normalized_value;
+    }
+
+    /**
+     * Get the contact's normalized phone number, if any.
+     */
+    public function phone(): ?string
+    {
+        return $this->phoneIdentity?->normalized_value;
     }
 
     /**

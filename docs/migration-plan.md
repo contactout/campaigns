@@ -234,7 +234,9 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
   `sequence`, scheduling/interaction timestamps). Recipients are always created _from_
   contacts.
 - Contact properties (custom fields) deferred to Phase 4 (needs placeholders).
-- Exit: create contacts, group them in lists, add them to a campaign as recipients.
+- Contacts are presented as a **spreadsheet-style grid** with list tabs (folded into the
+  Contacts section, mirroring the source "recipients-sheet" pattern).
+- Exit: create contacts, group them in lists (tabs), add them to a campaign as recipients.
 
 ### Phase 2 — Campaign core vertical (UI)
 
@@ -246,8 +248,8 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 
 ### Phase 3 — Recipient management UI
 
-- Add contacts to a campaign, remove, recipient grid (TanStack table + virtual),
-  recipient statuses, CSV/manual contact import.
+- Add contacts/lists to a campaign, remove, recipient grid, recipient statuses,
+  CSV/manual contact import. Contacts grid evolves toward the inline-editable sheet.
 - Exit: pick contacts/lists, add as recipients, manage statuses.
 
 ### Phase 4 — Templates, folders, signatures, placeholders

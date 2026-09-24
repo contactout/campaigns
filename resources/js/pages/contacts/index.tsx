@@ -1,8 +1,9 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import ContactStatusBadge from '@/components/contacts/contact-status-badge';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
+import ListTabs from '@/components/contacts/list-tabs';
 import Heading from '@/components/heading';
 import Pagination from '@/components/pagination';
 import { Button } from '@/components/ui/button';
@@ -16,8 +17,8 @@ import {
 } from '@/components/ui/select';
 import { index, show } from '@/routes/contacts';
 import type {
+    ContactListSummary,
     ContactSummary,
-    ListOption,
     Paginated,
     StatusOption,
 } from '@/types';
@@ -27,8 +28,9 @@ type Props = {
     filters: {
         q: string | null;
         list: number | null;
+        status: string | null;
     };
-    lists: ListOption[];
+    lists: ContactListSummary[];
     statuses: StatusOption[];
     can: {
         create: boolean;
@@ -43,14 +45,28 @@ export default function ContactsIndex({
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
+    const slug = currentTeam?.slug ?? '';
     const [search, setSearch] = useState(filters.q ?? '');
 
-    const navigate = (params: { q?: string; list?: string }) => {
+    const listOptions = lists.map((list) => ({
+        id: list.id,
+        name: list.name,
+    }));
+
+    const navigate = (params: {
+        q?: string;
+        list?: number | null;
+        status?: string;
+    }) => {
         router.get(
-            index.url(currentTeam?.slug ?? ''),
+            index.url(slug),
             {
                 q: params.q ?? filters.q ?? '',
-                list: params.list ?? filters.list ?? '',
+                list:
+                    params.list !== undefined
+                        ? (params.list ?? '')
+                        : (filters.list ?? ''),
+                status: params.status ?? filters.status ?? '',
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -62,7 +78,7 @@ export default function ContactsIndex({
 
             <h1 className="sr-only">Contacts</h1>
 
-            <div className="flex flex-col space-y-6">
+            <div className="flex flex-col space-y-4">
                 <div className="flex items-center justify-between">
                     <Heading
                         variant="small"
@@ -71,13 +87,25 @@ export default function ContactsIndex({
                     />
 
                     {can.create ? (
-                        <CreateContactModal lists={lists} statuses={statuses}>
+                        <CreateContactModal
+                            lists={listOptions}
+                            statuses={statuses}
+                            defaultListIds={
+                                filters.list ? [filters.list] : undefined
+                            }
+                        >
                             <Button data-test="contacts-new-button">
                                 <Plus /> New contact
                             </Button>
                         </CreateContactModal>
                     ) : null}
                 </div>
+
+                <ListTabs
+                    lists={lists}
+                    activeListId={filters.list}
+                    canCreate={can.create}
+                />
 
                 <form
                     className="flex flex-wrap items-center gap-2"
@@ -94,22 +122,22 @@ export default function ContactsIndex({
                     />
 
                     <Select
-                        value={filters.list ? String(filters.list) : 'all'}
+                        value={filters.status ?? 'all'}
                         onValueChange={(value) =>
-                            navigate({ list: value === 'all' ? '' : value })
+                            navigate({ status: value === 'all' ? '' : value })
                         }
                     >
                         <SelectTrigger className="w-48">
-                            <SelectValue placeholder="All lists" />
+                            <SelectValue placeholder="All statuses" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All lists</SelectItem>
-                            {lists.map((list) => (
+                            <SelectItem value="all">All statuses</SelectItem>
+                            {statuses.map((status) => (
                                 <SelectItem
-                                    key={list.id}
-                                    value={String(list.id)}
+                                    key={status.value}
+                                    value={status.value}
                                 >
-                                    {list.name}
+                                    {status.label}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -126,61 +154,55 @@ export default function ContactsIndex({
                     </p>
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">
-                        <table className="w-full text-sm">
+                        <table className="w-full border-collapse text-sm">
                             <thead className="bg-muted/50 text-left">
                                 <tr>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="border-b px-4 py-2 font-medium">
                                         Name
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="border-b px-4 py-2 font-medium">
                                         Email
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="border-b px-4 py-2 font-medium">
+                                        Phone
+                                    </th>
+                                    <th className="border-b px-4 py-2 font-medium">
                                         Status
                                     </th>
-                                    <th className="px-4 py-3 font-medium">
+                                    <th className="border-b px-4 py-2 font-medium">
                                         Lists
                                     </th>
-                                    <th className="px-4 py-3" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {contacts.data.map((contact) => (
                                     <tr
                                         key={contact.id}
-                                        className="border-t"
+                                        className="cursor-pointer border-b hover:bg-muted/40"
                                         data-test="contact-row"
+                                        onClick={() =>
+                                            router.visit(
+                                                show.url([slug, contact.id]),
+                                            )
+                                        }
                                     >
-                                        <td className="px-4 py-3 font-medium">
+                                        <td className="border-r px-4 py-2 font-medium">
                                             {contact.name}
                                         </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
+                                        <td className="border-r px-4 py-2 text-muted-foreground">
                                             {contact.email}
                                         </td>
-                                        <td className="px-4 py-3">
+                                        <td className="border-r px-4 py-2 text-muted-foreground">
+                                            {contact.phone}
+                                        </td>
+                                        <td className="border-r px-4 py-2">
                                             <ContactStatusBadge
                                                 status={contact.status}
                                                 label={contact.status_label}
                                             />
                                         </td>
-                                        <td className="px-4 py-3 text-muted-foreground">
+                                        <td className="px-4 py-2 text-muted-foreground">
                                             {contact.lists_count}
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                asChild
-                                            >
-                                                <Link
-                                                    href={show([
-                                                        currentTeam?.slug ?? '',
-                                                        contact.id,
-                                                    ])}
-                                                >
-                                                    View
-                                                </Link>
-                                            </Button>
                                         </td>
                                     </tr>
                                 ))}

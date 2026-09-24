@@ -1,13 +1,10 @@
 <?php
 
-use App\Enums\ContactIdentityType;
 use App\Enums\TeamRole;
 use App\Models\Contact;
-use App\Models\ContactIdentity;
 use App\Models\ContactList;
 use App\Models\Team;
 use App\Models\User;
-use Inertia\Testing\AssertableInertia as Assert;
 
 /**
  * Create a team with the given user attached as a member.
@@ -29,41 +26,13 @@ beforeEach(function (): void {
     config(['inertia.testing.ensure_pages_exist' => false]);
 });
 
-test('guests are redirected to login from lists', function () {
-    $team = Team::factory()->create();
-
-    $this->get(route('lists.index', ['current_team' => $team->slug]))
-        ->assertRedirect(route('login'));
-});
-
-test('non members cannot access lists', function () {
+test('non members cannot create a list', function () {
     $user = User::factory()->create();
     $team = Team::factory()->create();
 
     $this->actingAs($user)
-        ->get(route('lists.index', ['current_team' => $team->slug]))
+        ->post(route('lists.store', ['current_team' => $team->slug]), ['name' => 'Sneaky'])
         ->assertForbidden();
-});
-
-test('members can list their teams contact lists', function () {
-    [$team, $user] = contactListTeamWithMember();
-
-    $list = ContactList::factory()->create(['team_id' => $team->id, 'name' => 'Leads']);
-    $contact = Contact::factory()->forTeam($team)->create();
-    $list->contacts()->attach($contact);
-
-    $otherTeam = Team::factory()->create();
-    ContactList::factory()->create(['team_id' => $otherTeam->id]);
-
-    $this->actingAs($user)
-        ->get(route('lists.index', ['current_team' => $team->slug]))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('lists/index')
-            ->has('lists', 1)
-            ->where('lists.0.name', 'Leads')
-            ->where('lists.0.contacts_count', 1)
-            ->has('can'));
 });
 
 test('members can create a contact list', function () {
@@ -74,7 +43,7 @@ test('members can create a contact list', function () {
     ]);
 
     $response
-        ->assertRedirect(route('lists.index', ['current_team' => $team->slug]))
+        ->assertRedirect(route('contacts.index', ['current_team' => $team->slug]))
         ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'List created.']);
 
     $this->assertDatabaseHas('contact_lists', [
@@ -83,31 +52,6 @@ test('members can create a contact list', function () {
         'name' => 'Prospects',
         'is_default' => false,
     ]);
-});
-
-test('members can view a list with its contacts', function () {
-    [$team, $user] = contactListTeamWithMember();
-
-    $list = ContactList::factory()->create(['team_id' => $team->id, 'name' => 'Leads']);
-    $contact = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
-    ContactIdentity::factory()->create([
-        'team_id' => $team->id,
-        'contact_id' => $contact->id,
-        'identity_type' => ContactIdentityType::Email,
-        'normalized_value' => 'ada@example.com',
-    ]);
-    $list->contacts()->attach($contact);
-
-    $this->actingAs($user)
-        ->get(route('lists.show', ['current_team' => $team->slug, 'list' => $list]))
-        ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page
-            ->component('lists/show')
-            ->where('list.id', $list->id)
-            ->where('list.name', 'Leads')
-            ->has('contacts.data', 1)
-            ->where('contacts.data.0.name', 'Ada Lovelace')
-            ->where('contacts.data.0.email', 'ada@example.com'));
 });
 
 test('members can update a contact list', function () {
@@ -120,7 +64,7 @@ test('members can update a contact list', function () {
             'name' => 'New Name',
             'is_default' => true,
         ])
-        ->assertRedirect(route('lists.show', ['current_team' => $team->slug, 'list' => $list]));
+        ->assertRedirect();
 
     $this->assertDatabaseHas('contact_lists', [
         'id' => $list->id,
@@ -138,7 +82,7 @@ test('members can delete a contact list', function () {
 
     $this->actingAs($user)
         ->delete(route('lists.destroy', ['current_team' => $team->slug, 'list' => $list]))
-        ->assertRedirect(route('lists.index', ['current_team' => $team->slug]));
+        ->assertRedirect();
 
     $this->assertDatabaseMissing('contact_lists', ['id' => $list->id]);
     $this->assertDatabaseMissing('contact_list', ['contact_list_id' => $list->id]);
@@ -218,6 +162,8 @@ test('a list from another team is not found', function () {
     $otherList = ContactList::factory()->create(['team_id' => $otherTeam->id]);
 
     $this->actingAs($user)
-        ->get(route('lists.show', ['current_team' => $team->slug, 'list' => $otherList]))
+        ->patch(route('lists.update', ['current_team' => $team->slug, 'list' => $otherList]), [
+            'name' => 'Hijacked',
+        ])
         ->assertNotFound();
 });
