@@ -87,6 +87,21 @@ class ContactListController extends Controller
             ->withQueryString()
             ->through(fn (Contact $contact): array => $this->contactSummary($contact));
 
+        $availableContacts = Contact::query()
+            ->forTeam($currentTeam->id)
+            ->whereDoesntHave('lists', fn ($query) => $query->whereKey($list->id))
+            ->with('emailIdentity')
+            ->orderBy('name')
+            ->limit(200)
+            ->get()
+            ->map(fn (Contact $contact): array => [
+                'id' => $contact->id,
+                'name' => $contact->name,
+                'email' => $contact->emailIdentity?->normalized_value,
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('lists/show', [
             'list' => [
                 'id' => $list->id,
@@ -94,6 +109,7 @@ class ContactListController extends Controller
                 'is_default' => $list->is_default,
             ],
             'contacts' => $contacts,
+            'availableContacts' => $availableContacts,
             'can' => [
                 'update' => $request->user()->can('update', $list),
                 'delete' => $request->user()->can('delete', $list),

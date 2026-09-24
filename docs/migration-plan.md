@@ -21,19 +21,19 @@ mail-merge feature in `contactout/contactout_website`. It is **not a 1:1 port**:
 
 ## 2. Stacks
 
-| | Source (`contactout_website`) | Target (`mmos`) |
-|---|---|---|
-| Framework | Laravel (older major) | Laravel 13 |
-| PHP | 8.x | 8.3 (guidelines say 8.4) |
-| Frontend | React 16, TS 4.2 | React 19.2, TS 5.7 |
-| Inertia | `@inertiajs/react` 1.3 | `@inertiajs/react` 3 |
-| CSS | Tailwind 3 + `tailwind-styled-components` + `@emotion/styled` | Tailwind 4 (CSS-first) + shadcn/ui + `cva` + `cn()` |
-| HTTP client | `axios` (+ `humps`) | Inertia v3 XHR / `useHttp` |
-| Auth | ContactOut session + paid feature gates | Fortify + teams (starter kit) |
-| Queues | Redis + Horizon | TBD: database by default, Redis optional |
-| State | local state + `react-query` v3 | React 19 + Inertia props |
-| Tests (FE) | Jest 29 (~130 files) | Vitest (rewritten) |
-| Tests (BE) | Pest (`Contactout\MailMerge\Tests`) | Pest 5 |
+|             | Source (`contactout_website`)                                 | Target (`mmos`)                                     |
+| ----------- | ------------------------------------------------------------- | --------------------------------------------------- |
+| Framework   | Laravel (older major)                                         | Laravel 13                                          |
+| PHP         | 8.x                                                           | 8.3 (guidelines say 8.4)                            |
+| Frontend    | React 16, TS 4.2                                              | React 19.2, TS 5.7                                  |
+| Inertia     | `@inertiajs/react` 1.3                                        | `@inertiajs/react` 3                                |
+| CSS         | Tailwind 3 + `tailwind-styled-components` + `@emotion/styled` | Tailwind 4 (CSS-first) + shadcn/ui + `cva` + `cn()` |
+| HTTP client | `axios` (+ `humps`)                                           | Inertia v3 XHR / `useHttp`                          |
+| Auth        | ContactOut session + paid feature gates                       | Fortify + teams (starter kit)                       |
+| Queues      | Redis + Horizon                                               | TBD: database by default, Redis optional            |
+| State       | local state + `react-query` v3                                | React 19 + Inertia props                            |
+| Tests (FE)  | Jest 29 (~130 files)                                          | Vitest (rewritten)                                  |
+| Tests (BE)  | Pest (`Contactout\MailMerge\Tests`)                           | Pest 5                                              |
 
 Source frontend lives in `resources/assets/js/dashboard/` (+ `modules/mail-merge/resources/ts`).
 Target frontend lives in `resources/js/` with Wayfinder-generated routes.
@@ -89,24 +89,25 @@ Module: `resources/assets/js/dashboard/mail-merge/` — **538 files**.
 
 Mirror the existing **`Teams/` vertical slice** conventions:
 
-| Concern | Where |
-|---|---|
-| Migrations | `database/migrations/` (anonymous class, `constrained()` FKs) |
-| Models | `app/Models/` (`#[Fillable]` attributes, `casts()` method, PHPDoc `@property`) |
-| Enums | `app/Enums/` (TitleCase cases, `label()`/helpers) |
-| DTOs | `app/Data/` (`readonly class`, promoted ctor props) |
-| Actions | `app/Actions/Campaigns/…` (single-purpose `handle()`; `DB::transaction`) |
-| Policies | `app/Policies/` (auto-discovered) |
-| Requests | `app/Http/Requests/Campaigns/…` |
-| Controllers | `app/Http/Controllers/Campaigns/…` (+ `Api/V1/…` if a public API is wanted) |
-| Pages | `resources/js/pages/campaigns/*.tsx` |
-| Components | `resources/js/components/campaigns/…` + shadcn `components/ui/*` |
-| Hooks | `resources/js/hooks/` |
-| Types | `resources/js/types/` (domain types in their own file, re-exported) |
-| Routes | `routes/campaigns.php` (loaded from `routes/web.php`), Wayfinder-generated TS |
-| Tests | `tests/Feature/Campaigns/…`, `tests/Unit/…` |
+| Concern     | Where                                                                          |
+| ----------- | ------------------------------------------------------------------------------ |
+| Migrations  | `database/migrations/` (anonymous class, `constrained()` FKs)                  |
+| Models      | `app/Models/` (`#[Fillable]` attributes, `casts()` method, PHPDoc `@property`) |
+| Enums       | `app/Enums/` (TitleCase cases, `label()`/helpers)                              |
+| DTOs        | `app/Data/` (`readonly class`, promoted ctor props)                            |
+| Actions     | `app/Actions/Campaigns/…` (single-purpose `handle()`; `DB::transaction`)       |
+| Policies    | `app/Policies/` (auto-discovered)                                              |
+| Requests    | `app/Http/Requests/Campaigns/…`                                                |
+| Controllers | `app/Http/Controllers/Campaigns/…` (+ `Api/V1/…` if a public API is wanted)    |
+| Pages       | `resources/js/pages/campaigns/*.tsx`                                           |
+| Components  | `resources/js/components/campaigns/…` + shadcn `components/ui/*`               |
+| Hooks       | `resources/js/hooks/`                                                          |
+| Types       | `resources/js/types/` (domain types in their own file, re-exported)            |
+| Routes      | `routes/campaigns.php` (loaded from `routes/web.php`), Wayfinder-generated TS  |
+| Tests       | `tests/Feature/Campaigns/…`, `tests/Unit/…`                                    |
 
 Conventions to obey (from `AGENTS.md` + starter kit):
+
 - Wayfinder route/action functions instead of hardcoded URLs.
 - `Inertia::render()` only (no Blade pages outside `app.blade.php`).
 - `vendor/bin/pint --dirty --format agent`; PHPStan level 7.
@@ -127,25 +128,25 @@ owner is the team; `user_id` on a campaign records who created it.
 
 ## 5. Scope — in / deferred / out
 
-| Area | Decision | Notes |
-|---|---|---|
-| Campaign CRUD (draft/show/edit/start/stop/archive/duplicate) | **In** | Core |
-| Campaign steps ("touches") + scheduling/timezone | **In** | Core; email steps first |
-| Recipients: manual add, CSV import, grid, status | **In** | Core |
-| Templates + folders + placeholders + signatures | **In** | Core |
-| Mailer connections: **SMTP/IMAP** | **In** | Self-hostable, OSS-friendly |
-| Sending engine (jobs, rate limits, scheduling, threads) | **In** | Hardest phase |
-| Tracking: open pixel, link click, unsubscribe | **In** | Core |
-| Reply/bounce detection (IMAP polling) | **In** | Needs IMAP mailer |
-| Gmail API + Microsoft Graph mailers | **Deferred** | Needs own OAuth apps/creds |
-| Contacts + lists CRM subsystem (source "sheets") | **In** | Later phase; contacts/identities/properties/lists |
-| Non-email steps (call, LinkedIn, manual) | **Out of v1** | Email-only product; model stays email-only |
-| AI composer / personalization (OpenAI/Prism) | **Out of v1** | Optional adapter later, off by default |
-| Spam-test (provider inboxes) | **Out of v1** | External/paid infra; content scan only |
-| SMS via Dialer/Telnyx | **Out** | Proprietary module; not portable |
-| Lead/lists/extension "add to campaign" | **Out** | ContactOut ecosystem |
-| Admin panel, sales dashboard, feature/billing gates | **Out** | Not open-source relevant |
-| Marketing static "email campaigns" page | **In (last)** | Public-facing, low risk |
+| Area                                                         | Decision      | Notes                                             |
+| ------------------------------------------------------------ | ------------- | ------------------------------------------------- |
+| Campaign CRUD (draft/show/edit/start/stop/archive/duplicate) | **In**        | Core                                              |
+| Campaign steps ("touches") + scheduling/timezone             | **In**        | Core; email steps first                           |
+| Recipients: manual add, CSV import, grid, status             | **In**        | Core                                              |
+| Templates + folders + placeholders + signatures              | **In**        | Core                                              |
+| Mailer connections: **SMTP/IMAP**                            | **In**        | Self-hostable, OSS-friendly                       |
+| Sending engine (jobs, rate limits, scheduling, threads)      | **In**        | Hardest phase                                     |
+| Tracking: open pixel, link click, unsubscribe                | **In**        | Core                                              |
+| Reply/bounce detection (IMAP polling)                        | **In**        | Needs IMAP mailer                                 |
+| Gmail API + Microsoft Graph mailers                          | **Deferred**  | Needs own OAuth apps/creds                        |
+| Contacts + lists CRM subsystem (source "sheets")             | **In**        | Later phase; contacts/identities/properties/lists |
+| Non-email steps (call, LinkedIn, manual)                     | **Out of v1** | Email-only product; model stays email-only        |
+| AI composer / personalization (OpenAI/Prism)                 | **Out of v1** | Optional adapter later, off by default            |
+| Spam-test (provider inboxes)                                 | **Out of v1** | External/paid infra; content scan only            |
+| SMS via Dialer/Telnyx                                        | **Out**       | Proprietary module; not portable                  |
+| Lead/lists/extension "add to campaign"                       | **Out**       | ContactOut ecosystem                              |
+| Admin panel, sales dashboard, feature/billing gates          | **Out**       | Not open-source relevant                          |
+| Marketing static "email campaigns" page                      | **In (last)** | Public-facing, low risk                           |
 
 Decisions are recorded in §14.
 
@@ -153,24 +154,24 @@ Decisions are recorded in §14.
 
 ## 6. Source → target mapping (examples)
 
-| Source | Target |
-|---|---|
-| `Contactout\MailMerge\Models\Campaign` (`mm_campaigns`) | `App\Models\Campaign` (`campaigns`) |
-| `Models\Touch` | `App\Models\CampaignStep` (rename "touch" → "step" for clarity) |
-| `Models\Recipient` | `App\Models\Recipient` (`campaigns_recipients` or `recipients`) |
-| `Models\Email` | `App\Models\CampaignEmail` |
-| `Models\MailerConnection` | `App\Models\MailerConnection` |
-| `Actions\Campaign\StartCampaignAction` | `App\Actions\Campaigns\StartCampaign` |
-| `Http\Controllers\Api\CampaignController` | `App\Http\Controllers\Campaigns\CampaignController` |
-| `routes/api.php` `/api/email/...` | Inertia-only: `useHttp` / `<Form>` against Wayfinder routes (no public JSON API in v1) |
-| `resources/assets/js/dashboard/mail-merge/**` | `resources/js/pages/campaigns/**` + `resources/js/components/campaigns/**` |
-| `campaign-index.tsx` | `pages/campaigns/index.tsx` |
-| `campaign-edit-v2.tsx` | `pages/campaigns/edit.tsx` |
-| `styled.tsx` primitives | shadcn/ui + shared `components/campaigns/*` |
-| `api/*.ts` (axios) | `useHttp` / `router` + Wayfinder functions |
-| TinyMCE editor | Tiptap (MIT) |
-| `humps` decamelize | drop; standardise camelCase JSON props |
-| Feature gates / `campaigns bonus` | drop |
+| Source                                                  | Target                                                                                 |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Contactout\MailMerge\Models\Campaign` (`mm_campaigns`) | `App\Models\Campaign` (`campaigns`)                                                    |
+| `Models\Touch`                                          | `App\Models\CampaignStep` (rename "touch" → "step" for clarity)                        |
+| `Models\Recipient`                                      | `App\Models\Recipient` (`campaigns_recipients` or `recipients`)                        |
+| `Models\Email`                                          | `App\Models\CampaignEmail`                                                             |
+| `Models\MailerConnection`                               | `App\Models\MailerConnection`                                                          |
+| `Actions\Campaign\StartCampaignAction`                  | `App\Actions\Campaigns\StartCampaign`                                                  |
+| `Http\Controllers\Api\CampaignController`               | `App\Http\Controllers\Campaigns\CampaignController`                                    |
+| `routes/api.php` `/api/email/...`                       | Inertia-only: `useHttp` / `<Form>` against Wayfinder routes (no public JSON API in v1) |
+| `resources/assets/js/dashboard/mail-merge/**`           | `resources/js/pages/campaigns/**` + `resources/js/components/campaigns/**`             |
+| `campaign-index.tsx`                                    | `pages/campaigns/index.tsx`                                                            |
+| `campaign-edit-v2.tsx`                                  | `pages/campaigns/edit.tsx`                                                             |
+| `styled.tsx` primitives                                 | shadcn/ui + shared `components/campaigns/*`                                            |
+| `api/*.ts` (axios)                                      | `useHttp` / `router` + Wayfinder functions                                             |
+| TinyMCE editor                                          | Tiptap (MIT)                                                                           |
+| `humps` decamelize                                      | drop; standardise camelCase JSON props                                                 |
+| Feature gates / `campaigns bonus`                       | drop                                                                                   |
 
 Naming: prefer `campaign_steps` over "touches" going forward, but keep source vocabulary
 in the plan where it aids traceability.
@@ -180,17 +181,20 @@ in the plan where it aids traceability.
 ## 7. Translation rules
 
 **React 16 → 19**
+
 - `ReactDOM.render` → `createRoot` (MMOS already does this).
 - Drop `defaultProps`, `React.ForwardRefRenderFunction` legacy patterns.
 - `@testing-library/react` v11 → v16; rewrite Jest tests to Vitest/RTL.
 
 **Inertia 1 → 3**
+
 - Event names changed (`invalid`→`httpException`, `exception`→`networkError`).
 - `router.cancel()` → `router.cancelAll()`; `Inertia::lazy` → `Inertia::optional()`.
 - Prefer `<Form>`/`useForm` + Wayfinder `.form()` for mutations; `useHttp` for
   standalone JSON calls. Do not port the axios `request.ts` wrapper as-is.
 
 **Tailwind 3 → 4**
+
 - No `tailwind.config.js`; use `@theme`/`@source` in `resources/css/app.css`.
 - `tailwindcss/nesting` PostCSS plugin removed.
 - **`tailwind-styled-components` has no v4 support** → replace with shadcn/ui + `cva` + `cn()`.
@@ -198,10 +202,12 @@ in the plan where it aids traceability.
 - Map the source custom palette/screens to MMOS tokens (see §11).
 
 **TypeScript 4.2 → 5.7**
+
 - Prefer `const` objects + union types over `enum` (source uses enums).
 - Upgrade `@types/*` with React 19.
 
 **HTTP/JSON**
+
 - Decide camelCase vs snake_case: source uses `humps`; MMOS uses camelCase props.
   Standardise on **camelCase at the boundary** (matches existing controllers).
 
@@ -212,23 +218,26 @@ in the plan where it aids traceability.
 Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and demoable.
 
 ### Phase 0 — Data foundation (DONE)
+
 - Team-owned base tables: `campaigns`, `campaign_steps`, `recipients`, `campaign_emails`,
   `mailer_connections`.
 - Enums, models, factories, `CampaignPolicy`. Tests green.
 - Recipient table is **reworked in Phase 1** to reference a contact (see below).
 
 ### Phase 1 — Contacts & lists (PRIORITY)
+
 - Contacts + contact identities + lists + contact↔list pivot, team-owned.
 - `Contact`, `ContactIdentity`, `ContactList` models (source "Sheet" → **List**),
   enums (`ContactStatus`, `ContactIdentityType`), factories, policies.
 - **Rework `recipients`**: replace embedded `email` with `contact_id` FK; unique
   `[campaign_id, contact_id]`; keep per-campaign state (`status`, `source`, `placeholders`,
-  `sequence`, scheduling/interaction timestamps). Recipients are always created *from*
+  `sequence`, scheduling/interaction timestamps). Recipients are always created _from_
   contacts.
 - Contact properties (custom fields) deferred to Phase 4 (needs placeholders).
 - Exit: create contacts, group them in lists, add them to a campaign as recipients.
 
 ### Phase 2 — Campaign core vertical (UI)
+
 - `CampaignController` (index/store/show/update/destroy) + start/stop/archive/duplicate.
 - Form Requests + Actions.
 - Pages: campaign list, campaign show, campaign editor shell (email steps, no sending yet).
@@ -236,16 +245,19 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Exit: create/edit/duplicate/delete a campaign end to end in the browser.
 
 ### Phase 3 — Recipient management UI
+
 - Add contacts to a campaign, remove, recipient grid (TanStack table + virtual),
   recipient statuses, CSV/manual contact import.
 - Exit: pick contacts/lists, add as recipients, manage statuses.
 
 ### Phase 4 — Templates, folders, signatures, placeholders
+
 - Template CRUD + editor shell (Tiptap), folders, signature manager, placeholders,
   contact properties (custom fields).
 - Exit: save/apply a template and signature in a campaign step.
 
 ### Phase 5 — Mailer connections + sending engine
+
 - SMTP/IMAP connection CRUD + connectivity check (no Gmail/Outlook yet).
 - Port the send pipeline, simplified: `SendEmail`, `ScheduleStepJob`,
   `ScheduleRecipientStep`, `CheckEmailStatus`, rate limiting/sending limits.
@@ -254,17 +266,21 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
   (against Mailpit/Mailhog in dev), state transitions correct.
 
 ### Phase 6 — Tracking + replies + bounces
+
 - Open pixel, link redirect, unsubscribe; IMAP reply/bounce polling; thread ids.
 - Exit: opens/clicks/replies/unsubscribes recorded and shown in the UI.
 
 ### Phase 7 — Onboarding + polish
+
 - Campaign/recipient onboarding (replace Joyride with a maintained lib or custom),
   empty states, skeletons, loading overlays.
 
 ### Phase 8 — Public marketing page
+
 - Port `resources/views/static/features/email-campaigns` concept into an MMOS landing page.
 
 ### Deferred backlog
+
 Gmail API + Microsoft Graph mailers, AI composer, non-email steps (call/LinkedIn/manual),
 spam-test, SMS, additional team roles for campaigns (beyond team tenancy).
 
@@ -340,16 +356,16 @@ Queue columns / jobs tables come from the starter kit.
 
 ## 12. Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Base migrations absent from source | Rebuild from `mysql-schema.sql`; verify column-by-column |
-| `tailwind-styled-components` dead on TW4 | Full rewrite to shadcn/`cva`; do it component-by-component |
-| `campaign-steps.tsx` 1642 lines | Decompose into small steps + hooks during port |
-| Sending engine complexity | Port incrementally; SMTP only; heavy feature tests |
-| React 19 StrictMode double-effects | Audit effects; use refs for idempotency |
-| axios→Inertia client change | Standardise on `useHttp`/`<Form>`; centralise error handling |
-| Scope creep (CRM/SMS/AI) | Keep §5 "Out/Deferred" list enforced per PR |
-| IMAP reply parsing fragility | Isolate behind a service; mock in tests; document limits |
+| Risk                                     | Mitigation                                                   |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| Base migrations absent from source       | Rebuild from `mysql-schema.sql`; verify column-by-column     |
+| `tailwind-styled-components` dead on TW4 | Full rewrite to shadcn/`cva`; do it component-by-component   |
+| `campaign-steps.tsx` 1642 lines          | Decompose into small steps + hooks during port               |
+| Sending engine complexity                | Port incrementally; SMTP only; heavy feature tests           |
+| React 19 StrictMode double-effects       | Audit effects; use refs for idempotency                      |
+| axios→Inertia client change              | Standardise on `useHttp`/`<Form>`; centralise error handling |
+| Scope creep (CRM/SMS/AI)                 | Keep §5 "Out/Deferred" list enforced per PR                  |
+| IMAP reply parsing fragility             | Isolate behind a service; mock in tests; document limits     |
 
 ---
 
@@ -368,15 +384,15 @@ Queue columns / jobs tables come from the starter kit.
 
 ## 14. Decisions (locked)
 
-| # | Decision | Choice |
-|---|---|---|
-| 1 | Ownership | **Team-owned** (`team_id`, `{current_team}` prefix) |
-| 2 | Queue driver | **Database** (Redis optional, not required) |
-| 3 | Public API | **Inertia-only** in v1 (no separate JSON `v1/campaigns`) |
-| 4 | Rich-text editor | **Tiptap** (MIT) |
-| 5 | Step naming | Rename "touch" → **"step"** (`CampaignStep`) |
-| 6 | Contacts / lists CRM | **In scope** (Phase 1) |
-| 7 | Non-email steps | **Email-only** in v1 (no call/LinkedIn/manual/SMS) |
+| #   | Decision             | Choice                                                   |
+| --- | -------------------- | -------------------------------------------------------- |
+| 1   | Ownership            | **Team-owned** (`team_id`, `{current_team}` prefix)      |
+| 2   | Queue driver         | **Database** (Redis optional, not required)              |
+| 3   | Public API           | **Inertia-only** in v1 (no separate JSON `v1/campaigns`) |
+| 4   | Rich-text editor     | **Tiptap** (MIT)                                         |
+| 5   | Step naming          | Rename "touch" → **"step"** (`CampaignStep`)             |
+| 6   | Contacts / lists CRM | **In scope** (Phase 1)                                   |
+| 7   | Non-email steps      | **Email-only** in v1 (no call/LinkedIn/manual/SMS)       |
 
 ---
 

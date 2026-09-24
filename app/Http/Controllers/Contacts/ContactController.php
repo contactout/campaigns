@@ -146,7 +146,24 @@ class ContactController extends Controller
                 ])
                 ->values()
                 ->all(),
+            'list_ids' => $contact->lists->pluck('id')->values()->all(),
+            'allLists' => $currentTeam->contactLists()
+                ->orderBy('name')
+                ->get()
+                ->map(fn (ContactList $list): array => [
+                    'id' => $list->id,
+                    'name' => $list->name,
+                ])
+                ->values()
+                ->all(),
             'recipients' => $recipients,
+            'statuses' => array_map(
+                fn (ContactStatus $status): array => [
+                    'value' => $status->value,
+                    'label' => $status->label(),
+                ],
+                ContactStatus::cases(),
+            ),
         ]);
     }
 
