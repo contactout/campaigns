@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $campaign_id
- * @property string $email
+ * @property int $contact_id
  * @property string|null $timezone
  * @property RecipientStatus $status
  * @property string|null $source
@@ -28,9 +28,10 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Campaign $campaign
+ * @property-read Contact $contact
  * @property-read Collection<int, CampaignEmail> $emails
  */
-#[Fillable(['campaign_id', 'email', 'timezone', 'status', 'source', 'placeholders', 'sequence', 'next_scheduled_at', 'last_responded_at', 'last_delivered_at'])]
+#[Fillable(['campaign_id', 'contact_id', 'timezone', 'status', 'source', 'placeholders', 'sequence', 'next_scheduled_at', 'last_responded_at', 'last_delivered_at'])]
 class Recipient extends Model
 {
     /** @use HasFactory<RecipientFactory> */
@@ -44,6 +45,16 @@ class Recipient extends Model
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class);
+    }
+
+    /**
+     * Get the contact that the recipient represents.
+     *
+     * @return BelongsTo<Contact, $this>
+     */
+    public function contact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class);
     }
 
     /**

@@ -2,28 +2,39 @@
 
 use App\Enums\RecipientStatus;
 use App\Models\Campaign;
+use App\Models\Contact;
 use App\Models\Recipient;
 use Illuminate\Database\QueryException;
 
-test('recipient email must be unique per campaign', function () {
+test('recipient contact must be unique per campaign', function () {
     $campaign = Campaign::factory()->create();
+    $contact = Contact::factory()->create();
 
-    Recipient::factory()->for($campaign)->create(['email' => 'dup@example.com']);
+    Recipient::factory()->for($campaign)->create(['contact_id' => $contact->id]);
 
-    expect(fn () => Recipient::factory()->for($campaign)->create(['email' => 'dup@example.com']))
+    expect(fn () => Recipient::factory()->for($campaign)->create(['contact_id' => $contact->id]))
         ->toThrow(QueryException::class);
 
     $this->assertDatabaseCount('recipients', 1);
 });
 
-test('the same email can be used in different campaigns', function () {
+test('the same contact can be added to different campaigns', function () {
     $firstCampaign = Campaign::factory()->create();
     $secondCampaign = Campaign::factory()->create();
+    $contact = Contact::factory()->create();
 
-    Recipient::factory()->for($firstCampaign)->create(['email' => 'shared@example.com']);
-    Recipient::factory()->for($secondCampaign)->create(['email' => 'shared@example.com']);
+    Recipient::factory()->for($firstCampaign)->create(['contact_id' => $contact->id]);
+    Recipient::factory()->for($secondCampaign)->create(['contact_id' => $contact->id]);
 
-    expect(Recipient::where('email', 'shared@example.com')->count())->toBe(2);
+    expect(Recipient::where('contact_id', $contact->id)->count())->toBe(2);
+});
+
+test('recipient belongs to a contact', function () {
+    $contact = Contact::factory()->create();
+
+    $recipient = Recipient::factory()->create(['contact_id' => $contact->id]);
+
+    expect($recipient->contact->is($contact))->toBeTrue();
 });
 
 test('recipient status is cast to an enum', function () {

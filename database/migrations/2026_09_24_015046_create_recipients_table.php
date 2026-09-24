@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('recipients', function (Blueprint $table) {
             $table->id();
             $table->foreignId('campaign_id')->constrained()->cascadeOnDelete();
-            $table->string('email');
+            $table->foreignId('contact_id')->constrained()->cascadeOnDelete();
             $table->string('timezone')->nullable();
             $table->string('status')->default('Active');
             $table->string('source')->nullable();
@@ -25,7 +25,7 @@ return new class extends Migration
             $table->timestamp('last_delivered_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['campaign_id', 'email']);
+            $table->unique(['campaign_id', 'contact_id']);
             $table->index('status');
         });
     }

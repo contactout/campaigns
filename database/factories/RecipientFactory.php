@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\RecipientStatus;
 use App\Models\Campaign;
+use App\Models\Contact;
 use App\Models\Recipient;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -21,7 +22,7 @@ class RecipientFactory extends Factory
     {
         return [
             'campaign_id' => Campaign::factory(),
-            'email' => fake()->unique()->safeEmail(),
+            'contact_id' => Contact::factory(),
             'timezone' => 'UTC',
             'status' => RecipientStatus::Active,
             'source' => 'manual',

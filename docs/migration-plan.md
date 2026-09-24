@@ -138,7 +138,7 @@ owner is the team; `user_id` on a campaign records who created it.
 | Tracking: open pixel, link click, unsubscribe | **In** | Core |
 | Reply/bounce detection (IMAP polling) | **In** | Needs IMAP mailer |
 | Gmail API + Microsoft Graph mailers | **Deferred** | Needs own OAuth apps/creds |
-| Contacts + sheets CRM subsystem | **In** | Later phase; contacts/identities/properties/sheets |
+| Contacts + lists CRM subsystem (source "sheets") | **In** | Later phase; contacts/identities/properties/lists |
 | Non-email steps (call, LinkedIn, manual) | **Out of v1** | Email-only product; model stays email-only |
 | AI composer / personalization (OpenAI/Prism) | **Out of v1** | Optional adapter later, off by default |
 | Spam-test (provider inboxes) | **Out of v1** | External/paid infra; content scan only |
@@ -217,16 +217,16 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Enums, models, factories, `CampaignPolicy`. Tests green.
 - Recipient table is **reworked in Phase 1** to reference a contact (see below).
 
-### Phase 1 — Contacts & sheets (PRIORITY)
-- Contacts + contact identities + sheets + contact↔sheet pivot, team-owned.
-- `Contact`, `ContactIdentity`, `Sheet` models, enums (`ContactStatus`,
-  `ContactIdentityType`), factories, policies.
+### Phase 1 — Contacts & lists (PRIORITY)
+- Contacts + contact identities + lists + contact↔list pivot, team-owned.
+- `Contact`, `ContactIdentity`, `ContactList` models (source "Sheet" → **List**),
+  enums (`ContactStatus`, `ContactIdentityType`), factories, policies.
 - **Rework `recipients`**: replace embedded `email` with `contact_id` FK; unique
   `[campaign_id, contact_id]`; keep per-campaign state (`status`, `source`, `placeholders`,
   `sequence`, scheduling/interaction timestamps). Recipients are always created *from*
   contacts.
 - Contact properties (custom fields) deferred to Phase 4 (needs placeholders).
-- Exit: create contacts, group them in sheets, add them to a campaign as recipients.
+- Exit: create contacts, group them in lists, add them to a campaign as recipients.
 
 ### Phase 2 — Campaign core vertical (UI)
 - `CampaignController` (index/store/show/update/destroy) + start/stop/archive/duplicate.
@@ -238,7 +238,7 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 ### Phase 3 — Recipient management UI
 - Add contacts to a campaign, remove, recipient grid (TanStack table + virtual),
   recipient statuses, CSV/manual contact import.
-- Exit: pick contacts/sheets, add as recipients, manage statuses.
+- Exit: pick contacts/lists, add as recipients, manage statuses.
 
 ### Phase 4 — Templates, folders, signatures, placeholders
 - Template CRUD + editor shell (Tiptap), folders, signature manager, placeholders,
@@ -292,8 +292,8 @@ core tables (renames in parentheses):
 - CRM (Phase 1): `contacts` (team_id, name, source, avatar_url, status, timezone,
   last_contacted_at, last_responded_at, do_not_contact_at/by, softDeletes),
   `contact_identities` (contact_id, identity_type email|phone, normalized_value; unique
-  `[team_id, identity_type, normalized_value]`), `sheets` (team_id, name, is_default,
-  settings), `contact_sheet` pivot (unique `[sheet_id, contact_id]`).
+  `[team_id, identity_type, normalized_value]`), `contact_lists` (team_id, name, is_default,
+  settings), `contact_list` pivot (unique `[contact_list_id, contact_id]`).
   `contact_properties` (custom fields, FK to placeholders) deferred to Phase 4.
 
 Drop on port: `mm_leads`, `mm_reports`, `mm_prompts`, `spam_test_*`, `sending_domains`,
@@ -375,7 +375,7 @@ Queue columns / jobs tables come from the starter kit.
 | 3 | Public API | **Inertia-only** in v1 (no separate JSON `v1/campaigns`) |
 | 4 | Rich-text editor | **Tiptap** (MIT) |
 | 5 | Step naming | Rename "touch" → **"step"** (`CampaignStep`) |
-| 6 | Contacts / sheets CRM | **In scope** (Phase 6) |
+| 6 | Contacts / lists CRM | **In scope** (Phase 1) |
 | 7 | Non-email steps | **Email-only** in v1 (no call/LinkedIn/manual/SMS) |
 
 ---
