@@ -6,6 +6,7 @@ import { property } from '@/routes/contacts';
 type Props = {
     contactId: number;
     fieldId: number;
+    fieldName: string;
     value: string | null;
     className?: string;
 };
@@ -13,6 +14,7 @@ type Props = {
 export default function InlinePropertyCell({
     contactId,
     fieldId,
+    fieldName,
     value,
     className,
 }: Props) {
@@ -58,9 +60,14 @@ export default function InlinePropertyCell({
         return (
             <button
                 type="button"
-                onClick={() => setEditing(true)}
+                data-grid-cell
+                aria-label={`${fieldName}: ${value || 'empty'}. Click to edit`}
+                onClick={() => {
+                    setDraft(value ?? '');
+                    setEditing(true);
+                }}
                 className={cn(
-                    'block w-full rounded px-1 py-0.5 text-left hover:bg-muted',
+                    'block min-h-11 w-full truncate px-3 text-left outline-none hover:bg-muted/60 focus-visible:bg-primary/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
                     className,
                 )}
             >
@@ -76,6 +83,7 @@ export default function InlinePropertyCell({
     return (
         <input
             ref={inputRef}
+            aria-label={`Edit ${fieldName}`}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={save}
@@ -91,7 +99,7 @@ export default function InlinePropertyCell({
                 }
             }}
             className={cn(
-                'w-full rounded border border-input bg-background px-1 py-0.5 text-sm outline-none focus:ring-1 focus:ring-ring',
+                'min-h-11 w-full border-0 bg-background px-3 text-sm ring-2 ring-primary outline-none ring-inset',
                 className,
             )}
         />
