@@ -38,8 +38,9 @@ Edit `.env`:
 |----------|--------|
 | `DOMAIN` | Hostname Caddy will serve (e.g. `mail.example.com`) |
 | `ACME_EMAIL` | Email for Let's Encrypt registration |
-| `APP_URL` | Must be `https://YOUR_DOMAIN` |
+| `APP_URL` | Must be `https://YOUR_DOMAIN` (include `:HTTPS_PORT` if not 443) |
 | `APP_KEY` | Required — see below |
+| `HTTP_PORT` / `HTTPS_PORT` | Host ports mapped to Caddy (default `80` / `443`) |
 | `DB_PASSWORD` / `DB_ROOT_PASSWORD` | Strong unique passwords |
 
 Generate `APP_KEY` (shared by app, queue, and scheduler):
@@ -108,13 +109,15 @@ Useful on a laptop without public DNS:
 ```bash
 cp .env.docker.example .env
 # DOMAIN=localhost
-# APP_URL=https://localhost
+# HTTP_PORT=8088
+# HTTPS_PORT=8443
+# APP_URL=https://localhost:8443
 # APP_KEY=...  DB_PASSWORD=...  DB_ROOT_PASSWORD=...
 
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 ```
 
-Open https://localhost and accept the certificate warning.
+Open https://localhost:8443 (or your `HTTPS_PORT`) and accept the certificate warning.
 
 ## Operations
 

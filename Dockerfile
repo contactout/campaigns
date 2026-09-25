@@ -94,7 +94,6 @@ RUN apt-get update \
         libonig-dev \
         unzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_mysql \
         mbstring \
@@ -105,8 +104,8 @@ RUN apt-get update \
         gd \
         zip \
         opcache \
-        imap \
-    && docker-php-ext-enable opcache \
+    && printf "\n" | pecl install imap \
+    && docker-php-ext-enable opcache imap \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/log/supervisor /run/nginx \
     && rm -f /etc/nginx/sites-enabled/default
