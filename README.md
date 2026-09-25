@@ -182,4 +182,4 @@ More product/architecture notes: [`docs/migration-plan.md`](docs/migration-plan.
 
 ## License
 
-MIT (see `composer.json`).
+[MIT](LICENSE)
