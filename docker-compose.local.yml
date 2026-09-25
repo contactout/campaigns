@@ -1,0 +1,10 @@
+# Local HTTPS smoke test (self-signed).
+# Usage:
+#   DOMAIN=localhost ACME_EMAIL=dev@localhost docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Then open https://localhost (accept the browser warning).
+
+services:
+  caddy:
+    volumes:
+      - ./docker/Caddyfile.local:/etc/caddy/Caddyfile:ro

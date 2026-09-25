@@ -279,14 +279,19 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Campaigns empty state hints when no connection is configured.
 - No product-tour library (Joyride deferred permanently for v1).
 
-### Phase 8 — Public marketing page
+### Phase 8 — Public marketing page ❌ skipped
 
-- Port `resources/views/static/features/email-campaigns` concept into an MMOS landing page.
+- Port of ContactOut marketing landing deferred; not required for self-host v1.
+
+### Deploy — Docker Compose ✅
+
+- Production Compose stack: Caddy (HTTPS) + Nginx/PHP-FPM app + queue worker +
+  scheduler + MySQL 8. See `README.md` and `.env.docker.example`.
 
 ### Deferred backlog
 
 AI composer, non-email steps (call/LinkedIn/manual), spam-test, SMS, additional team
-roles for campaigns (beyond team tenancy).
+roles for campaigns (beyond team tenancy), public marketing page.
 
 ---
 
