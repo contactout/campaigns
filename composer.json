@@ -1,11 +1,14 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "contactout/mmos",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "MMOS — self-hosted open-source email outreach and campaign tool.",
     "keywords": [
+        "email",
+        "campaigns",
+        "mail-merge",
         "laravel",
-        "framework"
+        "inertia"
     ],
     "license": "MIT",
     "require": {

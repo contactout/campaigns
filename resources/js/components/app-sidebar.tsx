@@ -1,14 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import {
-    BookOpen,
-    FileText,
-    FolderGit2,
-    LayoutGrid,
-    Mail,
-    PenLine,
-    Send,
-    Users,
-} from 'lucide-react';
+import { FileText, LayoutGrid, Mail, PenLine, Send, Users } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -72,18 +63,7 @@ export function AppSidebar() {
         },
     ];
 
-    const footerNavItems: NavItem[] = [
-        {
-            title: 'Repository',
-            href: 'https://github.com/laravel/react-starter-kit',
-            icon: FolderGit2,
-        },
-        {
-            title: 'Documentation',
-            href: 'https://laravel.com/docs/starter-kits#react',
-            icon: BookOpen,
-        },
-    ];
+    const footerNavItems: NavItem[] = [];
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -109,7 +89,9 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
+                {footerNavItems.length > 0 ? (
+                    <NavFooter items={footerNavItems} className="mt-auto" />
+                ) : null}
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

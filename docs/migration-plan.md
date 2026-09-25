@@ -345,21 +345,16 @@ Queue columns / jobs tables come from the starter kit.
 
 ## 11. OSS hygiene / de-ContactOut-ification checklist
 
-- [ ] Remove all hard-coded addresses (`zaiman@contactout.com`, `rishi.kabra@contactout.io`,
-      `azri@contactout.io`).
-- [ ] Remove Slack escalation channel + `slack_mail_merge` logging.
-- [ ] Replace S3-only disks with configurable local/any-disk uploads.
-- [ ] Remove ContactOut OAuth clients/secrets (Google/Microsoft), Telnyx, Postmark, Resend.
-- [ ] Remove feature/billing gates (`config/feature.php`, `SendingLimitTier` paid logic,
-      `ProductFeature`).
-- [ ] Remove internal lead/search/extension integrations.
-- [ ] Rewrite `config/mail-merge.php` into a minimal `config/campaigns.php`.
-- [ ] Map source palette (`primary/blueberry/caribbean/comet/success/warning/error`) and the
-      custom `screens` set to MMOS `@theme` tokens; audit responsive breakpoints.
-- [ ] Add `LICENSE`, `README` (setup + `composer run dev`), `CONTRIBUTING`, `.env.example`
-      entries for mailer/IMAP settings.
-- [ ] Confirm the license is compatible with all retained deps (notably any rich-text editor
-      and IMAP/TanStack libs).
+- [x] No hard-coded employee/vendor email addresses in application code.
+- [x] No Slack escalation / internal logging channels.
+- [x] Local disk for uploads (no S3-only requirement).
+- [x] BYO Google/Microsoft OAuth via `.env` (no bundled ContactOut app secrets).
+- [x] No billing / paid feature gates.
+- [x] No internal lead/search/extension integrations.
+- [x] SMTP/IMAP + OAuth mailer settings via connection UI / env (not source `mail-merge.php`).
+- [x] MMOS design tokens (Tailwind v4 / shadcn); starter-kit footer links removed.
+- [x] `LICENSE` (MIT), `README`, `SECURITY`, `CONTRIBUTING`, `.env.example` / `.env.docker.example`.
+- [x] Retained deps are OSS-compatible (Laravel, Tiptap, webklex/php-imap, google/apiclient).
 
 ---
 

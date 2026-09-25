@@ -180,6 +180,11 @@ npm run check
 
 More product/architecture notes: [`docs/migration-plan.md`](docs/migration-plan.md).
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Please report security issues privately via
+[SECURITY.md](SECURITY.md).
+
 ## License
 
 [MIT](LICENSE)
