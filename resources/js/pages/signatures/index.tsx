@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { Pencil, PenLine, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import EmptyState from '@/components/empty-state';
 import DeleteSignatureModal from '@/components/signatures/delete-signature-modal';
 import SignatureFormModal from '@/components/signatures/signature-form-modal';
 import Heading from '@/components/heading';
@@ -53,23 +54,19 @@ export default function SignaturesIndex({ signatures, can }: Props) {
                 </div>
 
                 {signatures.length === 0 ? (
-                    <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center">
-                        <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-                            <PenLine className="size-6 text-muted-foreground" />
-                        </span>
-                        <h2 className="mt-4 font-semibold">
-                            No signatures yet
-                        </h2>
-                        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                            Create a signature to close your emails
-                            consistently.
-                        </p>
-                        {can.create && (
-                            <Button className="mt-5" onClick={openNew}>
-                                <Plus /> New signature
-                            </Button>
-                        )}
-                    </div>
+                    <EmptyState
+                        className="min-h-64 py-12"
+                        icon={PenLine}
+                        title="No signatures yet"
+                        description="Create a signature to close your emails consistently."
+                        actions={
+                            can.create ? (
+                                <Button onClick={openNew}>
+                                    <Plus /> New signature
+                                </Button>
+                            ) : null
+                        }
+                    />
                 ) : (
                     <div className="flex flex-col gap-3">
                         {signatures.map((signature) => (

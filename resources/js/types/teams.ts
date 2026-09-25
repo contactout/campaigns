@@ -41,6 +41,12 @@ export type DashboardInvitation = {
     };
 };
 
+export type DashboardSetup = {
+    has_connection: boolean;
+    has_contact: boolean;
+    has_campaign: boolean;
+};
+
 export type TeamPermissions = {
     canUpdateTeam: boolean;
     canDeleteTeam: boolean;

@@ -4,6 +4,8 @@ import {
     ArrowUp,
     Archive,
     Copy,
+    ListChecks,
+    Mail,
     Pencil,
     Play,
     Plus,
@@ -16,6 +18,7 @@ import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
 import DeleteCampaignModal from '@/components/campaigns/delete-campaign-modal';
 import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
 import StepFormModal from '@/components/campaigns/step-form-modal';
+import EmptyState from '@/components/empty-state';
 import Heading from '@/components/heading';
 import Pagination from '@/components/pagination';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -237,12 +240,22 @@ export default function CampaignShow({
                     </div>
 
                     {recipients.data.length === 0 ? (
-                        <div className="rounded-xl border border-dashed px-6 py-12 text-center">
-                            <h3 className="font-semibold">No recipients yet</h3>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Add contacts or lists to start this campaign.
-                            </p>
-                        </div>
+                        <EmptyState
+                            className="py-12"
+                            icon={ListChecks}
+                            title="No recipients yet"
+                            description="Add contacts or lists to start this campaign."
+                            actions={
+                                can.update ? (
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => setRecipientsOpen(true)}
+                                    >
+                                        <Plus /> Add recipients
+                                    </Button>
+                                ) : null
+                            }
+                        />
                     ) : (
                         <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full text-sm">
@@ -328,21 +341,19 @@ export default function CampaignShow({
                 </div>
 
                 {steps.length === 0 ? (
-                    <div className="rounded-xl border border-dashed px-6 py-12 text-center">
-                        <h3 className="font-semibold">No steps yet</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Add your first email step to build this sequence.
-                        </p>
-                        {can.update && (
-                            <Button
-                                variant="outline"
-                                className="mt-5"
-                                onClick={openNewStep}
-                            >
-                                <Plus /> Add step
-                            </Button>
-                        )}
-                    </div>
+                    <EmptyState
+                        className="py-12"
+                        icon={Mail}
+                        title="No steps yet"
+                        description="Add your first email step to build this sequence."
+                        actions={
+                            can.update ? (
+                                <Button variant="outline" onClick={openNewStep}>
+                                    <Plus /> Add step
+                                </Button>
+                            ) : null
+                        }
+                    />
                 ) : (
                     <div className="flex flex-col gap-3">
                         {steps.map((step, index) => (

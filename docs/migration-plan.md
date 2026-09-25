@@ -272,10 +272,12 @@ Each phase = one or more PRs, ends green (Pest + Pint + `npm run check`) and dem
 - Open pixel, link redirect, unsubscribe; IMAP reply/bounce polling; thread ids.
 - Exit: opens/clicks/replies/unsubscribes recorded and shown in the UI.
 
-### Phase 7 — Onboarding + polish
+### Phase 7 — Onboarding + polish ✅
 
-- Campaign/recipient onboarding (replace Joyride with a maintained lib or custom),
-  empty states, skeletons, loading overlays.
+- Shared `EmptyState` component across list/show empties.
+- Dashboard getting-started checklist (connection → contacts → campaign) from team counts.
+- Campaigns empty state hints when no connection is configured.
+- No product-tour library (Joyride deferred permanently for v1).
 
 ### Phase 8 — Public marketing page
 

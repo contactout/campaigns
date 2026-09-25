@@ -3,6 +3,7 @@ import { Plus, Search, Send } from 'lucide-react';
 import { useState } from 'react';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
 import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
+import EmptyState from '@/components/empty-state';
 import Heading from '@/components/heading';
 import Pagination from '@/components/pagination';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { index, show } from '@/routes/campaigns';
+import { index as connectionsIndex } from '@/routes/mailer-connections';
 import type {
     CampaignSummary,
     MailerConnectionOption,
@@ -132,30 +134,52 @@ export default function CampaignsIndex({
                 </form>
 
                 {campaigns.data.length === 0 ? (
-                    <div className="flex flex-col items-center rounded-xl border border-dashed px-6 py-16 text-center">
-                        <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-                            <Send className="size-6 text-muted-foreground" />
-                        </span>
-                        <h2 className="mt-4 font-semibold">
-                            {filters.q || filters.status
+                    <EmptyState
+                        icon={Send}
+                        title={
+                            filters.q || filters.status
                                 ? 'No matching campaigns'
-                                : 'No campaigns yet'}
-                        </h2>
-                        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                            {filters.q || filters.status
+                                : 'No campaigns yet'
+                        }
+                        description={
+                            filters.q || filters.status
                                 ? 'Try another search or change your filters.'
-                                : 'Create your first sequence to start reaching out.'}
-                        </p>
-                        {can.create && !filters.q && !filters.status && (
-                            <CreateCampaignModal
-                                mailerConnections={mailerConnections}
-                            >
-                                <Button className="mt-5">
-                                    <Plus /> New campaign
-                                </Button>
-                            </CreateCampaignModal>
-                        )}
-                    </div>
+                                : mailerConnections.length === 0
+                                  ? 'Connect an inbox first, then create your first sequence.'
+                                  : 'Create your first sequence to start reaching out.'
+                        }
+                        actions={
+                            !filters.q && !filters.status ? (
+                                <>
+                                    {mailerConnections.length === 0 ? (
+                                        <Button variant="secondary" asChild>
+                                            <Link href={connectionsIndex(slug)}>
+                                                Go to Connections
+                                            </Link>
+                                        </Button>
+                                    ) : null}
+                                    {can.create ? (
+                                        <CreateCampaignModal
+                                            mailerConnections={
+                                                mailerConnections
+                                            }
+                                        >
+                                            <Button
+                                                variant={
+                                                    mailerConnections.length ===
+                                                    0
+                                                        ? 'outline'
+                                                        : 'default'
+                                                }
+                                            >
+                                                <Plus /> New campaign
+                                            </Button>
+                                        </CreateCampaignModal>
+                                    ) : null}
+                                </>
+                            ) : null
+                        }
+                    />
                 ) : (
                     <div className="overflow-x-auto rounded-xl border bg-card">
                         <table className="w-full text-sm">

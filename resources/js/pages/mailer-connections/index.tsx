@@ -1,6 +1,7 @@
 import { Form, Head, usePage } from '@inertiajs/react';
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Pencil, Plug, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import EmptyState from '@/components/empty-state';
 import ConnectionFormModal from '@/components/mailer-connections/connection-form-modal';
 import DeleteConnectionModal from '@/components/mailer-connections/delete-connection-modal';
 import MailerConnectionStatusBadge from '@/components/mailer-connections/status-badge';
@@ -123,44 +124,44 @@ export default function MailerConnectionsIndex({
                 </div>
 
                 {connections.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-16 text-center">
-                        <h3 className="font-semibold">No connections yet</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Connect Gmail or Outlook, or add an SMTP account to
-                            start sending campaigns.
-                        </p>
-                        {can.create ? (
-                            <div className="mt-2 flex flex-wrap justify-center gap-2">
-                                {oauth.gmail ? (
-                                    <Button variant="secondary" asChild>
-                                        <a
-                                            href={oauthRedirect.url([
-                                                slug,
-                                                'gmail',
-                                            ])}
-                                        >
-                                            Connect Gmail
-                                        </a>
+                    <EmptyState
+                        icon={Plug}
+                        title="No connections yet"
+                        description="Connect Gmail or Outlook, or add an SMTP account to start sending campaigns."
+                        actions={
+                            can.create ? (
+                                <>
+                                    {oauth.gmail ? (
+                                        <Button variant="secondary" asChild>
+                                            <a
+                                                href={oauthRedirect.url([
+                                                    slug,
+                                                    'gmail',
+                                                ])}
+                                            >
+                                                Connect Gmail
+                                            </a>
+                                        </Button>
+                                    ) : null}
+                                    {oauth.outlook ? (
+                                        <Button variant="secondary" asChild>
+                                            <a
+                                                href={oauthRedirect.url([
+                                                    slug,
+                                                    'outlook',
+                                                ])}
+                                            >
+                                                Connect Outlook
+                                            </a>
+                                        </Button>
+                                    ) : null}
+                                    <Button onClick={openNew}>
+                                        <Plus /> New SMTP
                                     </Button>
-                                ) : null}
-                                {oauth.outlook ? (
-                                    <Button variant="secondary" asChild>
-                                        <a
-                                            href={oauthRedirect.url([
-                                                slug,
-                                                'outlook',
-                                            ])}
-                                        >
-                                            Connect Outlook
-                                        </a>
-                                    </Button>
-                                ) : null}
-                                <Button onClick={openNew}>
-                                    <Plus /> New SMTP
-                                </Button>
-                            </div>
-                        ) : null}
-                    </div>
+                                </>
+                            ) : null
+                        }
+                    />
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">
                         <table className="w-full text-sm">

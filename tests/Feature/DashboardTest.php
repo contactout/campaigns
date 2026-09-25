@@ -1,6 +1,9 @@
 <?php
 
 use App\Enums\TeamRole;
+use App\Models\Campaign;
+use App\Models\Contact;
+use App\Models\MailerConnection;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
@@ -23,6 +26,76 @@ test('authenticated users can visit the dashboard', function () {
         ->get(route('dashboard'));
 
     $response->assertOk();
+});
+
+test('dashboard includes setup flags for the current team', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('setup.has_connection', false)
+            ->where('setup.has_contact', false)
+            ->where('setup.has_campaign', false),
+        );
+
+    MailerConnection::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+    ]);
+    Contact::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+    ]);
+    Campaign::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+    ]);
+
+    $user->switchTeam($team);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('setup.has_connection', true)
+            ->where('setup.has_contact', true)
+            ->where('setup.has_campaign', true),
+        );
+});
+
+test('dashboard setup flags ignore other teams data', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $otherOwner = User::factory()->create();
+    $otherTeam = $otherOwner->currentTeam;
+
+    MailerConnection::factory()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $otherOwner->id,
+    ]);
+    Contact::factory()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $otherOwner->id,
+    ]);
+    Campaign::factory()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $otherOwner->id,
+    ]);
+
+    $user->switchTeam($team);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('setup.has_connection', false)
+            ->where('setup.has_contact', false)
+            ->where('setup.has_campaign', false),
+        );
 });
 
 test('dashboard includes pending invitations for the authenticated user', function () {

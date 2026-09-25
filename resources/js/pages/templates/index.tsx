@@ -1,6 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { FileText, FolderClosed, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import EmptyState from '@/components/empty-state';
 import CreateTemplateModal from '@/components/templates/create-template-modal';
 import DeleteFolderModal from '@/components/templates/delete-folder-modal';
 import DeleteTemplateModal from '@/components/templates/delete-template-modal';
@@ -174,28 +175,29 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
 
                     <section aria-label="Templates" className="min-w-0">
                         {filtered.length === 0 ? (
-                            <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed px-6 py-12 text-center">
-                                <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-                                    <FileText className="size-6 text-muted-foreground" />
-                                </span>
-                                <h2 className="mt-4 font-semibold">
-                                    {selectedFolder === null
+                            <EmptyState
+                                className="min-h-64 py-12"
+                                icon={FileText}
+                                title={
+                                    selectedFolder === null
                                         ? 'No templates yet'
-                                        : 'This folder is empty'}
-                                </h2>
-                                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                                    {selectedFolder === null
+                                        : 'This folder is empty'
+                                }
+                                description={
+                                    selectedFolder === null
                                         ? 'Create a template to reuse your best emails.'
-                                        : 'Move a template here or create a new one.'}
-                                </p>
-                                {can.create && (
-                                    <CreateTemplateModal folders={folders}>
-                                        <Button className="mt-5">
-                                            <Plus /> New template
-                                        </Button>
-                                    </CreateTemplateModal>
-                                )}
-                            </div>
+                                        : 'Move a template here or create a new one.'
+                                }
+                                actions={
+                                    can.create ? (
+                                        <CreateTemplateModal folders={folders}>
+                                            <Button>
+                                                <Plus /> New template
+                                            </Button>
+                                        </CreateTemplateModal>
+                                    ) : null
+                                }
+                            />
                         ) : (
                             <div className="flex flex-col gap-3">
                                 {filtered.map((template) => (

@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
 import ContactFieldFormModal from '@/components/contacts/contact-field-form-modal';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
@@ -8,6 +8,7 @@ import InlineCell from '@/components/contacts/inline-cell';
 import InlinePropertyCell from '@/components/contacts/inline-property-cell';
 import InlineStatusCell from '@/components/contacts/inline-status-cell';
 import ListTabs from '@/components/contacts/list-tabs';
+import EmptyState from '@/components/empty-state';
 import Heading from '@/components/heading';
 import Pagination from '@/components/pagination';
 import { Button } from '@/components/ui/button';
@@ -147,25 +148,37 @@ export default function ContactsIndex({
                 </form>
 
                 {contacts.data.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center">
-                        <h3 className="font-semibold">No contacts yet</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Add your first contact, or import a list later.
-                        </p>
-                        {can.create ? (
-                            <CreateContactModal
-                                lists={listOptions}
-                                statuses={statuses}
-                                defaultListIds={
-                                    filters.list ? [filters.list] : undefined
-                                }
-                            >
-                                <Button className="mt-2">
-                                    <Plus /> New contact
-                                </Button>
-                            </CreateContactModal>
-                        ) : null}
-                    </div>
+                    <EmptyState
+                        className="flex-1 py-12"
+                        icon={Users}
+                        title={
+                            filters.q || filters.list
+                                ? 'No matching contacts'
+                                : 'No contacts yet'
+                        }
+                        description={
+                            filters.q || filters.list
+                                ? 'Try another search or switch lists.'
+                                : 'Add your first contact, or import a list later.'
+                        }
+                        actions={
+                            can.create && !filters.q ? (
+                                <CreateContactModal
+                                    lists={listOptions}
+                                    statuses={statuses}
+                                    defaultListIds={
+                                        filters.list
+                                            ? [filters.list]
+                                            : undefined
+                                    }
+                                >
+                                    <Button>
+                                        <Plus /> New contact
+                                    </Button>
+                                </CreateContactModal>
+                            ) : null
+                        }
+                    />
                 ) : (
                     <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
                         <table className="w-full border-collapse text-sm">

@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Campaign;
+use App\Models\Contact;
+use App\Models\MailerConnection;
 use App\Models\TeamInvitation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -9,6 +12,9 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    /**
+     * Show the team dashboard, including setup progress when a team is selected.
+     */
     public function __invoke(Request $request): Response
     {
         $email = strtolower($request->user()->email);
@@ -31,8 +37,17 @@ class DashboardController extends Controller
                 ],
             ]);
 
+        $team = $request->user()->currentTeam;
+
+        $setup = $team === null ? null : [
+            'has_connection' => MailerConnection::query()->forTeam($team->id)->exists(),
+            'has_contact' => Contact::query()->forTeam($team->id)->exists(),
+            'has_campaign' => Campaign::query()->forTeam($team->id)->exists(),
+        ];
+
         return Inertia::render('dashboard', [
             'pendingInvitations' => $pendingInvitations,
+            'setup' => $setup,
         ]);
     }
 }
