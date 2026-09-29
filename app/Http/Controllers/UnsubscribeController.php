@@ -8,6 +8,7 @@ use App\Models\Recipient;
 use App\Models\Unsubscribe;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
@@ -34,7 +35,7 @@ class UnsubscribeController extends Controller
     /**
      * Record the unsubscribe and stop contacting the recipient.
      */
-    public function store(Request $request, Recipient $recipient): RedirectResponse
+    public function store(Request $request, Recipient $recipient): RedirectResponse|HttpResponse
     {
         $recipient->loadMissing(['campaign', 'contact.emailIdentity']);
 
@@ -59,6 +60,10 @@ class UnsubscribeController extends Controller
         $contact->status = ContactStatus::Unsubscribed;
         $contact->do_not_contact_at = Carbon::now();
         $contact->save();
+
+        if ($request->input('List-Unsubscribe') === 'One-Click') {
+            return new HttpResponse('', 200);
+        }
 
         return to_route('unsubscribe.done');
     }

@@ -79,7 +79,7 @@ class CampaignBodyBuilder
     {
         $pixel = sprintf(
             '<img src="%s" width="1" height="1" alt="" style="display:none" />',
-            route('tracking.open', ['campaignEmail' => $email->id]),
+            route('tracking.open', ['campaignEmail' => $email->tracker]),
         );
 
         if (stripos($html, '</body>') === false) {

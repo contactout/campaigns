@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * @property int $id
@@ -47,6 +48,18 @@ class CampaignEmail extends Model
 {
     /** @use HasFactory<CampaignEmailFactory> */
     use HasFactory;
+
+    /**
+     * Bootstrap the model and assign an unguessable tracker on creation.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (CampaignEmail $email): void {
+            if (blank($email->tracker)) {
+                $email->tracker = Str::random(32);
+            }
+        });
+    }
 
     /**
      * Get the campaign that owns the email.

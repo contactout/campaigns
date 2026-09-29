@@ -25,8 +25,10 @@ class OutlookCampaignMailer implements CampaignMailer
      *
      * Uses create → send → get so we can capture internetMessageId and
      * conversationId when Graph still exposes the message after send.
+     *
+     * @param  array<string, string>  $headers  Sent as Graph internetMessageHeaders.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
     {
         if ($connection->mailer_type !== MailerType::Outlook) {
             throw new RuntimeException('OutlookCampaignMailer requires an Outlook connection.');
@@ -52,6 +54,13 @@ class OutlookCampaignMailer implements CampaignMailer
                 ],
             ],
         ];
+
+        if ($headers !== []) {
+            $message['internetMessageHeaders'] = collect($headers)
+                ->map(fn (string $value, string $name): array => ['name' => $name, 'value' => $value])
+                ->values()
+                ->all();
+        }
 
         if ($fromEmail !== '') {
             $message['from'] = [

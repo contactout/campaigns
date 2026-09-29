@@ -27,8 +27,10 @@ class GmailCampaignMailer implements CampaignMailer
 
     /**
      * Send an HTML email using the connection's Gmail OAuth credentials.
+     *
+     * @param  array<string, string>  $headers
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
             throw new RuntimeException('GmailCampaignMailer requires a Gmail connection.');
@@ -45,6 +47,10 @@ class GmailCampaignMailer implements CampaignMailer
             ->to($to)
             ->subject($subject)
             ->html($html);
+
+        foreach ($headers as $name => $value) {
+            $email->getHeaders()->addTextHeader($name, $value);
+        }
 
         $raw = rtrim(strtr(base64_encode($email->toString()), '+/', '-_'), '=');
 

@@ -8,7 +8,7 @@ use App\Models\TrackedLink;
 test('an open records an email open and returns a transparent gif', function () {
     $email = CampaignEmail::factory()->create();
 
-    $response = $this->get(route('tracking.open', ['campaignEmail' => $email]));
+    $response = $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
 
     $response->assertOk()->assertHeader('Content-Type', 'image/gif');
 
@@ -25,8 +25,8 @@ test('an open records an email open and returns a transparent gif', function () 
 test('repeated opens are recorded each time', function () {
     $email = CampaignEmail::factory()->create();
 
-    $this->get(route('tracking.open', ['campaignEmail' => $email]));
-    $this->get(route('tracking.open', ['campaignEmail' => $email]));
+    $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
+    $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
 
     expect(EmailOpen::query()->count())->toBe(2)
         ->and($email->fresh()->opened_at)->not->toBeNull();
@@ -54,4 +54,22 @@ test('a click records a link click and redirects to the original url', function 
 
 test('an unknown tracking hash returns not found', function () {
     $this->get('/t/c/'.str_repeat('a', 32))->assertNotFound();
+});
+
+test('an email is given a unique random tracker on creation', function () {
+    $first = CampaignEmail::factory()->create(['tracker' => '']);
+    $second = CampaignEmail::factory()->create(['tracker' => '']);
+
+    expect($first->tracker)->toHaveLength(32)
+        ->and($second->tracker)->toHaveLength(32)
+        ->and($first->tracker)->not->toBe($second->tracker);
+});
+
+test('the open pixel cannot be reached by numeric email id', function () {
+    $email = CampaignEmail::factory()->create();
+
+    $this->get('/t/o/'.$email->id)->assertNotFound();
+
+    expect(EmailOpen::query()->count())->toBe(0)
+        ->and($email->fresh()->opened_at)->toBeNull();
 });

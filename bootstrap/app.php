@@ -21,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Trust the Compose reverse proxy (Caddy) for HTTPS / client IP headers.
         $middleware->trustProxies(at: '*');
 
+        // Mail providers POST RFC 8058 one-click unsubscribes without a CSRF
+        // token; the route is protected by its signed URL instead.
+        $middleware->validateCsrfTokens(except: ['unsubscribe/*']);
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,

@@ -52,7 +52,7 @@ test('appends the tracking pixel when there is no body tag', function () {
     $html = (new CampaignBodyBuilder)->build($email, '<p>Hi there</p>');
 
     expect($html)->toContain(
-        '<img src="'.route('tracking.open', ['campaignEmail' => $email->id]).'" width="1" height="1" alt="" style="display:none" />',
+        '<img src="'.route('tracking.open', ['campaignEmail' => $email->tracker]).'" width="1" height="1" alt="" style="display:none" />',
     );
 });
 
@@ -61,7 +61,7 @@ test('inserts the tracking pixel before the closing body tag', function () {
 
     $html = (new CampaignBodyBuilder)->build($email, '<html><body><p>Hi there</p></body></html>');
 
-    $pixel = '<img src="'.route('tracking.open', ['campaignEmail' => $email->id]).'" width="1" height="1" alt="" style="display:none" />';
+    $pixel = '<img src="'.route('tracking.open', ['campaignEmail' => $email->tracker]).'" width="1" height="1" alt="" style="display:none" />';
 
     expect($html)->toContain($pixel.'</body>');
 });
