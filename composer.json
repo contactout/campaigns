@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "contactout/mmos",
+    "name": "contactout/campaigns",
     "type": "project",
-    "description": "MMOS — self-hosted open-source email outreach and campaign tool.",
+    "description": "Campaigns — self-hosted open-source email outreach and campaign tool.",
     "keywords": [
         "email",
         "campaigns",

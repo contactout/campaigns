@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve MMOS.
+Thanks for helping improve Campaigns.
 
 ## Development setup
 
@@ -37,7 +37,7 @@ npm run check
 
 ## Scope notes
 
-MMOS is email-campaign focused. Large new surfaces (SMS, non-email steps, AI composer,
+Campaigns is email-campaign focused. Large new surfaces (SMS, non-email steps, AI composer,
 billing) should be discussed in an issue first.
 
 ## License

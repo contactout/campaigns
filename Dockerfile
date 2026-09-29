@@ -113,11 +113,11 @@ RUN apt-get update \
 COPY docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 COPY docker/php/www-override.conf /usr/local/etc/php-fpm.d/zz-www-override.conf
-COPY docker/nginx.conf /etc/nginx/sites-available/mmos
+COPY docker/nginx.conf /etc/nginx/sites-available/campaigns
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN ln -s /etc/nginx/sites-available/mmos /etc/nginx/sites-enabled/mmos \
+RUN ln -s /etc/nginx/sites-available/campaigns /etc/nginx/sites-enabled/campaigns \
     && chmod +x /usr/local/bin/entrypoint.sh
 
 COPY --from=vendor /app /var/www/html

@@ -1,17 +1,17 @@
-# Migration Plan — MMOS (Open-Source Email Campaign)
+# Migration Plan — Campaigns (Open-Source Email Campaign)
 
 Status: draft for review
 Source of truth: `../contactout_website` (branch `master`, module `modules/mail-merge`)
-Target: this repo (`mmos`)
+Target: this repo (`campaigns`)
 
 ---
 
 ## 1. Purpose
 
-`mmos` will become an **open-source email outreach / campaign tool**, derived from the
+`campaigns` will become an **open-source email outreach / campaign tool**, derived from the
 mail-merge feature in `contactout/contactout_website`. It is **not a 1:1 port**:
 
-- UI look & feel should be **similar**, but rebuilt on the MMOS design system.
+- UI look & feel should be **similar**, but rebuilt on the Campaigns design system.
 - Proprietary ContactOut infrastructure (paid gates, MTA/SMS, CRM/lead enrichment,
   internal OAuth apps, Slack escalation, S3, hard-coded ContactOut addresses) is **dropped**.
 - Frontend is **rewritten** for React 19 / Inertia v3 / Tailwind v4 / TS 5 (source is
@@ -21,7 +21,7 @@ mail-merge feature in `contactout/contactout_website`. It is **not a 1:1 port**:
 
 ## 2. Stacks
 
-|             | Source (`contactout_website`)                                 | Target (`mmos`)                                     |
+|             | Source (`contactout_website`)                                 | Target (`campaigns`)                                     |
 | ----------- | ------------------------------------------------------------- | --------------------------------------------------- |
 | Framework   | Laravel (older major)                                         | Laravel 13                                          |
 | PHP         | 8.x                                                           | 8.3 (guidelines say 8.4)                            |
@@ -85,7 +85,7 @@ Module: `resources/assets/js/dashboard/mail-merge/` — **538 files**.
 
 ---
 
-## 4. Target architecture (MMOS)
+## 4. Target architecture (Campaigns)
 
 Mirror the existing **`Teams/` vertical slice** conventions:
 
@@ -182,7 +182,7 @@ in the plan where it aids traceability.
 
 **React 16 → 19**
 
-- `ReactDOM.render` → `createRoot` (MMOS already does this).
+- `ReactDOM.render` → `createRoot` (Campaigns already does this).
 - Drop `defaultProps`, `React.ForwardRefRenderFunction` legacy patterns.
 - `@testing-library/react` v11 → v16; rewrite Jest tests to Vitest/RTL.
 
@@ -199,7 +199,7 @@ in the plan where it aids traceability.
 - `tailwindcss/nesting` PostCSS plugin removed.
 - **`tailwind-styled-components` has no v4 support** → replace with shadcn/ui + `cva` + `cn()`.
 - Drop `@emotion/styled` usage.
-- Map the source custom palette/screens to MMOS tokens (see §11).
+- Map the source custom palette/screens to Campaigns tokens (see §11).
 
 **TypeScript 4.2 → 5.7**
 
@@ -208,7 +208,7 @@ in the plan where it aids traceability.
 
 **HTTP/JSON**
 
-- Decide camelCase vs snake_case: source uses `humps`; MMOS uses camelCase props.
+- Decide camelCase vs snake_case: source uses `humps`; Campaigns uses camelCase props.
   Standardise on **camelCase at the boundary** (matches existing controllers).
 
 ---
@@ -352,7 +352,7 @@ Queue columns / jobs tables come from the starter kit.
 - [x] No billing / paid feature gates.
 - [x] No internal lead/search/extension integrations.
 - [x] SMTP/IMAP + OAuth mailer settings via connection UI / env (not source `mail-merge.php`).
-- [x] MMOS design tokens (Tailwind v4 / shadcn); starter-kit footer links removed.
+- [x] Campaigns design tokens (Tailwind v4 / shadcn); starter-kit footer links removed.
 - [x] `LICENSE` (MIT), `README`, `SECURITY`, `CONTRIBUTING`, `.env.example` / `.env.docker.example`.
 - [x] Retained deps are OSS-compatible (Laravel, Tiptap, webklex/php-imap, google/apiclient).
 

@@ -1,12 +1,12 @@
-# MMOS
+# Campaigns
 
-**Mail Merge Open Source** — a self-hosted email outreach / campaign tool.
+A self-hosted email outreach / campaign tool by [ContactOut](https://github.com/contactout).
 
 Team-owned campaigns, a contacts spreadsheet (lists included), SMTP / Gmail / Outlook
 sending, open & click tracking, unsubscribe, and reply/bounce detection.
 
 Built with Laravel 13, Inertia React, and Tailwind. Designed to run on your own server
-via Docker Compose. Maintained by [ContactOut](https://github.com/contactout).
+via Docker Compose.
 
 ## Features
 
@@ -139,11 +139,15 @@ docker compose up -d --build
 
 The app entrypoint runs `php artisan migrate --force` on start.
 
+The image and nginx site are named `campaigns` (previously `mmos`). Existing installs keep
+working — Compose picks up the new names on rebuild, and `DB_DATABASE` / `DB_USERNAME` stay
+whatever your `.env` already sets.
+
 ### Backups
 
 | Data | Volume / command |
 |------|------------------|
-| Database | `mysql_data` — `docker compose exec mysql mysqldump -ummos -p"$DB_PASSWORD" mmos > backup.sql` |
+| Database | `mysql_data` — `docker compose exec mysql mysqldump -ucampaigns -p"$DB_PASSWORD" campaigns > backup.sql` |
 | Uploads | `app_storage` |
 | TLS certs | `caddy_data` |
 

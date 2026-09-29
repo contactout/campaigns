@@ -40,7 +40,7 @@ export default function Welcome() {
                         aria-label="Main navigation"
                     >
                         <span className="text-xl font-bold tracking-tight">
-                            MMOS
+                            Campaigns
                         </span>
                         <div className="flex items-center gap-2">
                             {auth.user ? (

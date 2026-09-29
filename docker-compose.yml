@@ -19,7 +19,7 @@ services:
 
   app:
     build: .
-    image: mmos:latest
+    image: campaigns:latest
     restart: unless-stopped
     env_file: .env
     environment:
@@ -40,7 +40,7 @@ services:
       start_period: 90s
 
   queue:
-    image: mmos:latest
+    image: campaigns:latest
     restart: unless-stopped
     env_file: .env
     environment:
@@ -56,7 +56,7 @@ services:
         condition: service_healthy
 
   scheduler:
-    image: mmos:latest
+    image: campaigns:latest
     restart: unless-stopped
     env_file: .env
     environment:
@@ -75,8 +75,8 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${DB_DATABASE:-mmos}
-      MYSQL_USER: ${DB_USERNAME:-mmos}
+      MYSQL_DATABASE: ${DB_DATABASE:-campaigns}
+      MYSQL_USER: ${DB_USERNAME:-campaigns}
       MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
     volumes:
