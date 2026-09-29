@@ -140,14 +140,15 @@ docker compose up -d --build
 The app entrypoint runs `php artisan migrate --force` on start.
 
 The image and nginx site are named `campaigns` (previously `mmos`). Existing installs keep
-working — Compose picks up the new names on rebuild, and `DB_DATABASE` / `DB_USERNAME` stay
-whatever your `.env` already sets.
+working — Compose picks up the new names on rebuild, and the database is untouched: keep
+whatever `DB_DATABASE` / `DB_USERNAME` your `.env` already sets. To pick up the new
+branding on an existing install, set `APP_NAME=Campaigns` in your `.env`.
 
 ### Backups
 
 | Data | Volume / command |
 |------|------------------|
-| Database | `mysql_data` — `docker compose exec mysql mysqldump -ucampaigns -p"$DB_PASSWORD" campaigns > backup.sql` |
+| Database | `mysql_data` — `docker compose exec mysql sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > backup.sql` |
 | Uploads | `app_storage` |
 | TLS certs | `caddy_data` |
 
