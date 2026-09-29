@@ -6,7 +6,7 @@ Team-owned campaigns, a contacts spreadsheet (lists included), SMTP / Gmail / Ou
 sending, open & click tracking, unsubscribe, and reply/bounce detection.
 
 Built with Laravel 13, Inertia React, and Tailwind. Designed to run on your own server
-via Docker Compose.
+via Docker Compose. Maintained by [ContactOut](https://github.com/contactout).
 
 ## Features
 
@@ -27,8 +27,8 @@ via Docker Compose.
 ## Quick start
 
 ```bash
-git clone <repo-url> mmos
-cd mmos
+git clone https://github.com/contactout/campaigns.git
+cd campaigns
 cp .env.docker.example .env
 ```
 
