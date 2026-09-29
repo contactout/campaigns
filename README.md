@@ -148,9 +148,21 @@ branding on an existing install, set `APP_NAME=Campaigns` in your `.env`.
 
 | Data | Volume / command |
 |------|------------------|
-| Database | `mysql_data` — `docker compose exec mysql sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > backup.sql` |
+| Database | `mysql_data` — see below |
 | Uploads | `app_storage` |
 | TLS certs | `caddy_data` |
+
+The database credentials are read from the `mysql` container's own environment, so this
+works whether your `.env` uses the original `mmos` names or the current `campaigns` ones:
+
+```bash
+docker compose exec -T mysql sh -c \
+  'mysqldump --single-transaction --no-tablespaces --skip-lock-tables \
+     -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > backup.sql
+```
+
+`--no-tablespaces` avoids needing the `PROCESS` privilege the app user does not have, and
+`--single-transaction` keeps the dump consistent without locking the tables of a live app.
 
 ### Common issues
 
