@@ -19,6 +19,7 @@ use App\Models\Team;
 use App\Models\Unsubscribe;
 use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\RecordingCampaignMailer;
 
 beforeEach(function (): void {
     $this->withoutVite();
@@ -153,12 +154,12 @@ function mmosUnsubscribeSendFixture(): array
 test('a subsequent send is skipped after the recipient unsubscribes', function () {
     $mailer = new class implements CampaignMailer
     {
-        /** @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string}> */
+        /** @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>}> */
         public array $sent = [];
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
         {
-            $this->sent[] = compact('connection', 'to', 'subject', 'html');
+            $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers');
 
             return new SendResult;
         }
@@ -180,12 +181,12 @@ test('a subsequent send is skipped after the recipient unsubscribes', function (
 test('an unsubscribed recipient status fails the email without sending', function () {
     $mailer = new class implements CampaignMailer
     {
-        /** @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string}> */
+        /** @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>}> */
         public array $sent = [];
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
         {
-            $this->sent[] = compact('connection', 'to', 'subject', 'html');
+            $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers');
 
             return new SendResult;
         }
@@ -201,4 +202,53 @@ test('an unsubscribed recipient status fails the email without sending', functio
 
     expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Failed)
         ->and($mailer->sent)->toBeEmpty();
+});
+
+test('a signed one-click post without a csrf token unsubscribes the recipient', function () {
+    $recipient = mmosUnsubscribeRecipient();
+
+    $url = URL::signedRoute('unsubscribe.store', ['recipient' => $recipient]);
+
+    // CSRF validation is skipped under the testing environment; enable it.
+    $this->app['env'] = 'production';
+
+    $this->post($url, ['List-Unsubscribe' => 'One-Click'])->assertOk();
+
+    expect(Unsubscribe::query()->sole()->email)->toBe('ada@example.com')
+        ->and($recipient->fresh()->status)->toBe(RecipientStatus::Unsubscribed)
+        ->and($recipient->contact->fresh()->status)->toBe(ContactStatus::Unsubscribed);
+});
+
+test('an unsigned one-click post is rejected', function () {
+    $recipient = mmosUnsubscribeRecipient();
+
+    $this->post(route('unsubscribe.store', ['recipient' => $recipient]), ['List-Unsubscribe' => 'One-Click'])
+        ->assertForbidden();
+
+    expect(Unsubscribe::query()->count())->toBe(0)
+        ->and($recipient->fresh()->status)->toBe(RecipientStatus::Active);
+});
+
+test('a sent email carries signed one-click unsubscribe headers', function () {
+    $fixture = mmosUnsubscribeSendFixture();
+
+    $mailer = new RecordingCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $mailer);
+
+    app()->call([new SendEmail($fixture['email']), 'handle']);
+
+    expect($mailer->sent)->toHaveCount(1);
+
+    $headers = $mailer->sent[0]['headers'];
+
+    expect($headers['List-Unsubscribe-Post'])->toBe('List-Unsubscribe=One-Click')
+        ->and($headers['List-Unsubscribe'])->toStartWith('<')->toEndWith('>');
+
+    $url = trim($headers['List-Unsubscribe'], '<>');
+
+    expect($url)->toStartWith(route('unsubscribe.store', ['recipient' => $fixture['recipient']]));
+
+    $this->post($url, ['List-Unsubscribe' => 'One-Click'])->assertOk();
+
+    expect($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Unsubscribed);
 });

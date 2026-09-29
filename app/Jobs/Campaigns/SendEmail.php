@@ -15,6 +15,7 @@ use App\Services\Mail\CampaignStepScheduler;
 use App\Services\Mail\PlaceholderRenderer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\URL;
 use Throwable;
 
 class SendEmail implements ShouldQueue
@@ -87,7 +88,7 @@ class SendEmail implements ShouldQueue
         $html = $bodyBuilder->build($email, $html);
 
         try {
-            $result = $mailer->send($connection, $to, $subject, $html);
+            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email));
         } catch (Throwable $exception) {
             $this->markFailed($email);
             $this->recordConnectionFailure($connection, $exception);
@@ -114,6 +115,21 @@ class SendEmail implements ShouldQueue
         $connection->increment('sent_count');
 
         $scheduler->scheduleNextStep($email);
+    }
+
+    /**
+     * Build the RFC 8058 one-click unsubscribe headers for the email.
+     *
+     * @return array<string, string>
+     */
+    private function unsubscribeHeaders(CampaignEmail $email): array
+    {
+        $url = URL::signedRoute('unsubscribe.store', ['recipient' => $email->recipient_id]);
+
+        return [
+            'List-Unsubscribe' => '<'.$url.'>',
+            'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
+        ];
     }
 
     /**

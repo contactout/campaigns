@@ -12,7 +12,7 @@
     ],
     "license": "MIT",
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
         "google/apiclient": "^2.20",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
@@ -53,7 +53,7 @@
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
             "@php artisan migrate --force",
-            "npm install",
+            "npm ci",
             "npm run build"
         ],
         "dev": [
@@ -87,7 +87,7 @@
         ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
-            "@php artisan boost:update --ansi"
+            "@php -r \"require 'vendor/autoload.php'; if (class_exists('Laravel\\\\Boost\\\\BoostServiceProvider')) { passthru(escapeshellarg(PHP_BINARY) . ' artisan boost:update --ansi'); }\""
         ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""

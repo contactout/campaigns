@@ -29,10 +29,17 @@ export default function Register({ passwordRules, teamInvitation }: Props) {
                 {({ processing, errors }) => (
                     <>
                         {teamInvitation && (
-                            <TeamInvitationAlert
-                                invitation={teamInvitation}
-                                action="Register"
-                            />
+                            <>
+                                <input
+                                    type="hidden"
+                                    name="invitation"
+                                    value={teamInvitation.code}
+                                />
+                                <TeamInvitationAlert
+                                    invitation={teamInvitation}
+                                    action="Register"
+                                />
+                            </>
                         )}
 
                         <div className="grid gap-6">

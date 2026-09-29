@@ -23,12 +23,14 @@ const features = [
 ];
 
 export default function Welcome() {
-    const { auth, currentTeam } = usePage().props;
+    const { auth, currentTeam, canRegister } = usePage().props;
     const destination = auth.user
         ? currentTeam
             ? dashboard(currentTeam.slug)
             : teamsIndex()
-        : register();
+        : canRegister
+          ? register()
+          : login();
 
     return (
         <>
@@ -54,11 +56,13 @@ export default function Welcome() {
                                     <Button size="sm" variant="ghost" asChild>
                                         <Link href={login()}>Log in</Link>
                                     </Button>
-                                    <Button size="sm" asChild>
-                                        <Link href={register()}>
-                                            Get started <ArrowRight />
-                                        </Link>
-                                    </Button>
+                                    {canRegister && (
+                                        <Button size="sm" asChild>
+                                            <Link href={register()}>
+                                                Get started <ArrowRight />
+                                            </Link>
+                                        </Button>
+                                    )}
                                 </>
                             )}
                         </div>
@@ -84,11 +88,13 @@ export default function Welcome() {
                                     <Link href={destination}>
                                         {auth.user
                                             ? 'Open dashboard'
-                                            : 'Get started'}{' '}
+                                            : canRegister
+                                              ? 'Get started'
+                                              : 'Log in'}{' '}
                                         <ArrowRight />
                                     </Link>
                                 </Button>
-                                {!auth.user && (
+                                {!auth.user && canRegister && (
                                     <Button size="lg" variant="outline" asChild>
                                         <Link href={login()}>
                                             I have an account

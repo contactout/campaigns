@@ -16,7 +16,7 @@ use Inertia\Inertia;
 |
 */
 
-Route::get('t/o/{campaignEmail}', [TrackingController::class, 'open'])->name('tracking.open');
+Route::get('t/o/{campaignEmail:tracker}', [TrackingController::class, 'open'])->name('tracking.open');
 Route::get('t/c/{hash}', [TrackingController::class, 'click'])->name('tracking.click');
 
 Route::get('unsubscribe/done', fn () => Inertia::render('unsubscribed'))->name('unsubscribe.done');

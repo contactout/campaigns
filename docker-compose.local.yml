@@ -5,6 +5,6 @@
 # Then open https://localhost (accept the browser warning).
 
 services:
-  caddy:
-    volumes:
-      - ./docker/Caddyfile.local:/etc/caddy/Caddyfile:ro
+    caddy:
+        volumes:
+            - ./docker/Caddyfile.local:/etc/caddy/Caddyfile:ro

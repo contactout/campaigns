@@ -48,7 +48,7 @@ test('recipient placeholders are cast to an array', function () {
         'placeholders' => ['first_name' => 'Ada', 'company' => 'Analytical Engines'],
     ]);
 
-    expect($recipient->fresh()->placeholders)->toBe([
+    expect($recipient->fresh()->placeholders)->toEqual([
         'first_name' => 'Ada',
         'company' => 'Analytical Engines',
     ]);

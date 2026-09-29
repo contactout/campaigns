@@ -21,9 +21,11 @@ class SmtpCampaignMailer implements CampaignMailer
     /**
      * Send an HTML email using the given connection's SMTP credentials.
      *
+     * @param  array<string, string>  $headers
+     *
      * @throws TransportExceptionInterface When the message cannot be sent.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
     {
         $settings = $connection->smtp_setting ?? [];
 
@@ -35,6 +37,10 @@ class SmtpCampaignMailer implements CampaignMailer
             ->to($to)
             ->subject($subject)
             ->html($html);
+
+        foreach ($headers as $name => $value) {
+            $email->getHeaders()->addTextHeader($name, $value);
+        }
 
         Transport::fromDsn($this->dsn($settings))->send($email);
 

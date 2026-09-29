@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TeamInvitationAlert from '@/components/team-invitation-alert';
@@ -25,6 +25,8 @@ export default function Login({
     canResetPassword,
     teamInvitation,
 }: Props) {
+    const { canRegister } = usePage().props;
+
     return (
         <>
             <Head title="Log in" />
@@ -106,20 +108,22 @@ export default function Login({
                             </Button>
                         </div>
 
-                        <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink
-                                href={register({
-                                    query: {
-                                        invitation: teamInvitation?.code,
-                                    },
-                                })}
-                                data-test="register-link"
-                                tabIndex={5}
-                            >
-                                Sign up
-                            </TextLink>
-                        </div>
+                        {(canRegister || teamInvitation) && (
+                            <div className="text-center text-sm text-muted-foreground">
+                                Don't have an account?{' '}
+                                <TextLink
+                                    href={register({
+                                        query: {
+                                            invitation: teamInvitation?.code,
+                                        },
+                                    })}
+                                    data-test="register-link"
+                                    tabIndex={5}
+                                >
+                                    Sign up
+                                </TextLink>
+                            </div>
+                        )}
                     </>
                 )}
             </Form>

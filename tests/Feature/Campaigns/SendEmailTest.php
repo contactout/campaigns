@@ -27,7 +27,7 @@ use RuntimeException;
 class FakeCampaignMailer implements CampaignMailer
 {
     /**
-     * @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string}>
+     * @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>}>
      */
     public array $sent = [];
 
@@ -40,13 +40,13 @@ class FakeCampaignMailer implements CampaignMailer
         $this->result = $result ?? new SendResult;
     }
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
-        $this->sent[] = compact('connection', 'to', 'subject', 'html');
+        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers');
 
         return $this->result;
     }

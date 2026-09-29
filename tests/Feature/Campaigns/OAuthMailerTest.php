@@ -7,6 +7,7 @@ use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
 use App\Models\MailerConnection;
 use App\Models\Team;
+use App\Services\Mail\GmailCampaignMailer;
 use App\Services\Mail\OutlookCampaignMailer;
 use App\Services\OAuth\OAuthTokenManager;
 use Carbon\CarbonImmutable;
@@ -98,13 +99,63 @@ test('outlook campaign mailer creates sends and returns message ids', function (
         'recipient@example.com',
         'Hello',
         '<p>Hi</p>',
+        ['List-Unsubscribe' => '<https://example.com/u>', 'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click'],
     );
+
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.microsoft.com/v1.0/me/messages'
+        && $request['internetMessageHeaders'] === [
+            ['name' => 'List-Unsubscribe', 'value' => '<https://example.com/u>'],
+            ['name' => 'List-Unsubscribe-Post', 'value' => 'List-Unsubscribe=One-Click'],
+        ]);
 
     expect($result)->toBeInstanceOf(SendResult::class)
         ->and($result->messageId)->toBe('<outlook-1@example.com>')
         ->and($result->threadId)->toBe('conv-1');
 
     Http::assertSentCount(3);
+});
+
+test('gmail campaign mailer puts unsubscribe headers in the raw message', function () {
+    $connection = MailerConnection::factory()->forTeam(Team::factory()->create())->create([
+        'mailer_type' => MailerType::Gmail,
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'access_token' => 'g-access',
+            'refresh_token' => 'g-refresh',
+            'expires_at' => CarbonImmutable::now()->addHour()->toIso8601String(),
+            'email' => 'ada@gmail.com',
+            'from_email' => 'ada@gmail.com',
+            'from_name' => 'Ada',
+        ],
+    ]);
+
+    $api = new class extends FakeGmailApi
+    {
+        public string $raw = '';
+
+        public function sendRaw(string $accessToken, string $raw): array
+        {
+            $this->raw = $raw;
+
+            return parent::sendRaw($accessToken, $raw);
+        }
+    };
+
+    (new GmailCampaignMailer(app(OAuthTokenManager::class), $api))->send(
+        $connection,
+        'to@example.com',
+        'Hello',
+        '<p>Hi</p>',
+        [
+            'List-Unsubscribe' => '<https://example.com/u>',
+            'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
+        ],
+    );
+
+    $mime = (string) base64_decode(strtr($api->raw, '-_', '+/'));
+
+    expect($mime)->toContain('List-Unsubscribe: <https://example.com/u>')
+        ->and($mime)->toContain('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
 });
 
 test('verifying a gmail connection marks it active', function () {

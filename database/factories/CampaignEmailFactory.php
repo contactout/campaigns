@@ -8,6 +8,7 @@ use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Recipient;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends Factory<CampaignEmail>
@@ -29,7 +30,7 @@ class CampaignEmailFactory extends Factory
             'thread_id' => '',
             'message_id' => '',
             'reply_to_id' => '',
-            'tracker' => '',
+            'tracker' => Str::random(32),
             'status' => EmailStatus::Pending,
             'data' => null,
             'reply_count' => 0,

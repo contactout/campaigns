@@ -20,7 +20,12 @@ reasonable window to investigate and ship a fix before any public disclosure.
 ## Self-hosted operators
 
 - Keep `APP_DEBUG=false` and a strong unique `APP_KEY` in production
-- Restrict who can register / join teams on public internet deployments
+- Keep `REGISTRATION_ENABLED=false` on public internet deployments. The first
+  user can always register; everyone else needs a team invitation. Only enable
+  open registration if you accept strangers sending email from your domain
+- System mail (email verification, password resets, invitations) needs a working
+  `MAIL_*` configuration. If you have none, mark a user verified from the server
+  with `php artisan campaigns:verify-user user@example.com`
 - Treat mailer connection tokens and SMTP passwords as secrets (they are
   stored encrypted at rest via Laravel’s encrypted cast)
 - Rotate OAuth client secrets if you suspect compromise

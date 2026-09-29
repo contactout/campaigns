@@ -16,7 +16,9 @@ interface CampaignMailer
     /**
      * Send an HTML email to the given address using the connection's credentials.
      *
+     * @param  array<string, string>  $headers  Extra message headers such as List-Unsubscribe.
+     *
      * @throws \Throwable When the provider rejects or cannot send the message.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html): SendResult;
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult;
 }
