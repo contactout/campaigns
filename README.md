@@ -1,6 +1,15 @@
 # Campaigns
 
+[![tests](https://github.com/contactout/campaigns/actions/workflows/tests.yml/badge.svg)](https://github.com/contactout/campaigns/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A self-hosted email outreach / campaign tool by [ContactOut](https://github.com/contactout).
+
+<!-- screenshot: docs/screenshot.png -->
+
+**Why Campaigns?** It sends multi-step outreach sequences (cold and sales outreach) from your
+own inboxes, with replies and bounces detected automatically. It is not a newsletter or bulk
+email service provider like Listmonk or Mautic.
 
 Team-owned campaigns, a contacts spreadsheet (lists included), SMTP / Gmail / Outlook
 sending, open & click tracking, unsubscribe, and reply/bounce detection.
@@ -34,14 +43,14 @@ cp .env.docker.example .env
 
 Edit `.env`:
 
-| Variable | Notes |
-|----------|--------|
-| `DOMAIN` | Hostname Caddy will serve (e.g. `mail.example.com`) |
-| `ACME_EMAIL` | Email for Let's Encrypt registration |
-| `APP_URL` | Must be `https://YOUR_DOMAIN` (include `:HTTPS_PORT` if not 443) |
-| `APP_KEY` | Required — see below |
-| `HTTP_PORT` / `HTTPS_PORT` | Host ports mapped to Caddy (default `80` / `443`) |
-| `DB_PASSWORD` / `DB_ROOT_PASSWORD` | Strong unique passwords |
+| Variable                           | Notes                                                            |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| `DOMAIN`                           | Hostname Caddy will serve (e.g. `mail.example.com`)              |
+| `ACME_EMAIL`                       | Email for Let's Encrypt registration                             |
+| `APP_URL`                          | Must be `https://YOUR_DOMAIN` (include `:HTTPS_PORT` if not 443) |
+| `APP_KEY`                          | Required — see below                                             |
+| `HTTP_PORT` / `HTTPS_PORT`         | Host ports mapped to Caddy (default `80` / `443`)                |
+| `DB_PASSWORD` / `DB_ROOT_PASSWORD` | Strong unique passwords                                          |
 
 Generate `APP_KEY` (shared by app, queue, and scheduler):
 
@@ -60,6 +69,21 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 1. Connect an inbox (SMTP / Gmail / Outlook)
 2. Add contacts
 3. Create a campaign
+
+### System email & registration
+
+System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`
+settings in `.env` (`MAIL_MAILER=smtp`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`,
+`MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`). This is separate from the inboxes you connect for
+campaign sending.
+
+- The first registered user can always register.
+- Set `REGISTRATION_ENABLED=true` to allow open sign-up. Otherwise, others join through team invitations.
+- If mail isn't configured, verify a user from the command line:
+
+```bash
+docker compose exec app php artisan campaigns:verify-user you@example.com
+```
 
 ### Gmail / Outlook OAuth (optional)
 
@@ -85,6 +109,8 @@ Then recreate containers: `docker compose up -d`.
 
 ## Architecture
 
+See [docs/architecture.md](docs/architecture.md) for the domain model and sending pipeline.
+
 ```
 Internet → Caddy (HTTPS) → app (Nginx + PHP-FPM)
                               ├─ queue (campaign sends)
@@ -92,13 +118,13 @@ Internet → Caddy (HTTPS) → app (Nginx + PHP-FPM)
                          → MySQL 8.4
 ```
 
-| Service | Role |
-|---------|------|
-| `caddy` | TLS termination (Let's Encrypt) → reverse proxy to the app |
-| `app` | Nginx + PHP-FPM (Laravel) |
-| `queue` | `php artisan queue:work` — sends campaign emails |
+| Service     | Role                                                            |
+| ----------- | --------------------------------------------------------------- |
+| `caddy`     | TLS termination (Let's Encrypt) → reverse proxy to the app      |
+| `app`       | Nginx + PHP-FPM (Laravel)                                       |
+| `queue`     | `php artisan queue:work` — sends campaign emails                |
 | `scheduler` | `php artisan schedule:work` — due emails + reply/bounce polling |
-| `mysql` | MySQL 8.4 |
+| `mysql`     | MySQL 8.4                                                       |
 
 Queue, cache, and sessions use the **database** driver (no Redis required).
 
@@ -132,10 +158,16 @@ docker compose exec app php artisan tinker
 
 ### Upgrades
 
+Once releases exist, deploy a release tag rather than tracking `main`:
+
 ```bash
-git pull
+git fetch --tags
+git checkout vX.Y.Z
 docker compose up -d --build
 ```
+
+Read [CHANGELOG.md](CHANGELOG.md) before upgrading. If you track `main` instead, use `git pull`
+followed by the same `docker compose up -d --build`.
 
 The app entrypoint runs `php artisan migrate --force` on start.
 
@@ -146,11 +178,11 @@ branding on an existing install, set `APP_NAME=Campaigns` in your `.env`.
 
 ### Backups
 
-| Data | Volume / command |
-|------|------------------|
-| Database | `mysql_data` — see below |
-| Uploads | `app_storage` |
-| TLS certs | `caddy_data` |
+| Data      | Volume / command         |
+| --------- | ------------------------ |
+| Database  | `mysql_data` — see below |
+| Uploads   | `app_storage`            |
+| TLS certs | `caddy_data`             |
 
 The database credentials are read from the `mysql` container's own environment, so this
 works whether your `.env` uses the original `mmos` names or the current `campaigns` ones:
@@ -171,9 +203,26 @@ docker compose exec -T mysql sh -c \
 - **Gmail/Outlook buttons missing** — credentials not set or containers not recreated after editing `.env`.
 - **Campaigns not sending** — check `queue` and `scheduler` are up: `docker compose ps` and `docker compose logs queue scheduler`.
 
+## Deliverability & compliance
+
+- Configure **SPF**, **DKIM**, and **DMARC** for every domain you send from.
+- Warm up new inboxes gradually and keep daily volume modest; providers throttle and flag bursts.
+- Every campaign email carries an unsubscribe link and one-click `List-Unsubscribe` headers.
+  Unsubscribed addresses are suppressed for the team.
+- You, the operator, are responsible for complying with laws such as CAN-SPAM and GDPR: having
+  a lawful basis for contacting people, including a physical postal address in your email
+  footer, and honoring unsubscribe requests.
+- Open and click tracking stores events together with the user agent. How long you retain that
+  data, and how you handle deletion requests, is your responsibility.
+
+This section is general information, not legal advice.
+
 ## Development (without the production stack)
 
-PHP **8.4**, Node **22**, Composer, and SQLite (default) or MySQL:
+PHP **8.4**, Node **22**, Composer, and SQLite (default) or MySQL. After the initial setup
+(`composer install`, `.env`, `key:generate`, `migrate`, `npm ci`), `composer dev` is the
+one-command dev runner: it invokes `php artisan dev`, which starts the local development
+processes for you. Or run the pieces manually:
 
 ```bash
 composer install
@@ -198,7 +247,7 @@ npm run types:check
 npm run check
 ```
 
-More product/architecture notes: [`docs/migration-plan.md`](docs/migration-plan.md).
+More architecture notes: [`docs/architecture.md`](docs/architecture.md).
 
 ## Contributing
 

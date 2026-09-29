@@ -1,0 +1,58 @@
+name: Bug report
+description: Something is not working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For security problems, do not open an issue; see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag or git commit SHA (`git rev-parse --short HEAD`).
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose (production stack)
+        - Docker Compose (local override)
+        - Local development (php artisan serve / composer dev)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: mailer
+    attributes:
+      label: Mailer connection type
+      options:
+        - SMTP
+        - Gmail
+        - Outlook
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output from `docker compose logs app queue scheduler` or `storage/logs`. Remove secrets and personal data.
+      render: shell
