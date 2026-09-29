@@ -10,6 +10,7 @@ use App\Http\Responses\RegisterResponse;
 use App\Http\Responses\TwoFactorLoginResponse;
 use App\Http\Responses\VerifyEmailResponse;
 use App\Models\TeamInvitation;
+use App\Support\RegistrationAccess;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -81,9 +82,13 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn (Request $request) => Inertia::render('auth/register', [
-            'teamInvitation' => $this->teamInvitation($request),
-        ]));
+        Fortify::registerView(function (Request $request) {
+            abort_unless(app(RegistrationAccess::class)->allows($request->query('invitation')), 404);
+
+            return Inertia::render('auth/register', [
+                'teamInvitation' => $this->teamInvitation($request),
+            ]);
+        });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 

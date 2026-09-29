@@ -12,6 +12,7 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            canRegister: boolean;
             sidebarOpen: boolean;
             currentTeam: Team | null;
             teams: Team[];

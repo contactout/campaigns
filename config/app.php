@@ -123,4 +123,16 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Open Registration
+    |--------------------------------------------------------------------------
+    |
+    | When false, only the very first user (bootstrap) and people holding a
+    | valid team invitation can register.
+    |
+    */
+
+    'registration_enabled' => (bool) env('REGISTRATION_ENABLED', false),
+
 ];
