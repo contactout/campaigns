@@ -43,6 +43,7 @@ export default defineConfig({
         ignorePatterns: [
             'vendor/**',
             'node_modules/**',
+            'docs-site/**',
             'public/**',
             'bootstrap/ssr/**',
             'tailwind.config.js',
@@ -65,6 +66,7 @@ export default defineConfig({
         htmlWhitespaceSensitivity: 'css',
         ignorePatterns: [
             '.github/**',
+            'docs-site/**',
             'composer.json',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
