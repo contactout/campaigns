@@ -44,3 +44,6 @@ yarn-error.log
 /boost.json
 /opencode.json
 /opencode.jsonc
+/docs-site/node_modules
+/docs-site/.vitepress/dist
+/docs-site/.vitepress/cache

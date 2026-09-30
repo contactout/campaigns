@@ -24,7 +24,7 @@ For anything that sends mail (SMTP connections, invitations), use a local mail c
 
 PHP **8.4**, Node **22**, and Composer are expected. SQLite is the default local DB.
 
-Production self-hosting uses Docker Compose — see [README.md](README.md).
+Production self-hosting uses Docker Compose — see [README.md](https://github.com/contactout/campaigns/blob/main/README.md).
 
 ## Before you open a PR
 
@@ -54,10 +54,10 @@ billing) should be discussed in an issue first.
 
 ## Code of conduct
 
-This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues
-privately via [SECURITY.md](SECURITY.md).
+This project follows the [Code of Conduct](https://github.com/contactout/campaigns/blob/main/CODE_OF_CONDUCT.md). Report security issues
+privately via [SECURITY.md](https://github.com/contactout/campaigns/blob/main/SECURITY.md).
 
 ## License
 
 By contributing, you agree that your contributions are licensed under the MIT License
-([LICENSE](LICENSE)).
+([LICENSE](https://github.com/contactout/campaigns/blob/main/LICENSE)).

@@ -1,6 +1,10 @@
+<!-- Included by the VitePress page `docs-site/architecture.md` (region `body`). Keep new sections inside that region. -->
+
 # Architecture
 
 A tour of how Campaigns is put together. For deployment, see the [README](../README.md).
+
+<!-- #region body -->
 
 ## Stack
 
@@ -89,3 +93,5 @@ Opens and clicks are approximate: mail clients may prefetch or block images.
 | `resources/js/pages/`                     | Inertia pages, one directory per domain. Layouts are mapped in `resources/js/app.tsx`.                                       |
 | `resources/js/wayfinder/`                 | Generated (gitignored) by Wayfinder from routes and controllers; use its typed URL helpers instead of hardcoding paths.      |
 | `tests/`                                  | Pest feature and unit tests.                                                                                                 |
+
+<!-- #endregion body -->
