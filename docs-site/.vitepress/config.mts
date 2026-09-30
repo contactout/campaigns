@@ -13,6 +13,7 @@ export default defineConfig({
         },
     },
     themeConfig: {
+        logo: '/connie.svg',
         siteTitle: 'Campaigns',
         nav: [
             { text: 'Quick start', link: '/quick-start' },

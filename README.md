@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/brand/connie.png" alt="Connie, the ContactOut owl" width="260">
+</p>
+
 # Campaigns
 
 [![tests](https://github.com/contactout/campaigns/actions/workflows/tests.yml/badge.svg)](https://github.com/contactout/campaigns/actions/workflows/tests.yml)
