@@ -8,19 +8,19 @@ on:
       - 'docs-site/**'
       - 'docs/architecture.md'
       - 'CONTRIBUTING.md'
+      - 'README.md'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs-site/**'
       - 'docs/architecture.md'
       - 'CONTRIBUTING.md'
+      - 'README.md'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -61,6 +61,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
