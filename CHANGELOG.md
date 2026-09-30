@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Documentation site (VitePress), published to GitHub Pages.
 - Campaigns with multi-step sequences, recipients from contacts, and a start/pause/archive lifecycle.
 - Contacts spreadsheet with inline editing, lists as tabs, and custom columns.
 - Templates, template folders, signatures, and placeholder merge fields in the step editor.

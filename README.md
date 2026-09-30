@@ -1,6 +1,7 @@
 # Campaigns
 
 [![tests](https://github.com/contactout/campaigns/actions/workflows/tests.yml/badge.svg)](https://github.com/contactout/campaigns/actions/workflows/tests.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://contactout.github.io/campaigns/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A self-hosted email outreach / campaign tool by [ContactOut](https://github.com/contactout).
@@ -15,7 +16,7 @@ Team-owned campaigns, a contacts spreadsheet (lists included), SMTP / Gmail / Ou
 sending, open & click tracking, unsubscribe, and reply/bounce detection.
 
 Built with Laravel 13, Inertia React, and Tailwind. Designed to run on your own server
-via Docker Compose.
+via Docker Compose. Documentation: [contactout.github.io/campaigns](https://contactout.github.io/campaigns/).
 
 ## Features
 

@@ -46,6 +46,7 @@ opencode.jsonc
 **/.DS_Store
 tests
 docs
+docs-site
 docker-compose*.yml
 .dockerignore
 .editorconfig
