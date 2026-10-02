@@ -13,6 +13,7 @@ use App\Models\Unsubscribe;
 use App\Services\Mail\CampaignBodyBuilder;
 use App\Services\Mail\CampaignStepScheduler;
 use App\Services\Mail\PlaceholderRenderer;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -55,6 +56,11 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * second worker.
      */
     private const int LOCK_SECONDS = 300;
+
+    /**
+     * Minutes to wait before retrying an email the connection is throttling.
+     */
+    private const int RATE_LIMIT_RETRY_MINUTES = 15;
 
     /**
      * Cache key prefix for the per-email send lock.
@@ -151,11 +157,14 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $this->refreshSendingWindow($connection);
+
         if ($this->isRateLimited($connection)) {
-            $email->scheduled_at = now()->addMinutes(15);
+            $email->scheduled_at = now()->addMinutes(self::RATE_LIMIT_RETRY_MINUTES);
             $email->save();
 
-            $connection->rate_limit_expired_at = now();
+            // When the connection may try again, not when it was throttled.
+            $connection->rate_limit_expired_at = $email->scheduled_at;
             $connection->save();
 
             return;
@@ -224,6 +233,30 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             'List-Unsubscribe' => '<'.$url.'>',
             'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
         ];
+    }
+
+    /**
+     * Start a new sending day once the previous window has rolled over.
+     *
+     * `sent_count` is a per-UTC-day counter compared against `sending_limit`, so
+     * without this a connection that reached its limit would stay throttled for
+     * good. The window lives on the connection rather than in a scheduled
+     * command, so the limit lifts even when the scheduler container is down.
+     */
+    private function refreshSendingWindow(MailerConnection $connection): void
+    {
+        if ($connection->sending_limit === null) {
+            return;
+        }
+
+        if ($connection->sending_limit_refreshed_at !== null
+            && $connection->sending_limit_refreshed_at->isFuture()) {
+            return;
+        }
+
+        $connection->sent_count = 0;
+        $connection->sending_limit_refreshed_at = CarbonImmutable::today('UTC')->addDay();
+        $connection->save();
     }
 
     /**
