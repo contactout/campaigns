@@ -16,6 +16,7 @@ use App\Services\Mail\PlaceholderRenderer;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\URL;
 use Throwable;
 
@@ -40,6 +41,27 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     public int $uniqueFor = 3600;
 
     /**
+     * Seconds the worker may spend on this job.
+     *
+     * Set explicitly so it stays below {@see self::LOCK_SECONDS}: the send lock
+     * must outlive the job that holds it.
+     */
+    public int $timeout = 120;
+
+    /**
+     * Seconds the send lock is held while the email is being sent.
+     *
+     * Must outlast {@see self::timeout} so a slow send is never joined by a
+     * second worker.
+     */
+    private const int LOCK_SECONDS = 300;
+
+    /**
+     * Cache key prefix for the per-email send lock.
+     */
+    private const string LOCK_PREFIX = 'campaign-email-send:';
+
+    /**
      * Create a new job instance.
      */
     public function __construct(public CampaignEmail $email) {}
@@ -56,6 +78,33 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * Send the campaign email and advance the recipient to the next step.
      */
     public function handle(
+        CampaignStepScheduler $scheduler,
+        PlaceholderRenderer $renderer,
+        CampaignBodyBuilder $bodyBuilder,
+        CampaignMailer $mailer,
+    ): void {
+        // Two workers must not send the same email. Uniqueness only guards
+        // dispatch, and its lock can expire while a job waits in a backlog, so
+        // the send itself takes a lock keyed on the email.
+        $lock = Cache::lock(self::LOCK_PREFIX.$this->email->id, self::LOCK_SECONDS);
+
+        if (! $lock->get()) {
+            // Leave the email scheduled; the next dispatch cycle picks it up
+            // once the worker holding the lock is done.
+            return;
+        }
+
+        try {
+            $this->send($scheduler, $renderer, $bodyBuilder, $mailer);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Send the email once the caller holds its lock.
+     */
+    private function send(
         CampaignStepScheduler $scheduler,
         PlaceholderRenderer $renderer,
         CampaignBodyBuilder $bodyBuilder,

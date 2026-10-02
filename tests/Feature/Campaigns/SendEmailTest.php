@@ -264,6 +264,39 @@ test('persists message_id and thread_id when the mailer returns them', function 
         ->and($email->thread_id)->toBe('thread-abc');
 });
 
+test('does not send again while the same email is already being sent', function () {
+    $fixture = mmosSendEmailFixture();
+
+    $mailer = new class($fixture['email']) implements CampaignMailer
+    {
+        public int $sends = 0;
+
+        public function __construct(private readonly CampaignEmail $email) {}
+
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+        {
+            $this->sends++;
+
+            // Stand in for a second worker picking up a duplicate job for this
+            // email while this send is still in flight. Only once, so a missing
+            // lock fails the assertion instead of recursing forever.
+            if ($this->sends === 1) {
+                app()->call([new SendEmail($this->email), 'handle']);
+            }
+
+            return new SendResult;
+        }
+    };
+
+    $this->app->instance(CampaignMailer::class, $mailer);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($mailer->sends)->toBe(1)
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
+        ->and($fixture['connection']->fresh()->sent_count)->toBe(1);
+});
+
 test('does not send an email that has already been sent', function () {
     $fake = new FakeCampaignMailer;
     $this->app->instance(CampaignMailer::class, $fake);
