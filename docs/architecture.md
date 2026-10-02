@@ -42,6 +42,7 @@ Start campaign
 scheduler (every minute)
    -> campaigns:dispatch-due: due, scheduled emails of active campaigns (batches of 200)
    -> SendEmail job per email (queue worker)
+        - skip unless the email is still scheduled and due (one queued job per email)
         - skip if the campaign is not active
         - fail if the address is missing or suppressed, or the connection is inactive
         - defer 15 minutes if the connection is rate limited
@@ -75,7 +76,9 @@ Public routes in `routes/tracking.php` sit outside the authenticated team group:
 - `GET|POST /unsubscribe/{recipient}` is protected by Laravel's `signed` middleware; confirming
   writes an `Unsubscribe` row and stops further sends to that address for the team.
 
-Opens and clicks are approximate: mail clients may prefetch or block images.
+Opens and clicks are approximate: mail clients may prefetch or block images. Known proxy user
+agents are ignored, and a click records an open as well, because a blocked pixel leaves no other
+trace that the message was read.
 
 ## Directory conventions
 

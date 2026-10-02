@@ -34,6 +34,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Campaign emails could be queued and sent more than once when the queue fell behind; sends are
+  now unique per email and re-check that the email is still scheduled and due.
+- Every step of a recipient added after the campaign started fired within minutes, because step
+  days were counted from the campaign start rather than from when the recipient joined.
+- Recipients added to a running campaign received nothing until the campaign was stopped and
+  restarted.
+- Open tracking counted mailbox proxy fetches and pixels for emails that were never sent, failed,
+  or bounced. A click now also records an open, since a blocked pixel leaves no other trace.
+- User agents longer than 255 characters broke open and click tracking inserts.
 - Docker build for PHP 8.4 IMAP support.
 
 ### Security
