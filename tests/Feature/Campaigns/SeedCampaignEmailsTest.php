@@ -150,13 +150,17 @@ test('later steps of a late-joining recipient stay offset from their join date',
 });
 
 test('a recipient added before the campaign started is scheduled from the campaign start', function () {
-    $this->travelTo(CarbonImmutable::parse('2026-01-01 08:00:00'));
+    $this->travelTo(CarbonImmutable::parse('2026-01-05 08:00:00'));
 
-    ['campaign' => $campaign, 'recipient' => $recipient] = mmosSeededCampaign(startedAt: '2026-01-01 00:00:00');
+    ['campaign' => $campaign, 'recipient' => $recipient] = mmosSeededCampaign(startedAt: '2026-01-05 00:00:00');
+
+    // The recipient joined while the campaign was still a draft. Counting from
+    // the join date instead of the start would land on 2026-01-01.
+    $recipient->forceFill(['created_at' => CarbonImmutable::parse('2026-01-01 09:00:00')])->save();
 
     app(CampaignStepScheduler::class)->scheduleFirstSteps($campaign);
 
     $email = CampaignEmail::query()->where('recipient_id', $recipient->id)->sole();
 
-    expect($email->scheduled_at->toDateTimeString())->toBe('2026-01-01 09:00:00');
+    expect($email->scheduled_at->toDateTimeString())->toBe('2026-01-05 09:00:00');
 });

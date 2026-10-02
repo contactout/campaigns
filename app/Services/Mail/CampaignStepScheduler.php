@@ -9,6 +9,7 @@ use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Recipient;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Works out when campaign steps should send and materialises the queue rows.
@@ -70,6 +71,11 @@ class CampaignStepScheduler
      *
      * Recipients already holding an email for the first step are skipped.
      *
+     * Every seed job scans all eligible recipients, so two enrollments arriving
+     * together would otherwise each insert a first-step row for the same
+     * recipient. The campaign row is locked for the duration so concurrent seed
+     * jobs serialise and the later one sees the earlier one's rows.
+     *
      * @return int The number of emails created.
      */
     public function scheduleFirstSteps(Campaign $campaign): int
@@ -80,30 +86,48 @@ class CampaignStepScheduler
             return 0;
         }
 
-        $recipients = $campaign->recipients()
-            ->whereIn('status', [RecipientStatus::Active, RecipientStatus::Pending])
-            ->get();
+        return DB::transaction(function () use ($campaign, $firstStep): int {
+            $this->lockCampaign($campaign);
 
-        $created = 0;
+            $recipients = $campaign->recipients()
+                ->whereIn('status', [RecipientStatus::Active, RecipientStatus::Pending])
+                ->get();
 
-        foreach ($recipients as $recipient) {
-            if ($this->emailExists($recipient->id, $firstStep->id)) {
-                continue;
+            $created = 0;
+
+            foreach ($recipients as $recipient) {
+                $email = CampaignEmail::query()->firstOrCreate(
+                    [
+                        'recipient_id' => $recipient->id,
+                        'campaign_step_id' => $firstStep->id,
+                    ],
+                    [
+                        'campaign_id' => $campaign->id,
+                        'mailer_connection_id' => $campaign->mailer_connection_id,
+                        'status' => EmailStatus::Scheduled,
+                        'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $this->baselineFor($campaign, $recipient)),
+                    ],
+                );
+
+                if ($email->wasRecentlyCreated) {
+                    $created++;
+                }
             }
 
-            CampaignEmail::create([
-                'campaign_id' => $campaign->id,
-                'campaign_step_id' => $firstStep->id,
-                'recipient_id' => $recipient->id,
-                'mailer_connection_id' => $campaign->mailer_connection_id,
-                'status' => EmailStatus::Scheduled,
-                'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $this->baselineFor($campaign, $recipient)),
-            ]);
+            return $created;
+        });
+    }
 
-            $created++;
-        }
-
-        return $created;
+    /**
+     * Take the campaign row lock that serialises seeding.
+     *
+     * Deliberately used only for first-step seeding. `scheduleNextStep` runs on
+     * every send, so locking the campaign row there would serialise every send
+     * for a campaign against the others.
+     */
+    private function lockCampaign(Campaign $campaign): void
+    {
+        Campaign::query()->whereKey($campaign->id)->lockForUpdate()->first();
     }
 
     /**
@@ -131,28 +155,17 @@ class CampaignStepScheduler
             return;
         }
 
-        if ($this->emailExists($email->recipient_id, $nextStep->id)) {
-            return;
-        }
-
-        CampaignEmail::create([
-            'campaign_id' => $campaign->id,
-            'campaign_step_id' => $nextStep->id,
-            'recipient_id' => $email->recipient_id,
-            'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
-            'status' => EmailStatus::Scheduled,
-            'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $this->baselineFor($campaign, $email->recipient)),
-        ]);
-    }
-
-    /**
-     * Determine whether an email already exists for the recipient/step pair.
-     */
-    private function emailExists(int $recipientId, int $stepId): bool
-    {
-        return CampaignEmail::query()
-            ->where('recipient_id', $recipientId)
-            ->where('campaign_step_id', $stepId)
-            ->exists();
+        CampaignEmail::query()->firstOrCreate(
+            [
+                'recipient_id' => $email->recipient_id,
+                'campaign_step_id' => $nextStep->id,
+            ],
+            [
+                'campaign_id' => $campaign->id,
+                'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
+                'status' => EmailStatus::Scheduled,
+                'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $this->baselineFor($campaign, $email->recipient)),
+            ],
+        );
     }
 }
