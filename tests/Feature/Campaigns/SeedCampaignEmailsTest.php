@@ -107,3 +107,56 @@ test('seeding schedules about now when the computed time is in the past', functi
 
     expect($email->scheduled_at->equalTo(CarbonImmutable::now()->addMinute()))->toBeTrue();
 });
+
+test('a recipient added after the campaign started is scheduled from their join date', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-10 08:00:00'));
+
+    ['campaign' => $campaign, 'recipient' => $recipient] = mmosSeededCampaign(startedAt: '2026-01-01 00:00:00');
+
+    app(CampaignStepScheduler::class)->scheduleFirstSteps($campaign);
+
+    $email = CampaignEmail::query()->where('recipient_id', $recipient->id)->sole();
+
+    expect($email->scheduled_at->toDateTimeString())->toBe('2026-01-10 09:00:00');
+});
+
+test('later steps of a late-joining recipient stay offset from their join date', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-10 08:00:00'));
+
+    ['campaign' => $campaign, 'step' => $firstStep, 'recipient' => $recipient] = mmosSeededCampaign(startedAt: '2026-01-01 00:00:00');
+
+    $secondStep = CampaignStep::factory()->forCampaign($campaign)->create([
+        'sequence' => 2,
+        'day' => 3,
+        'time' => '09:00:00',
+    ]);
+
+    $scheduler = app(CampaignStepScheduler::class);
+    $scheduler->scheduleFirstSteps($campaign);
+
+    $firstEmail = CampaignEmail::query()
+        ->where('recipient_id', $recipient->id)
+        ->where('campaign_step_id', $firstStep->id)
+        ->sole();
+
+    $scheduler->scheduleNextStep($firstEmail);
+
+    $secondEmail = CampaignEmail::query()
+        ->where('recipient_id', $recipient->id)
+        ->where('campaign_step_id', $secondStep->id)
+        ->sole();
+
+    expect($secondEmail->scheduled_at->toDateTimeString())->toBe('2026-01-13 09:00:00');
+});
+
+test('a recipient added before the campaign started is scheduled from the campaign start', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-01 08:00:00'));
+
+    ['campaign' => $campaign, 'recipient' => $recipient] = mmosSeededCampaign(startedAt: '2026-01-01 00:00:00');
+
+    app(CampaignStepScheduler::class)->scheduleFirstSteps($campaign);
+
+    $email = CampaignEmail::query()->where('recipient_id', $recipient->id)->sole();
+
+    expect($email->scheduled_at->toDateTimeString())->toBe('2026-01-01 09:00:00');
+});
