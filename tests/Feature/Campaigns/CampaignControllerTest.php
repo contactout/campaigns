@@ -230,13 +230,15 @@ test('members can save sending window and tracking settings', function () {
         ])
         ->assertRedirect();
 
-    expect($campaign->refresh()->settings)->toBe([
-        'sending_days' => [1, 2, 3, 4, 5],
-        'sending_hour_from' => 9,
-        'sending_hour_to' => 17,
-        'open_tracking' => false,
-        'link_tracking' => false,
-    ]);
+    // Asserted key by key: MySQL's json column reorders object keys, so
+    // comparing the whole array would depend on storage order.
+    $settings = $campaign->refresh()->settings;
+
+    expect($settings['sending_days'])->toBe([1, 2, 3, 4, 5])
+        ->and($settings['sending_hour_from'])->toBe(9)
+        ->and($settings['sending_hour_to'])->toBe(17)
+        ->and($settings['open_tracking'])->toBeFalse()
+        ->and($settings['link_tracking'])->toBeFalse();
 });
 
 test('the campaign show page exposes the default settings', function () {
