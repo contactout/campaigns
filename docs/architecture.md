@@ -45,12 +45,17 @@ scheduler (every minute)
         - skip unless the email is still scheduled and due (one queued job per email)
         - skip if the campaign is not active
         - fail if the address is missing or suppressed, or the connection is inactive
+        - reset the connection's daily send counter when the UTC day rolls over
         - defer 15 minutes if the connection is rate limited
         - render placeholders (PlaceholderRenderer)
-        - rewrite links and add the open pixel (CampaignBodyBuilder)
+        - rewrite links, add the unsubscribe link and the open pixel (CampaignBodyBuilder)
         - send via the CampaignMailer for the connection type
         - schedule the recipient's next step (CampaignStepScheduler)
 ```
+
+`CampaignStepScheduler` counts a step's `day` from the later of the campaign start and the moment
+the recipient joined, then moves the result onto the campaign's sending window (`SendingWindow`):
+the allowed weekdays and hour range, evaluated in the recipient's timezone when it has one.
 
 `CampaignMailerResolver` picks the implementation of the `CampaignMailer` contract:
 `SmtpCampaignMailer`, `GmailCampaignMailer` (Gmail API), or `OutlookCampaignMailer`.
@@ -78,7 +83,8 @@ Public routes in `routes/tracking.php` sit outside the authenticated team group:
 
 Opens and clicks are approximate: mail clients may prefetch or block images. Known proxy user
 agents are ignored, and a click records an open as well, because a blocked pixel leaves no other
-trace that the message was read.
+trace that the message was read. Link rewriting and the pixel can each be turned off per campaign;
+the unsubscribe link is always added.
 
 ## Directory conventions
 

@@ -19,6 +19,8 @@ All notable changes to this project are documented here. The format is based on
 - Dashboard setup checklist and shared empty states.
 - Docker Compose production stack (Caddy with automatic TLS, MySQL 8.4) and a local self-signed override.
 - One-click unsubscribe: `List-Unsubscribe` headers on every campaign email.
+- Per-campaign sending window (allowed weekdays and an hour range) and switches for open and link
+  tracking, both edited from the campaign dialog.
 - `REGISTRATION_ENABLED` setting to control open sign-up; the first user can always register.
 - `campaigns:verify-user` command to verify a user when system mail is not configured.
 - Architecture overview in `docs/architecture.md`, issue and pull request templates, Code of Conduct.
@@ -43,6 +45,15 @@ All notable changes to this project are documented here. The format is based on
 - Open tracking counted mailbox proxy fetches and pixels for emails that were never sent, failed,
   or bounced. A click now also records an open, since a blocked pixel leaves no other trace.
 - User agents longer than 255 characters broke open and click tracking inserts.
+- A connection's sending limit never reset, so a connection that reached `sending_limit` was
+  throttled indefinitely. It now counts sends since midnight UTC and resets when the UTC day rolls
+  over.
+- Campaign emails carried `List-Unsubscribe` headers but no unsubscribe link in the body, which the
+  deliverability docs already promised.
+- A recipient's own `timezone` was stored but never used when scheduling.
+- `campaign_emails` had no uniqueness on (recipient_id, campaign_step_id), so two seed jobs running
+  at once could insert the same step twice. Existing duplicates are merged into the earliest row,
+  keeping their opens, clicks and tracked links.
 - Docker build for PHP 8.4 IMAP support.
 
 ### Security
