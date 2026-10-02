@@ -1,8 +1,22 @@
 <?php
 
+use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\TrackedLink;
 use App\Services\Mail\CampaignBodyBuilder;
+use Illuminate\Support\Facades\URL;
+
+/**
+ * Create an email whose campaign carries the given settings.
+ *
+ * @param  array<string, mixed>  $settings
+ */
+function mmosTrackedEmail(array $settings = []): CampaignEmail
+{
+    $campaign = Campaign::factory()->create(['settings' => $settings]);
+
+    return CampaignEmail::factory()->create(['campaign_id' => $campaign->id]);
+}
 
 test('rewrites absolute links to tracked urls', function () {
     $email = CampaignEmail::factory()->create();
@@ -64,4 +78,48 @@ test('inserts the tracking pixel before the closing body tag', function () {
     $pixel = '<img src="'.route('tracking.open', ['campaignEmail' => $email->tracker]).'" width="1" height="1" alt="" style="display:none" />';
 
     expect($html)->toContain($pixel.'</body>');
+});
+
+test('adds an unsubscribe link to the signed confirmation page', function () {
+    $email = CampaignEmail::factory()->create();
+
+    $html = (new CampaignBodyBuilder)->build($email, '<p>Hi there</p>');
+
+    expect($html)->toContain(URL::signedRoute('unsubscribe.show', ['recipient' => $email->recipient_id]));
+});
+
+test('does not wrap the unsubscribe link in click tracking', function () {
+    $email = CampaignEmail::factory()->create();
+
+    $html = (new CampaignBodyBuilder)->build($email, '<p>Hi there</p>');
+
+    expect(TrackedLink::query()->count())->toBe(0)
+        ->and($html)->not->toContain('t/c/');
+});
+
+test('skips link rewriting when link tracking is off', function () {
+    $email = mmosTrackedEmail(['link_tracking' => false]);
+
+    $html = (new CampaignBodyBuilder)->build($email, '<a href="https://example.com/page">Visit us</a>');
+
+    expect(TrackedLink::query()->count())->toBe(0)
+        ->and($html)->toContain('href="https://example.com/page"');
+});
+
+test('skips the open pixel when open tracking is off', function () {
+    $email = mmosTrackedEmail(['open_tracking' => false]);
+
+    $html = (new CampaignBodyBuilder)->build($email, '<p>Hi there</p>');
+
+    expect($html)->not->toContain(route('tracking.open', ['campaignEmail' => $email->tracker]));
+});
+
+test('still adds the unsubscribe link when both kinds of tracking are off', function () {
+    $email = mmosTrackedEmail(['open_tracking' => false, 'link_tracking' => false]);
+
+    $html = (new CampaignBodyBuilder)->build($email, '<a href="https://example.com/page">Visit us</a>');
+
+    expect($html)->toContain(URL::signedRoute('unsubscribe.show', ['recipient' => $email->recipient_id]))
+        ->and($html)->toContain('href="https://example.com/page"')
+        ->and($html)->not->toContain('t/c/');
 });

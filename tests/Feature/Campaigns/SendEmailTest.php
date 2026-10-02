@@ -19,6 +19,7 @@ use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -210,7 +211,12 @@ test('reschedules the email when the connection is rate limited', function () {
 
     $fixture = mmosSendEmailFixture();
 
-    $fixture['connection']->update(['sending_limit' => 1, 'sent_count' => 1]);
+    $fixture['connection']->update([
+        'sending_limit' => 1,
+        'sent_count' => 1,
+        // Inside today's window, so the counter is not reset first.
+        'sending_limit_refreshed_at' => CarbonImmutable::now()->addDay(),
+    ]);
     $fixture['email']->update(['scheduled_at' => CarbonImmutable::now()]);
 
     mmosRunSendEmail($fixture['email']);
@@ -220,7 +226,10 @@ test('reschedules the email when the connection is rate limited', function () {
     expect($email->status)->toBe(EmailStatus::Scheduled)
         ->and($email->scheduled_at->equalTo(CarbonImmutable::now()->addMinutes(15)))->toBeTrue();
 
-    expect($fixture['connection']->fresh()->rate_limit_expired_at)->not->toBeNull()
+    $connection = $fixture['connection']->fresh();
+
+    expect($connection->rate_limit_expired_at)->not->toBeNull()
+        ->and($connection->rate_limit_expired_at->equalTo($email->scheduled_at))->toBeTrue()
         ->and($fake->sent)->toBeEmpty();
 });
 
@@ -261,4 +270,134 @@ test('persists message_id and thread_id when the mailer returns them', function 
     expect($email->status)->toBe(EmailStatus::Sent)
         ->and($email->message_id)->toBe('<msg-123@example.com>')
         ->and($email->thread_id)->toBe('thread-abc');
+});
+
+test('does not send again while the same email is already being sent', function () {
+    $fixture = mmosSendEmailFixture();
+
+    $mailer = new class($fixture['email']) implements CampaignMailer
+    {
+        public int $sends = 0;
+
+        public function __construct(private readonly CampaignEmail $email) {}
+
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+        {
+            $this->sends++;
+
+            // Stand in for a second worker picking up a duplicate job for this
+            // email while this send is still in flight. Only once, so a missing
+            // lock fails the assertion instead of recursing forever.
+            if ($this->sends === 1) {
+                app()->call([new SendEmail($this->email), 'handle']);
+            }
+
+            return new SendResult;
+        }
+    };
+
+    $this->app->instance(CampaignMailer::class, $mailer);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($mailer->sends)->toBe(1)
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
+        ->and($fixture['connection']->fresh()->sent_count)->toBe(1);
+});
+
+test('starts a new sending window when the utc day rolls over', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-01 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    // Yesterday's window, and the limit was already reached in it.
+    $fixture['connection']->update([
+        'sending_limit' => 1,
+        'sent_count' => 1,
+        'sending_limit_refreshed_at' => CarbonImmutable::parse('2026-02-01 00:00:00'),
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $connection = $fixture['connection']->fresh();
+
+    expect($fake->sent)->toHaveCount(1)
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
+        ->and($connection->sent_count)->toBe(1)
+        ->and($connection->sending_limit_refreshed_at->toDateTimeString())->toBe('2026-02-02 00:00:00');
+});
+
+test('opens a sending window on the first send for a connection', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-01 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['connection']->update(['sending_limit' => 5]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['connection']->fresh()->sending_limit_refreshed_at->toDateTimeString())
+        ->toBe('2026-02-02 00:00:00');
+});
+
+test('does not send an email that has already been sent', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    mmosRunSendEmail($fixture['email']);
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent)->toHaveCount(1)
+        ->and($fixture['connection']->fresh()->sent_count)->toBe(1);
+});
+
+test('does not send an email that was pushed back to a future time', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-01 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    $fixture['email']->update(['scheduled_at' => CarbonImmutable::now()->addMinutes(15)]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Scheduled)
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('does not send an email that is still pending', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    $fixture['email']->update(['status' => EmailStatus::Pending]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Pending)
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('queues only one job per campaign email', function () {
+    config(['queue.default' => 'database']);
+
+    $fixture = mmosSendEmailFixture();
+    $other = CampaignEmail::factory()->create();
+
+    SendEmail::dispatch($fixture['email']);
+    SendEmail::dispatch($fixture['email']);
+    SendEmail::dispatch($fixture['email']->fresh());
+    SendEmail::dispatch($other);
+
+    expect(DB::table('jobs')->count())->toBe(2);
 });

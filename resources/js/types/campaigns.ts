@@ -16,12 +16,21 @@ export type CampaignSummary = {
     created_at: string | null;
 };
 
+export type CampaignSettings = {
+    sending_days: number[];
+    sending_hour_from: number;
+    sending_hour_to: number;
+    open_tracking: boolean;
+    link_tracking: boolean;
+};
+
 export type CampaignDetail = {
     id: number;
     name: string;
     status: string;
     status_label: string;
     timezone: string;
+    settings: CampaignSettings;
     mailer_connection_id: number | null;
     started_at: string | null;
     interrupted_reason: string | null;

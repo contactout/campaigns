@@ -9,6 +9,7 @@ use App\Actions\Campaigns\DuplicateCampaign;
 use App\Actions\Campaigns\StartCampaign;
 use App\Actions\Campaigns\StopCampaign;
 use App\Actions\Campaigns\UpdateCampaign;
+use App\Data\CampaignSettings;
 use App\Enums\CampaignStatus;
 use App\Enums\EmailStatus;
 use App\Http\Controllers\Controller;
@@ -205,6 +206,7 @@ class CampaignController extends Controller
                 'status' => $campaign->status->value,
                 'status_label' => $campaign->status->label(),
                 'timezone' => $campaign->timezone,
+                'settings' => CampaignSettings::fromArray($campaign->settings)->toArray(),
                 'mailer_connection_id' => $campaign->mailer_connection_id,
                 'started_at' => $campaign->started_at?->toISOString(),
                 'interrupted_reason' => $campaign->interrupted_reason,

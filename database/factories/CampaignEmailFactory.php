@@ -41,4 +41,16 @@ class CampaignEmailFactory extends Factory
             'replied_at' => null,
         ];
     }
+
+    /**
+     * Indicate that the email has been sent.
+     */
+    public function sent(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => EmailStatus::Sent,
+            'scheduled_at' => now(),
+            'dispatched_at' => now(),
+        ]);
+    }
 }

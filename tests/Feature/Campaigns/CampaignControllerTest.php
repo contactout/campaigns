@@ -211,6 +211,110 @@ test('members can update a campaign', function () {
         ->and($campaign->timezone)->toBe('Europe/London');
 });
 
+test('members can save sending window and tracking settings', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->patch(route('campaigns.update', ['current_team' => $team->slug, 'campaign' => $campaign]), [
+            'name' => $campaign->name,
+            'timezone' => 'UTC',
+            'settings' => [
+                'sending_days' => [1, 2, 3, 4, 5],
+                'sending_hour_from' => 9,
+                'sending_hour_to' => 17,
+                'open_tracking' => false,
+                'link_tracking' => false,
+            ],
+        ])
+        ->assertRedirect();
+
+    // Asserted key by key: MySQL's json column reorders object keys, so
+    // comparing the whole array would depend on storage order.
+    $settings = $campaign->refresh()->settings;
+
+    expect($settings['sending_days'])->toBe([1, 2, 3, 4, 5])
+        ->and($settings['sending_hour_from'])->toBe(9)
+        ->and($settings['sending_hour_to'])->toBe(17)
+        ->and($settings['open_tracking'])->toBeFalse()
+        ->and($settings['link_tracking'])->toBeFalse();
+});
+
+test('the campaign show page exposes the default settings', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('campaign.settings.sending_days', [1, 2, 3, 4, 5, 6, 7])
+            ->where('campaign.settings.sending_hour_from', 0)
+            ->where('campaign.settings.sending_hour_to', 0)
+            ->where('campaign.settings.open_tracking', true)
+            ->where('campaign.settings.link_tracking', true));
+});
+
+test('updating a campaign without settings leaves them untouched', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'settings' => ['sending_days' => [1, 2, 3, 4, 5], 'sending_hour_from' => 9, 'sending_hour_to' => 17],
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('campaigns.update', ['current_team' => $team->slug, 'campaign' => $campaign]), [
+            'name' => 'Renamed',
+            'timezone' => 'UTC',
+        ])
+        ->assertRedirect();
+
+    $campaign->refresh();
+
+    expect($campaign->name)->toBe('Renamed')
+        ->and($campaign->settings['sending_days'])->toBe([1, 2, 3, 4, 5])
+        ->and($campaign->settings['sending_hour_to'])->toBe(17);
+});
+
+test('an invalid sending hour range is rejected', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->patch(route('campaigns.update', ['current_team' => $team->slug, 'campaign' => $campaign]), [
+            'name' => $campaign->name,
+            'timezone' => 'UTC',
+            'settings' => [
+                'sending_days' => [1, 2, 3, 4, 5],
+                'sending_hour_from' => 17,
+                'sending_hour_to' => 9,
+            ],
+        ])
+        ->assertSessionHasErrors('settings.sending_hour_to');
+
+    expect($campaign->refresh()->settings)->toBeNull();
+});
+
+test('settings need at least one sending day', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->patch(route('campaigns.update', ['current_team' => $team->slug, 'campaign' => $campaign]), [
+            'name' => $campaign->name,
+            'timezone' => 'UTC',
+            'settings' => [
+                'sending_hour_from' => 0,
+                'sending_hour_to' => 0,
+            ],
+        ])
+        ->assertSessionHasErrors('settings.sending_days');
+});
+
 test('members can delete a campaign and its steps', function () {
     [$team, $user] = campaignTeamWithMember();
 
