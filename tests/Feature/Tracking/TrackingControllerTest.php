@@ -1,12 +1,14 @@
 <?php
 
+use App\Enums\EmailStatus;
 use App\Models\CampaignEmail;
 use App\Models\EmailOpen;
 use App\Models\LinkClick;
 use App\Models\TrackedLink;
+use App\Support\TrackingUserAgent;
 
 test('an open records an email open and returns a transparent gif', function () {
-    $email = CampaignEmail::factory()->create();
+    $email = CampaignEmail::factory()->sent()->create();
 
     $response = $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
 
@@ -23,7 +25,7 @@ test('an open records an email open and returns a transparent gif', function () 
 });
 
 test('repeated opens are recorded each time', function () {
-    $email = CampaignEmail::factory()->create();
+    $email = CampaignEmail::factory()->sent()->create();
 
     $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
     $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
@@ -32,8 +34,62 @@ test('repeated opens are recorded each time', function () {
         ->and($email->fresh()->opened_at)->not->toBeNull();
 });
 
-test('a click records a link click and redirects to the original url', function () {
+test('a proxy fetch is not recorded but still returns the gif', function () {
+    $email = CampaignEmail::factory()->sent()->create();
+
+    $response = $this->withHeaders([
+        'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GoogleImageProxy',
+    ])->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
+
+    $response->assertOk()->assertHeader('Content-Type', 'image/gif');
+
+    expect(EmailOpen::query()->count())->toBe(0)
+        ->and($email->fresh()->opened_at)->toBeNull();
+});
+
+test('a bare mozilla user agent is treated as a proxy fetch', function () {
+    $email = CampaignEmail::factory()->sent()->create();
+
+    $this->withHeaders(['User-Agent' => 'Mozilla/5.0'])
+        ->get(route('tracking.open', ['campaignEmail' => $email->tracker]))
+        ->assertOk();
+
+    expect(EmailOpen::query()->count())->toBe(0);
+});
+
+test('an open is ignored for an email that was never sent', function () {
     $email = CampaignEmail::factory()->create();
+
+    $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/gif');
+
+    expect(EmailOpen::query()->count())->toBe(0)
+        ->and($email->fresh()->opened_at)->toBeNull();
+});
+
+test('an open is ignored for a bounced email', function () {
+    $email = CampaignEmail::factory()->sent()->create(['status' => EmailStatus::Bounced]);
+
+    $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]))->assertOk();
+
+    expect(EmailOpen::query()->count())->toBe(0)
+        ->and($email->fresh()->opened_at)->toBeNull();
+});
+
+test('a long user agent is cut to the length the column accepts', function () {
+    $email = CampaignEmail::factory()->sent()->create();
+
+    $this->withHeaders(['User-Agent' => str_repeat('a', 600)])
+        ->get(route('tracking.open', ['campaignEmail' => $email->tracker]))
+        ->assertOk();
+
+    expect(EmailOpen::query()->sole()->user_agent)
+        ->toHaveLength(TrackingUserAgent::MAX_LENGTH);
+});
+
+test('a click records a link click and redirects to the original url', function () {
+    $email = CampaignEmail::factory()->sent()->create();
 
     $link = TrackedLink::factory()->create([
         'campaign_email_id' => $email->id,
@@ -50,6 +106,53 @@ test('a click records a link click and redirects to the original url', function 
         ->and($click->campaign_email_id)->toBe($email->id)
         ->and($click->recipient_id)->toBe($email->recipient_id)
         ->and($click->user_agent)->toBe('MailClient/1.0');
+});
+
+test('a click infers an open when the pixel was blocked', function () {
+    $email = CampaignEmail::factory()->sent()->create();
+
+    $link = TrackedLink::factory()->create(['campaign_email_id' => $email->id]);
+
+    $this->get(route('tracking.click', ['hash' => $link->hash]))->assertRedirect();
+
+    expect(EmailOpen::query()->count())->toBe(1)
+        ->and($email->fresh()->opened_at)->not->toBeNull();
+});
+
+test('repeated clicks infer only one open', function () {
+    $email = CampaignEmail::factory()->sent()->create();
+
+    $link = TrackedLink::factory()->create(['campaign_email_id' => $email->id]);
+
+    $this->get(route('tracking.click', ['hash' => $link->hash]))->assertRedirect();
+    $this->get(route('tracking.click', ['hash' => $link->hash]))->assertRedirect();
+
+    expect(LinkClick::query()->count())->toBe(2)
+        ->and(EmailOpen::query()->count())->toBe(1);
+});
+
+test('a click records a trimmed user agent', function () {
+    $email = CampaignEmail::factory()->sent()->create();
+
+    $link = TrackedLink::factory()->create(['campaign_email_id' => $email->id]);
+
+    $this->withHeaders(['User-Agent' => str_repeat('b', 600)])
+        ->get(route('tracking.click', ['hash' => $link->hash]))
+        ->assertRedirect();
+
+    expect(LinkClick::query()->sole()->user_agent)
+        ->toHaveLength(TrackingUserAgent::MAX_LENGTH);
+});
+
+test('a click on an unsent email still records the click', function () {
+    $email = CampaignEmail::factory()->create();
+
+    $link = TrackedLink::factory()->create(['campaign_email_id' => $email->id]);
+
+    $this->get(route('tracking.click', ['hash' => $link->hash]))->assertRedirect();
+
+    expect(LinkClick::query()->count())->toBe(1)
+        ->and(EmailOpen::query()->count())->toBe(0);
 });
 
 test('an unknown tracking hash returns not found', function () {
