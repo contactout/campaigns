@@ -2,6 +2,7 @@
 
 namespace App\Services\Mail;
 
+use App\Data\CampaignSettings;
 use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Campaign;
@@ -9,20 +10,22 @@ use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Recipient;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Works out when campaign steps should send and materialises the queue rows.
  */
 class CampaignStepScheduler
 {
+    public function __construct(private readonly SendingWindow $sendingWindow) {}
+
     /**
-     * Compute the UTC send time for a step relative to a recipient's baseline.
+     * Compute the UTC send time for a step, relative to the recipient.
      *
-     * The baseline is interpreted in the campaign timezone, moved to the start
-     * of that day, offset by the step's day, and set to the step's configured
-     * time (defaulting to 09:00). Times already in the past fall back to
-     * roughly now so they send on the next run.
+     * The baseline is interpreted in the recipient's timezone, moved to the
+     * start of that day, offset by the step's day, and set to the step's
+     * configured time (defaulting to 09:00). Times already in the past fall
+     * back to roughly now so they send on the next run, and the result is then
+     * pushed onto the campaign's sending window.
      *
      * The step's `day` is counted from the recipient's baseline, which is the
      * later of the campaign start and the moment the recipient joined. A step
@@ -30,22 +33,37 @@ class CampaignStepScheduler
      * documented as an offset from the start of the sequence, and anchoring it
      * to the previous send would silently stretch a 0/3/7 sequence.
      */
-    public function scheduledAtFor(Campaign $campaign, CampaignStep $step, ?CarbonImmutable $baseline = null): CarbonImmutable
+    public function scheduledAtFor(Campaign $campaign, CampaignStep $step, ?Recipient $recipient = null): CarbonImmutable
     {
-        $baseline ??= $this->baselineFor($campaign);
+        $timezone = $this->timezoneFor($campaign, $recipient);
 
-        $scheduled = $baseline
-            ->setTimezone($campaign->timezone)
+        $scheduled = $this->baselineFor($campaign, $recipient)
+            ->setTimezone($timezone)
             ->startOfDay()
             ->addDays((int) ($step->day ?? 0))
             ->setTimeFromTimeString($step->time ?: '09:00:00')
             ->utc();
 
         if ($scheduled->isPast()) {
-            return CarbonImmutable::now()->addMinute();
+            $scheduled = CarbonImmutable::now()->addMinute();
         }
 
-        return $scheduled;
+        return $this->sendingWindow->nextAllowedAt(
+            $scheduled,
+            $timezone,
+            CampaignSettings::fromArray($campaign->settings),
+        );
+    }
+
+    /**
+     * Resolve the timezone a recipient's schedule is planned in.
+     *
+     * A recipient keeps the timezone it was added with; the campaign's timezone
+     * is the fallback for recipients that have none.
+     */
+    public function timezoneFor(Campaign $campaign, ?Recipient $recipient = null): string
+    {
+        return $recipient?->timezone ?: $campaign->timezone;
     }
 
     /**
@@ -69,12 +87,11 @@ class CampaignStepScheduler
     /**
      * Create the first-step email for every eligible recipient of the campaign.
      *
-     * Recipients already holding an email for the first step are skipped.
-     *
-     * Every seed job scans all eligible recipients, so two enrollments arriving
-     * together would otherwise each insert a first-step row for the same
-     * recipient. The campaign row is locked for the duration so concurrent seed
-     * jobs serialise and the later one sees the earlier one's rows.
+     * Recipients already holding an email for the first step are skipped. Every
+     * seed job scans all eligible recipients, so two enrollments arriving
+     * together can both try to insert the same recipient and step; the unique
+     * index on (recipient_id, campaign_step_id) settles which insert wins and
+     * `createOrFirst` returns the row that landed.
      *
      * @return int The number of emails created.
      */
@@ -86,48 +103,32 @@ class CampaignStepScheduler
             return 0;
         }
 
-        return DB::transaction(function () use ($campaign, $firstStep): int {
-            $this->lockCampaign($campaign);
+        $recipients = $campaign->recipients()
+            ->whereIn('status', [RecipientStatus::Active, RecipientStatus::Pending])
+            ->get();
 
-            $recipients = $campaign->recipients()
-                ->whereIn('status', [RecipientStatus::Active, RecipientStatus::Pending])
-                ->get();
+        $created = 0;
 
-            $created = 0;
+        foreach ($recipients as $recipient) {
+            $email = CampaignEmail::query()->createOrFirst(
+                [
+                    'recipient_id' => $recipient->id,
+                    'campaign_step_id' => $firstStep->id,
+                ],
+                [
+                    'campaign_id' => $campaign->id,
+                    'mailer_connection_id' => $campaign->mailer_connection_id,
+                    'status' => EmailStatus::Scheduled,
+                    'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $recipient),
+                ],
+            );
 
-            foreach ($recipients as $recipient) {
-                $email = CampaignEmail::query()->firstOrCreate(
-                    [
-                        'recipient_id' => $recipient->id,
-                        'campaign_step_id' => $firstStep->id,
-                    ],
-                    [
-                        'campaign_id' => $campaign->id,
-                        'mailer_connection_id' => $campaign->mailer_connection_id,
-                        'status' => EmailStatus::Scheduled,
-                        'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $this->baselineFor($campaign, $recipient)),
-                    ],
-                );
-
-                if ($email->wasRecentlyCreated) {
-                    $created++;
-                }
+            if ($email->wasRecentlyCreated) {
+                $created++;
             }
+        }
 
-            return $created;
-        });
-    }
-
-    /**
-     * Take the campaign row lock that serialises seeding.
-     *
-     * Deliberately used only for first-step seeding. `scheduleNextStep` runs on
-     * every send, so locking the campaign row there would serialise every send
-     * for a campaign against the others.
-     */
-    private function lockCampaign(Campaign $campaign): void
-    {
-        Campaign::query()->whereKey($campaign->id)->lockForUpdate()->first();
+        return $created;
     }
 
     /**
@@ -155,7 +156,7 @@ class CampaignStepScheduler
             return;
         }
 
-        CampaignEmail::query()->firstOrCreate(
+        CampaignEmail::query()->createOrFirst(
             [
                 'recipient_id' => $email->recipient_id,
                 'campaign_step_id' => $nextStep->id,
@@ -164,7 +165,7 @@ class CampaignStepScheduler
                 'campaign_id' => $campaign->id,
                 'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
                 'status' => EmailStatus::Scheduled,
-                'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $this->baselineFor($campaign, $email->recipient)),
+                'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $email->recipient),
             ],
         );
     }
