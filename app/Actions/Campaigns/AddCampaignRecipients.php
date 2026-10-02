@@ -2,7 +2,9 @@
 
 namespace App\Actions\Campaigns;
 
+use App\Enums\CampaignStatus;
 use App\Enums\RecipientStatus;
+use App\Jobs\Campaigns\SeedCampaignEmails;
 use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\Recipient;
@@ -17,13 +19,16 @@ class AddCampaignRecipients
      * source is recorded as "manual" whenever explicit contacts were provided,
      * otherwise "list".
      *
+     * Adding recipients to a running campaign queues their first step; a draft
+     * or stopped campaign keeps them queued for its next start.
+     *
      * @param  array<int, int|string>  $contactIds
      * @param  array<int, int|string>  $listIds
      * @return int the number of recipients created
      */
     public function handle(Campaign $campaign, array $contactIds, array $listIds): int
     {
-        return DB::transaction(function () use ($campaign, $contactIds, $listIds): int {
+        $created = DB::transaction(function () use ($campaign, $contactIds, $listIds): int {
             $contactIds = array_values(array_unique(array_map(intval(...), $contactIds)));
             $listIds = array_values(array_unique(array_map(intval(...), $listIds)));
 
@@ -64,6 +69,12 @@ class AddCampaignRecipients
 
             return count($newIds);
         });
+
+        if ($created > 0 && $campaign->status === CampaignStatus::Active) {
+            SeedCampaignEmails::dispatch($campaign)->afterCommit();
+        }
+
+        return $created;
     }
 
     /**

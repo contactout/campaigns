@@ -1,8 +1,11 @@
 <?php
 
+use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
+use App\Models\CampaignEmail;
+use App\Models\CampaignStep;
 use App\Models\Contact;
 use App\Models\ContactIdentity;
 use App\Models\ContactList;
@@ -258,4 +261,73 @@ test('a recipient from another campaign is not found', function () {
         ->assertNotFound();
 
     $this->assertDatabaseHas('recipients', ['id' => $foreignRecipient->id]);
+});
+
+test('adding recipients to an active campaign schedules their first step', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->active()->create();
+    $step = CampaignStep::factory()->forCampaign($campaign)->create([
+        'sequence' => 1,
+        'day' => 0,
+        'time' => '09:00:00',
+    ]);
+
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => [$contact->id],
+        ])
+        ->assertRedirect();
+
+    $recipient = $campaign->recipients()->sole();
+    $email = CampaignEmail::query()->where('recipient_id', $recipient->id)->sole();
+
+    expect($email->campaign_step_id)->toBe($step->id)
+        ->and($email->status)->toBe(EmailStatus::Scheduled);
+});
+
+test('adding recipients to a draft campaign schedules nothing', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => [$contact->id],
+        ])
+        ->assertRedirect();
+
+    expect($campaign->recipients()->count())->toBe(1)
+        ->and(CampaignEmail::query()->count())->toBe(0);
+});
+
+test('re-adding an existing recipient does not schedule a second first step', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->active()->create();
+    CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $endpoint = route('campaigns.recipients.store', [
+        'current_team' => $team->slug,
+        'campaign' => $campaign,
+    ]);
+
+    $this->actingAs($user)->post($endpoint, ['contacts' => [$contact->id]])->assertRedirect();
+    $this->actingAs($user)->post($endpoint, ['contacts' => [$contact->id]])->assertRedirect();
+
+    expect($campaign->recipients()->count())->toBe(1)
+        ->and(CampaignEmail::query()->count())->toBe(1);
 });
