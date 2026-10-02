@@ -13,12 +13,13 @@ use App\Models\Unsubscribe;
 use App\Services\Mail\CampaignBodyBuilder;
 use App\Services\Mail\CampaignStepScheduler;
 use App\Services\Mail\PlaceholderRenderer;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\URL;
 use Throwable;
 
-class SendEmail implements ShouldQueue
+class SendEmail implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
@@ -31,9 +32,25 @@ class SendEmail implements ShouldQueue
     public int $tries = 1;
 
     /**
+     * Seconds the per-email uniqueness lock is held if the job never runs.
+     *
+     * `campaigns:dispatch-due` re-selects every due email each minute, so a
+     * backed-up queue would otherwise queue the same email many times over.
+     */
+    public int $uniqueFor = 3600;
+
+    /**
      * Create a new job instance.
      */
     public function __construct(public CampaignEmail $email) {}
+
+    /**
+     * Allow only one queued job per campaign email.
+     */
+    public function uniqueId(): string
+    {
+        return (string) $this->email->id;
+    }
 
     /**
      * Send the campaign email and advance the recipient to the next step.
@@ -44,7 +61,15 @@ class SendEmail implements ShouldQueue
         CampaignBodyBuilder $bodyBuilder,
         CampaignMailer $mailer,
     ): void {
-        $email = $this->email->load([
+        // Re-read the row: the job may have sat in the queue while the email was
+        // sent, failed, or pushed back by a rate limit.
+        $email = CampaignEmail::query()->find($this->email->id);
+
+        if (! $email instanceof CampaignEmail) {
+            return;
+        }
+
+        $email->load([
             'campaign.mailerConnection',
             'step',
             'recipient.contact.emailIdentity',
@@ -52,6 +77,10 @@ class SendEmail implements ShouldQueue
             'recipient.contact.properties',
             'mailerConnection',
         ]);
+
+        if (! $this->isDue($email)) {
+            return;
+        }
 
         if ($email->campaign->status !== CampaignStatus::Active) {
             return;
@@ -115,6 +144,22 @@ class SendEmail implements ShouldQueue
         $connection->increment('sent_count');
 
         $scheduler->scheduleNextStep($email);
+    }
+
+    /**
+     * Determine whether the email is still waiting to be sent.
+     *
+     * A queued job becomes stale when the email was already sent, failed, or
+     * pushed back by a rate limit, so it must not send on the strength of its
+     * payload alone.
+     */
+    private function isDue(CampaignEmail $email): bool
+    {
+        if ($email->status !== EmailStatus::Scheduled) {
+            return false;
+        }
+
+        return $email->scheduled_at === null || ! $email->scheduled_at->isFuture();
     }
 
     /**

@@ -19,6 +19,7 @@ use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -261,4 +262,61 @@ test('persists message_id and thread_id when the mailer returns them', function 
     expect($email->status)->toBe(EmailStatus::Sent)
         ->and($email->message_id)->toBe('<msg-123@example.com>')
         ->and($email->thread_id)->toBe('thread-abc');
+});
+
+test('does not send an email that has already been sent', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    mmosRunSendEmail($fixture['email']);
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent)->toHaveCount(1)
+        ->and($fixture['connection']->fresh()->sent_count)->toBe(1);
+});
+
+test('does not send an email that was pushed back to a future time', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-01 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    $fixture['email']->update(['scheduled_at' => CarbonImmutable::now()->addMinutes(15)]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Scheduled)
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('does not send an email that is still pending', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    $fixture['email']->update(['status' => EmailStatus::Pending]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Pending)
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('queues only one job per campaign email', function () {
+    config(['queue.default' => 'database']);
+
+    $fixture = mmosSendEmailFixture();
+    $other = CampaignEmail::factory()->create();
+
+    SendEmail::dispatch($fixture['email']);
+    SendEmail::dispatch($fixture['email']);
+    SendEmail::dispatch($fixture['email']->fresh());
+    SendEmail::dispatch($other);
+
+    expect(DB::table('jobs')->count())->toBe(2);
 });
