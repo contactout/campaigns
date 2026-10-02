@@ -331,9 +331,8 @@ test('two enrollments each schedule exactly one first step per recipient', funct
     $this->actingAs($user)->post($endpoint, ['contacts' => [$second->id]])->assertRedirect();
 
     // Each seed job scans every eligible recipient, so both must leave the
-    // other's recipients alone. On MySQL the campaign row lock in
-    // scheduleFirstSteps is what serialises them; SQLite ignores it, so this
-    // asserts the outcome, not the locking.
+    // other's recipients alone. The unique index on (recipient_id,
+    // campaign_step_id) is what settles an overlapping insert.
     expect($campaign->recipients()->count())->toBe(2)
         ->and(CampaignEmail::query()->count())->toBe(2)
         ->and(CampaignEmail::query()->distinct()->count('recipient_id'))->toBe(2);
