@@ -6,6 +6,7 @@ use App\Models\EmailOpen;
 use App\Models\LinkClick;
 use App\Models\TrackedLink;
 use App\Support\TrackingUserAgent;
+use Carbon\CarbonImmutable;
 
 test('an open records an email open and returns a transparent gif', function () {
     $email = CampaignEmail::factory()->sent()->create();
@@ -86,6 +87,24 @@ test('a long user agent is cut to the length the column accepts', function () {
 
     expect(EmailOpen::query()->sole()->user_agent)
         ->toHaveLength(TrackingUserAgent::MAX_LENGTH);
+});
+
+test('the first open timestamp is kept when the email is opened again', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 09:00:00'));
+
+    $email = CampaignEmail::factory()->sent()->create();
+    $link = TrackedLink::factory()->create(['campaign_email_id' => $email->id]);
+
+    $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
+    $firstOpenedAt = $email->fresh()->opened_at;
+
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 11:00:00'));
+
+    $this->get(route('tracking.open', ['campaignEmail' => $email->tracker]));
+    $this->get(route('tracking.click', ['hash' => $link->hash]));
+
+    expect(EmailOpen::query()->count())->toBe(2)
+        ->and($email->fresh()->opened_at->equalTo($firstOpenedAt))->toBeTrue();
 });
 
 test('a click records a link click and redirects to the original url', function () {

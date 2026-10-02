@@ -48,8 +48,8 @@ class TrackingController extends Controller
             'user_agent' => TrackingUserAgent::normalize($request->userAgent()),
         ]);
 
-        // A click proves the message was read even when the client blocked the
-        // open pixel, so infer a single open from it.
+        // A click can indicate an open even when the client blocked the pixel
+        // (link scanners follow URLs too), so infer a single open from it.
         $recordEmailOpen->handle($hash->campaignEmail, $request->userAgent(), multiple: false);
 
         return redirect()->away($hash->url);

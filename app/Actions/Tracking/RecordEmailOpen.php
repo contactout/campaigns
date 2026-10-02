@@ -27,7 +27,6 @@ class RecordEmailOpen
         'YahooMailProxy',
         'SuperhumanProxy',
         'HeadlessChrome',
-        'BingPreview',
     ];
 
     /**
@@ -82,6 +81,9 @@ class RecordEmailOpen
 
     /**
      * Determine whether the user agent belongs to a known proxy.
+     *
+     * The list mirrors the signatures mail merge suppresses, plus a bare
+     * "Mozilla/5.0", which several proxies send instead of a full user agent.
      */
     private function isProxyFetch(?string $userAgent): bool
     {
