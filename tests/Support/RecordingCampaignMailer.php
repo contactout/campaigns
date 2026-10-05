@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Models\MailerConnection;
 
@@ -12,7 +13,7 @@ use App\Models\MailerConnection;
 class RecordingCampaignMailer implements CampaignMailer
 {
     /**
-     * @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>}>
+     * @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>, thread: EmailThread|null}>
      */
     public array $sent = [];
 
@@ -25,13 +26,13 @@ class RecordingCampaignMailer implements CampaignMailer
         $this->result = $result ?? new SendResult;
     }
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
-        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers');
+        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers', 'thread');
 
         return $this->result;
     }

@@ -2,6 +2,7 @@
 
 use App\Actions\MailerConnections\VerifyMailerConnection;
 use App\Contracts\Mail\GmailApi;
+use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
@@ -26,7 +27,7 @@ class FakeGmailApi implements GmailApi
      */
     public array $sendResult = ['id' => 'msg-1', 'threadId' => 'thread-1'];
 
-    public function sendRaw(string $accessToken, string $raw): array
+    public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array
     {
         return $this->sendResult;
     }
@@ -133,11 +134,11 @@ test('gmail campaign mailer puts unsubscribe headers in the raw message', functi
     {
         public string $raw = '';
 
-        public function sendRaw(string $accessToken, string $raw): array
+        public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array
         {
             $this->raw = $raw;
 
-            return parent::sendRaw($accessToken, $raw);
+            return parent::sendRaw($accessToken, $raw, $threadId);
         }
     };
 
@@ -234,4 +235,150 @@ test('oauth token manager refreshes tokens that expire within 60 seconds', funct
     expect($token)->toBe('new-access')
         ->and($connection->fresh()->smtp_setting['access_token'])->toBe('new-access')
         ->and($connection->fresh()->smtp_setting['refresh_token'])->toBe('refresh-token');
+});
+
+test('gmail campaign mailer files a follow-up into the previous conversation', function () {
+    $connection = MailerConnection::factory()->forTeam(Team::factory()->create())->create([
+        'mailer_type' => MailerType::Gmail,
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'access_token' => 'g-access',
+            'refresh_token' => 'g-refresh',
+            'expires_at' => CarbonImmutable::now()->addHour()->toIso8601String(),
+            'email' => 'ada@gmail.com',
+            'from_email' => 'ada@gmail.com',
+            'from_name' => 'Ada',
+        ],
+    ]);
+
+    $api = new class extends FakeGmailApi
+    {
+        public string $raw = '';
+
+        public ?string $threadId = null;
+
+        public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array
+        {
+            $this->raw = $raw;
+            $this->threadId = $threadId;
+
+            return parent::sendRaw($accessToken, $raw, $threadId);
+        }
+    };
+
+    $result = (new GmailCampaignMailer(app(OAuthTokenManager::class), $api))->send(
+        $connection,
+        'to@example.com',
+        'Hello',
+        '<p>Hi</p>',
+        [],
+        new EmailThread(messageId: '<first@example.com>', threadId: 'gmail-thread-1'),
+    );
+
+    expect($api->threadId)->toBe('gmail-thread-1');
+
+    $mime = (string) base64_decode(strtr($api->raw, '-_', '+/'));
+
+    expect($mime)->toContain('In-Reply-To: <first@example.com>')
+        ->and($mime)->toContain('References: <first@example.com>')
+        ->and($result->messageId)->toStartWith('<')
+        ->and($result->messageId)->toEndWith('>')
+        ->and($result->threadId)->toBe('thread-1');
+});
+
+test('gmail campaign mailer starts a new conversation without a thread context', function () {
+    $connection = MailerConnection::factory()->forTeam(Team::factory()->create())->create([
+        'mailer_type' => MailerType::Gmail,
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'access_token' => 'g-access',
+            'refresh_token' => 'g-refresh',
+            'expires_at' => CarbonImmutable::now()->addHour()->toIso8601String(),
+            'email' => 'ada@gmail.com',
+            'from_email' => 'ada@gmail.com',
+        ],
+    ]);
+
+    $api = new class extends FakeGmailApi
+    {
+        public ?string $threadId = 'set';
+
+        public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array
+        {
+            $this->threadId = $threadId;
+
+            return parent::sendRaw($accessToken, $raw, $threadId);
+        }
+    };
+
+    (new GmailCampaignMailer(app(OAuthTokenManager::class), $api))->send(
+        $connection,
+        'to@example.com',
+        'Hello',
+        '<p>Hi</p>',
+    );
+
+    expect($api->threadId)->toBeNull();
+});
+
+test('outlook campaign mailer creates a reply in the previous conversation', function () {
+    $connection = MailerConnection::factory()->forTeam(Team::factory()->create())->create([
+        'mailer_type' => MailerType::Outlook,
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'access_token' => 'ms-access',
+            'refresh_token' => 'ms-refresh',
+            'expires_at' => CarbonImmutable::now()->addHour()->toIso8601String(),
+            'email' => 'ada@outlook.com',
+            'from_email' => 'ada@outlook.com',
+            'from_name' => 'Ada',
+        ],
+    ]);
+
+    Http::fake(function (Request $request) {
+        $url = $request->url();
+
+        if ($request->method() === 'POST' && $url === 'https://graph.microsoft.com/v1.0/me/messages/reply-msg-1/createReply') {
+            return Http::response(['id' => 'graph-reply-1', 'conversationId' => 'conv-1'], 201);
+        }
+
+        if ($request->method() === 'PATCH' && $url === 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1') {
+            return Http::response(['id' => 'graph-reply-1'], 200);
+        }
+
+        if ($request->method() === 'POST' && $url === 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1/send') {
+            return Http::response(null, 202);
+        }
+
+        if ($request->method() === 'GET' && str_starts_with($url, 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1')) {
+            return Http::response([
+                'internetMessageId' => '<outlook-reply@example.com>',
+                'conversationId' => 'conv-1',
+            ], 200);
+        }
+
+        return Http::response(['error' => 'unexpected'], 500);
+    });
+
+    $result = app(OutlookCampaignMailer::class)->send(
+        $connection,
+        'recipient@example.com',
+        'Hello',
+        '<p>Hi</p>',
+        ['List-Unsubscribe' => '<https://example.com/u>'],
+        new EmailThread(messageId: '<outlook-1@example.com>', threadId: 'conv-1', replyToId: 'reply-msg-1'),
+    );
+
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && $request->url() === 'https://graph.microsoft.com/v1.0/me/messages/reply-msg-1/createReply');
+
+    Http::assertSent(fn (Request $request) => $request->method() === 'PATCH'
+        && $request->url() === 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1'
+        && $request['body']['content'] === '<p>Hi</p>');
+
+    expect($result->messageId)->toBe('<outlook-reply@example.com>')
+        ->and($result->threadId)->toBe('conv-1')
+        ->and($result->replyToId)->toBe('graph-reply-1');
+
+    Http::assertSentCount(4);
 });
