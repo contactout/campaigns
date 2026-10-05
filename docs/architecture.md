@@ -62,6 +62,16 @@ the allowed weekdays and hour range, evaluated in the recipient's timezone when 
 OAuth tokens are refreshed by `OAuthTokenManager`. Send jobs make a single attempt; failures are
 recorded on the email and the connection instead of being retried blindly.
 
+## Threading follow-up steps
+
+A step marked `is_threaded` is sent as a reply to the recipient's previous sent email. `SendEmail`
+looks that email up and passes an `EmailThread` to the mailer, then stores the ids the next step
+needs on the sent email: `message_id` (RFC 5322, also used to match replies), `thread_id` (the
+Gmail thread or Outlook conversation), and `reply_to_id` (the Graph message id Outlook replies on).
+SMTP sets `In-Reply-To`/`References`; Gmail files the message into the thread id; Outlook creates
+the reply on the previous message. An unthreaded step, or a threaded step whose previous email has
+no ids, starts a new conversation.
+
 ## Replies and bounces
 
 The scheduler runs `campaigns:check-mailboxes` every ten minutes, which queues a
