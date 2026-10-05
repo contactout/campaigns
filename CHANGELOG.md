@@ -19,6 +19,8 @@ All notable changes to this project are documented here. The format is based on
 - Dashboard setup checklist and shared empty states.
 - Docker Compose production stack (Caddy with automatic TLS, MySQL 8.4) and a local self-signed override.
 - One-click unsubscribe: `List-Unsubscribe` headers on every campaign email.
+- Follow-up steps marked as threaded reply in the same conversation: SMTP sets `In-Reply-To`/
+  `References`, Gmail uses the thread id, and Outlook creates a reply on the previous message.
 - Per-campaign sending window (allowed weekdays and an hour range) and switches for open and link
   tracking, both edited from the campaign dialog.
 - `REGISTRATION_ENABLED` setting to control open sign-up; the first user can always register.

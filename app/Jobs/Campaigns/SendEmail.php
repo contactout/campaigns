@@ -3,6 +3,7 @@
 namespace App\Jobs\Campaigns;
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\EmailThread;
 use App\Enums\CampaignStatus;
 use App\Enums\EmailStatus;
 use App\Enums\MailerConnectionStatus;
@@ -175,7 +176,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $html = $bodyBuilder->build($email, $html);
 
         try {
-            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email));
+            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
         } catch (Throwable $exception) {
             $this->markFailed($email);
             $this->recordConnectionFailure($connection, $exception);
@@ -194,6 +195,10 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             $email->thread_id = $result->threadId;
         }
 
+        if ($result->replyToId !== null && $result->replyToId !== '') {
+            $email->reply_to_id = $result->replyToId;
+        }
+
         $email->save();
 
         $email->recipient->last_delivered_at = now();
@@ -202,6 +207,45 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $connection->increment('sent_count');
 
         $scheduler->scheduleNextStep($email);
+    }
+
+    /**
+     * Resolve the conversation this email should reply in.
+     *
+     * Only threaded steps reply; the previous sent email for the recipient
+     * supplies the message id and provider thread id. A threaded step with no
+     * previous message, or one that carries no ids, starts a new conversation.
+     */
+    private function resolveThread(CampaignEmail $email): ?EmailThread
+    {
+        if (! $email->step->is_threaded) {
+            return null;
+        }
+
+        $previous = CampaignEmail::query()
+            ->where('recipient_id', $email->recipient_id)
+            ->whereKeyNot($email->id)
+            ->whereIn('status', [
+                EmailStatus::Sent,
+                EmailStatus::Delivered,
+                EmailStatus::Opened,
+                EmailStatus::Replied,
+            ])
+            ->orderByDesc('dispatched_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $previous instanceof CampaignEmail) {
+            return null;
+        }
+
+        $thread = new EmailThread(
+            messageId: filled($previous->message_id) ? $previous->message_id : null,
+            threadId: filled($previous->thread_id) ? $previous->thread_id : null,
+            replyToId: filled($previous->reply_to_id) ? $previous->reply_to_id : null,
+        );
+
+        return $thread->isThreaded() ? $thread : null;
     }
 
     /**

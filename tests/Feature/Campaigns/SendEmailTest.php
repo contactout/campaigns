@@ -1,6 +1,7 @@
 <?php
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\CampaignStatus;
 use App\Enums\ContactIdentityType;
@@ -28,7 +29,7 @@ use RuntimeException;
 class FakeCampaignMailer implements CampaignMailer
 {
     /**
-     * @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>}>
+     * @var array<int, array{connection: MailerConnection, to: string, subject: string, html: string, headers: array<string, string>, thread: EmailThread|null}>
      */
     public array $sent = [];
 
@@ -41,13 +42,13 @@ class FakeCampaignMailer implements CampaignMailer
         $this->result = $result ?? new SendResult;
     }
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
-        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers');
+        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers', 'thread');
 
         return $this->result;
     }
@@ -281,7 +282,7 @@ test('does not send again while the same email is already being sent', function 
 
         public function __construct(private readonly CampaignEmail $email) {}
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
         {
             $this->sends++;
 
@@ -400,4 +401,110 @@ test('queues only one job per campaign email', function () {
     SendEmail::dispatch($other);
 
     expect(DB::table('jobs')->count())->toBe(2);
+});
+
+/**
+ * Create a follow-up step for the fixture and return the scheduled email.
+ *
+ * @param  array<string, mixed>  $fixture
+ */
+function mmosSendFollowUp(array $fixture, bool $threaded = true): CampaignEmail
+{
+    $step = CampaignStep::factory()->forCampaign($fixture['campaign'])->create([
+        'sequence' => 2,
+        'day' => 1,
+        'time' => '09:00:00',
+        'is_threaded' => $threaded,
+    ]);
+
+    return CampaignEmail::factory()->create([
+        'campaign_id' => $fixture['campaign']->id,
+        'campaign_step_id' => $step->id,
+        'recipient_id' => $fixture['recipient']->id,
+        'mailer_connection_id' => $fixture['connection']->id,
+        'status' => EmailStatus::Scheduled,
+        'scheduled_at' => CarbonImmutable::now(),
+    ]);
+}
+
+test('a threaded follow-up replies to the previous sent step', function () {
+    $fake = new FakeCampaignMailer(new SendResult(
+        messageId: '<first@example.com>',
+        threadId: 'thread-1',
+        replyToId: 'provider-reply-1',
+    ));
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $followUp = mmosSendFollowUp($fixture, threaded: true);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $fake->result = new SendResult(
+        messageId: '<second@example.com>',
+        threadId: 'thread-1',
+    );
+
+    mmosRunSendEmail($followUp);
+
+    expect($fake->sent)->toHaveCount(2);
+
+    $thread = $fake->sent[1]['thread'];
+
+    expect($thread)->toBeInstanceOf(EmailThread::class)
+        ->and($thread->messageId)->toBe('<first@example.com>')
+        ->and($thread->threadId)->toBe('thread-1')
+        ->and($thread->replyToId)->toBe('provider-reply-1');
+
+    $sentFollowUp = $followUp->fresh();
+
+    expect($sentFollowUp->status)->toBe(EmailStatus::Sent)
+        ->and($sentFollowUp->message_id)->toBe('<second@example.com>')
+        ->and($sentFollowUp->thread_id)->toBe('thread-1');
+});
+
+test('an unthreaded follow-up starts a new conversation', function () {
+    $fake = new FakeCampaignMailer(new SendResult(
+        messageId: '<first@example.com>',
+        threadId: 'thread-1',
+    ));
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $followUp = mmosSendFollowUp($fixture, threaded: false);
+
+    mmosRunSendEmail($fixture['email']);
+    mmosRunSendEmail($followUp);
+
+    expect($fake->sent)->toHaveCount(2)
+        ->and($fake->sent[1]['thread'])->toBeNull();
+});
+
+test('a threaded follow-up with no previous message id starts a new conversation', function () {
+    $fake = new FakeCampaignMailer(new SendResult);
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $followUp = mmosSendFollowUp($fixture, threaded: true);
+
+    mmosRunSendEmail($fixture['email']);
+    mmosRunSendEmail($followUp);
+
+    expect($fake->sent)->toHaveCount(2)
+        ->and($fake->sent[1]['thread'])->toBeNull();
+});
+
+test('persists the provider reply target returned by the mailer', function () {
+    $fake = new FakeCampaignMailer(new SendResult(
+        messageId: '<outlook@example.com>',
+        threadId: 'conv-1',
+        replyToId: 'graph-message-1',
+    ));
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->reply_to_id)->toBe('graph-message-1');
 });

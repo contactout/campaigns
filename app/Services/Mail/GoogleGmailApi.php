@@ -19,11 +19,15 @@ class GoogleGmailApi implements GmailApi
      *
      * @return array{id: string, threadId: string}
      */
-    public function sendRaw(string $accessToken, string $raw): array
+    public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array
     {
         try {
             $message = new Message;
             $message->setRaw($raw);
+
+            if ($threadId !== null && $threadId !== '') {
+                $message->setThreadId($threadId);
+            }
 
             $sent = $this->gmail($accessToken)->users_messages->send('me', $message);
         } catch (Throwable $exception) {
