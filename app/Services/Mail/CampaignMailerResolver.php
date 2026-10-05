@@ -3,6 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\MailerType;
 use App\Models\MailerConnection;
@@ -26,12 +27,12 @@ class CampaignMailerResolver implements CampaignMailer
      *
      * @param  array<string, string>  $headers
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
     {
         return match ($connection->mailer_type) {
-            MailerType::Smtp => $this->smtp->send($connection, $to, $subject, $html, $headers),
-            MailerType::Gmail => $this->gmail->send($connection, $to, $subject, $html, $headers),
-            MailerType::Outlook => $this->outlook->send($connection, $to, $subject, $html, $headers),
+            MailerType::Smtp => $this->smtp->send($connection, $to, $subject, $html, $headers, $thread),
+            MailerType::Gmail => $this->gmail->send($connection, $to, $subject, $html, $headers, $thread),
+            MailerType::Outlook => $this->outlook->send($connection, $to, $subject, $html, $headers, $thread),
         };
     }
 }

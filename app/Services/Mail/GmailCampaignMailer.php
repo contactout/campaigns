@@ -2,8 +2,10 @@
 
 namespace App\Services\Mail;
 
+use App\Concerns\AppliesThreadHeaders;
 use App\Contracts\Mail\CampaignMailer;
 use App\Contracts\Mail\GmailApi;
+use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\MailerType;
 use App\Models\MailerConnection;
@@ -14,9 +16,15 @@ use Symfony\Component\Mime\Email;
 
 /**
  * Sends campaign emails through the Gmail API.
+ *
+ * Follow-ups are filed into the previous Gmail thread so they arrive as part
+ * of the same conversation, and also carry the `In-Reply-To`/`References`
+ * headers for recipients whose client threads on headers.
  */
 class GmailCampaignMailer implements CampaignMailer
 {
+    use AppliesThreadHeaders;
+
     /**
      * Create a new Gmail campaign mailer instance.
      */
@@ -30,7 +38,7 @@ class GmailCampaignMailer implements CampaignMailer
      *
      * @param  array<string, string>  $headers
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = []): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
             throw new RuntimeException('GmailCampaignMailer requires a Gmail connection.');
@@ -52,10 +60,19 @@ class GmailCampaignMailer implements CampaignMailer
             $email->getHeaders()->addTextHeader($name, $value);
         }
 
+        $this->applyThreadHeaders($email, $thread);
+
+        // Symfony generates a Message-ID into a prepared copy of the headers,
+        // which would leave the id unavailable after sending. Set it here so it
+        // can be stored on the email for reply matching.
+        if (! $email->getHeaders()->has('Message-ID')) {
+            $email->getHeaders()->addIdHeader('Message-ID', $email->generateMessageId());
+        }
+
         $raw = rtrim(strtr(base64_encode($email->toString()), '+/', '-_'), '=');
 
         try {
-            $sent = $this->gmail->sendRaw($accessToken, $raw);
+            $sent = $this->gmail->sendRaw($accessToken, $raw, $thread?->threadId);
         } catch (RuntimeException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {

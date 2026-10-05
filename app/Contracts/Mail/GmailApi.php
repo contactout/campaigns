@@ -13,11 +13,14 @@ interface GmailApi
     /**
      * Send a raw RFC822 message and return the provider ids.
      *
+     * When a thread id is given the message is filed into that Gmail
+     * conversation instead of starting a new one.
+     *
      * @return array{id: string, threadId: string}
      *
      * @throws \RuntimeException When the API rejects the send.
      */
-    public function sendRaw(string $accessToken, string $raw): array;
+    public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array;
 
     /**
      * Fetch the authenticated user's Gmail profile email address.
