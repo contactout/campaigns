@@ -192,6 +192,31 @@ test('the campaign stats count opens clicks and unsubscribes', function () {
             ->where('stats.unsubscribed', 1));
 });
 
+test('the sent stat counts every dispatched email whatever happened after', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    foreach ([EmailStatus::Sent, EmailStatus::Opened, EmailStatus::Replied, EmailStatus::Bounced] as $status) {
+        CampaignEmail::factory()->create([
+            'campaign_id' => $campaign->id,
+            'status' => $status,
+            'dispatched_at' => now(),
+        ]);
+    }
+
+    CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'status' => EmailStatus::Scheduled,
+        'dispatched_at' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->where('stats.emails_sent', 4));
+});
+
 test('members can update a campaign', function () {
     [$team, $user] = campaignTeamWithMember();
 
