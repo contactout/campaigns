@@ -18,6 +18,7 @@ use App\Models\ContactIdentity;
 use App\Models\ContactProperty;
 use App\Models\MailerConnection;
 use App\Models\Recipient;
+use App\Models\Signature;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -161,6 +162,26 @@ test('sends the rendered email and schedules the next step', function () {
 
     expect($next)->not->toBeNull()
         ->and($next->status)->toBe(EmailStatus::Scheduled);
+});
+
+test('fills the signature tag from the sending connection', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    $signature = Signature::factory()->forTeam($fixture['team'])->create(['body' => '<p>Alex from Sales</p>']);
+    $fixture['connection']->update(['signature_id' => $signature->id]);
+    $fixture['firstStep']->update([
+        'subject' => 'Hi {{signature}}',
+        'body' => '<p>Hello</p><p>{{signature}}</p>',
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent)->toHaveCount(1)
+        ->and($fake->sent[0]['subject'])->toBe('Hi ')
+        ->and($fake->sent[0]['html'])->toStartWith('<p>Hello</p><p>Alex from Sales</p>');
 });
 
 test('marks the recipient completed after the last step', function () {

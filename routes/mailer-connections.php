@@ -9,6 +9,7 @@ Route::post('mailer-connections', [MailerConnectionController::class, 'store'])-
 Route::patch('mailer-connections/{mailerConnection}', [MailerConnectionController::class, 'update'])->name('mailer-connections.update');
 Route::delete('mailer-connections/{mailerConnection}', [MailerConnectionController::class, 'destroy'])->name('mailer-connections.destroy');
 Route::post('mailer-connections/{mailerConnection}/verify', [MailerConnectionController::class, 'verify'])->name('mailer-connections.verify');
+Route::put('mailer-connections/{mailerConnection}/signature', [MailerConnectionController::class, 'updateSignature'])->name('mailer-connections.signature.update');
 Route::get('mailer-connections/oauth/{provider}', OAuthRedirectController::class)
     ->whereIn('provider', ['gmail', 'outlook'])
     ->name('mailer-connections.oauth.redirect');

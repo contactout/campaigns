@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $team_id
  * @property int|null $user_id
+ * @property int|null $signature_id
  * @property string $name
  * @property MailerType $mailer_type
  * @property array<string, mixed>|null $smtp_setting
@@ -35,9 +36,10 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Team $team
  * @property-read User|null $user
+ * @property-read Signature|null $signature
  * @property-read Collection<int, Campaign> $campaigns
  */
-#[Fillable(['team_id', 'user_id', 'name', 'mailer_type', 'smtp_setting', 'status', 'exception_type', 'exception_data', 'threw_at', 'rate_limit_expired_at', 'sending_limit', 'sent_count', 'sending_limit_refreshed_at', 'last_checked_at'])]
+#[Fillable(['team_id', 'user_id', 'signature_id', 'name', 'mailer_type', 'smtp_setting', 'status', 'exception_type', 'exception_data', 'threw_at', 'rate_limit_expired_at', 'sending_limit', 'sent_count', 'sending_limit_refreshed_at', 'last_checked_at'])]
 class MailerConnection extends Model
 {
     /** @use HasFactory<MailerConnectionFactory> */
@@ -61,6 +63,30 @@ class MailerConnection extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the signature appended to emails sent through the connection.
+     *
+     * @return BelongsTo<Signature, $this>
+     */
+    public function signature(): BelongsTo
+    {
+        return $this->belongsTo(Signature::class);
+    }
+
+    /**
+     * Resolve the signature for emails sent through the connection.
+     *
+     * Falls back to the team's default signature when none is assigned.
+     */
+    public function resolveSignature(): ?Signature
+    {
+        return $this->signature
+            ?? Signature::query()
+                ->forTeam($this->team_id)
+                ->where('is_default', true)
+                ->first();
     }
 
     /**

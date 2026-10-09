@@ -4,6 +4,7 @@ use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
 use App\Enums\TeamRole;
 use App\Models\MailerConnection;
+use App\Models\Signature;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Mail\SmtpConnectionVerifier;
@@ -215,6 +216,94 @@ test('a mailer connection from another team is not found', function () {
             'mailerConnection' => $otherConnection,
         ]))
         ->assertNotFound();
+});
+
+test('the connections page lists the team signatures and each connection signature', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $signature = Signature::factory()->forTeam($team)->create(['name' => 'Alex']);
+    Signature::factory()->forTeam($team)->default()->create(['name' => 'Team']);
+    Signature::factory()->create(['name' => 'Hidden']);
+
+    MailerConnection::factory()->forTeam($team)->create(['signature_id' => $signature->id]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('connections.0.signature_id', $signature->id)
+            ->has('signatures', 2)
+            ->where('signatures.0.name', 'Team')
+            ->where('signatures.0.is_default', true)
+            ->where('signatures.1.name', 'Alex')
+            ->missing('signatures.0.body'));
+});
+
+test('members can assign and clear a connection signature of any mailer type', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $signature = Signature::factory()->forTeam($team)->create();
+    $connection = MailerConnection::factory()->forTeam($team)->create(['mailer_type' => MailerType::Gmail]);
+
+    $route = route('mailer-connections.signature.update', [
+        'current_team' => $team->slug,
+        'mailerConnection' => $connection,
+    ]);
+
+    $this->actingAs($user)
+        ->put($route, ['signature_id' => $signature->id])
+        ->assertRedirect()
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Signature updated.']);
+
+    expect($connection->fresh()->signature_id)->toBe($signature->id);
+
+    $this->actingAs($user)
+        ->put($route, ['signature_id' => null])
+        ->assertRedirect();
+
+    expect($connection->fresh()->signature_id)->toBeNull();
+});
+
+test('a connection cannot use another team signature', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create();
+    $foreign = Signature::factory()->create();
+
+    $this->actingAs($user)
+        ->put(route('mailer-connections.signature.update', [
+            'current_team' => $team->slug,
+            'mailerConnection' => $connection,
+        ]), ['signature_id' => $foreign->id])
+        ->assertSessionHasErrors('signature_id');
+
+    expect($connection->fresh()->signature_id)->toBeNull();
+});
+
+test('another team connection signature cannot be changed', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $signature = Signature::factory()->forTeam($team)->create();
+    $otherConnection = MailerConnection::factory()->create();
+
+    $this->actingAs($user)
+        ->put(route('mailer-connections.signature.update', [
+            'current_team' => $team->slug,
+            'mailerConnection' => $otherConnection,
+        ]), ['signature_id' => $signature->id])
+        ->assertNotFound();
+
+    expect($otherConnection->fresh()->signature_id)->toBeNull();
+});
+
+test('deleting a signature clears it from the connections using it', function () {
+    $team = Team::factory()->create();
+    $signature = Signature::factory()->forTeam($team)->create();
+    $connection = MailerConnection::factory()->forTeam($team)->create(['signature_id' => $signature->id]);
+
+    $signature->delete();
+
+    expect($connection->fresh()->signature_id)->toBeNull();
 });
 
 test('verifying a reachable mailer connection marks it active and clears the error', function () {

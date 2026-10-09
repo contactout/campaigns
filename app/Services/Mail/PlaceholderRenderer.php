@@ -3,6 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Models\ContactField;
+use App\Models\MailerConnection;
 use App\Models\Recipient;
 
 /**
@@ -12,19 +13,39 @@ use App\Models\Recipient;
  * custom contact field defined for the recipient's team. Matching is
  * case-insensitive and tolerant of optional surrounding whitespace; unknown
  * placeholders resolve to an empty string.
+ *
+ * When rendered for a connection, `signature` resolves to that connection's
+ * signature HTML (or the team default). A paragraph holding only the tag is
+ * replaced whole, so the signature's own paragraphs are not nested in it.
  */
 class PlaceholderRenderer
 {
+    private const string PLACEHOLDER = '\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}';
+
+    private const string SIGNATURE_PARAGRAPH = '<p\b[^>]*>\s*\{\{\s*signature\s*\}\}\s*<\/p>';
+
     /**
      * Render the given HTML for a single recipient.
      */
-    public function render(string $html, Recipient $recipient): string
+    public function render(string $html, Recipient $recipient, ?MailerConnection $connection = null): string
     {
         $values = $this->valuesFor($recipient);
 
+        if ($connection === null) {
+            return (string) preg_replace_callback(
+                '/'.self::PLACEHOLDER.'/',
+                static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
+                $html,
+            );
+        }
+
+        $values['signature'] = (string) $connection->resolveSignature()?->body;
+
         return (string) preg_replace_callback(
-            '/\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/',
-            static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
+            '/'.self::SIGNATURE_PARAGRAPH.'|'.self::PLACEHOLDER.'/i',
+            static fn (array $matches): string => isset($matches[1])
+                ? $values[strtolower($matches[1])] ?? ''
+                : $values['signature'],
             $html,
         );
     }
