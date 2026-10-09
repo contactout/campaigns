@@ -21,10 +21,14 @@ class VerifyMailerConnection
         private readonly OAuthTokenManager $tokens,
         private readonly GmailApi $gmail,
         private readonly MicrosoftOAuthClient $microsoft,
+        private readonly ResumeDeferredEmails $resumeDeferredEmails,
     ) {}
 
     /**
      * Probe the connection and record the outcome on the model.
+     *
+     * A successful probe also resumes the emails held back while the
+     * connection was inactive.
      *
      * @param  SmtpConnectionVerifier|null  $verifier  Optional override, primarily for callers outside the container.
      */
@@ -53,6 +57,8 @@ class VerifyMailerConnection
             'exception_data' => null,
             'threw_at' => null,
         ])->save();
+
+        $this->resumeDeferredEmails->handle($connection);
 
         return $connection;
     }
