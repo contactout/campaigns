@@ -3,6 +3,7 @@
 namespace App\Services\OAuth;
 
 use App\Enums\MailerType;
+use App\Exceptions\Mail\MailerAuthenticationException;
 use App\Models\MailerConnection;
 use Carbon\CarbonImmutable;
 use RuntimeException;
@@ -31,7 +32,7 @@ class OAuthTokenManager
         $accessToken = (string) ($settings['access_token'] ?? '');
 
         if ($accessToken === '') {
-            throw new RuntimeException('Mailer connection is missing an access token.');
+            throw new MailerAuthenticationException('Mailer connection is missing an access token.');
         }
 
         if (! $this->needsRefresh($settings['expires_at'] ?? null)) {
@@ -41,13 +42,13 @@ class OAuthTokenManager
         $refreshToken = (string) ($settings['refresh_token'] ?? '');
 
         if ($refreshToken === '') {
-            throw new RuntimeException('Mailer connection is missing a refresh token.');
+            throw new MailerAuthenticationException('Mailer connection is missing a refresh token.');
         }
 
         $refreshed = match ($connection->mailer_type) {
             MailerType::Gmail => $this->google->refresh($refreshToken),
             MailerType::Outlook => $this->microsoft->refresh($refreshToken),
-            default => throw new RuntimeException('Mailer connection does not support OAuth token refresh.'),
+            default => throw new MailerAuthenticationException('Mailer connection does not support OAuth token refresh.'),
         };
 
         $connection->smtp_setting = array_merge($settings, [
