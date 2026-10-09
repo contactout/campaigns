@@ -6,10 +6,13 @@ use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
+use App\Enums\SendFailureType;
+use App\Exceptions\Mail\MailerHttpException;
 use App\Models\MailerConnection;
 use App\Models\Team;
 use App\Services\Mail\GmailCampaignMailer;
 use App\Services\Mail\OutlookCampaignMailer;
+use App\Services\Mail\SendFailureClassifier;
 use App\Services\OAuth\OAuthTokenManager;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
@@ -381,4 +384,67 @@ test('outlook campaign mailer creates a reply in the previous conversation', fun
         ->and($result->replyToId)->toBe('graph-reply-1');
 
     Http::assertSentCount(4);
+});
+
+test('outlook campaign mailer reports the graph status and error code when a send is rejected', function () {
+    $connection = MailerConnection::factory()->forTeam(Team::factory()->create())->create([
+        'mailer_type' => MailerType::Outlook,
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'access_token' => 'ms-access',
+            'refresh_token' => 'ms-refresh',
+            'expires_at' => CarbonImmutable::now()->addHour()->toIso8601String(),
+            'email' => 'ada@outlook.com',
+            'from_email' => 'ada@outlook.com',
+        ],
+    ]);
+
+    Http::fake([
+        'graph.microsoft.com/v1.0/me/messages' => Http::response([
+            'error' => ['code' => 'ErrorInvalidRecipients', 'message' => 'At least one recipient is not valid.'],
+        ], 400),
+    ]);
+
+    try {
+        app(OutlookCampaignMailer::class)->send($connection, 'not-an-address', 'Hello', '<p>Hi</p>');
+        $this->fail('Expected the send to be rejected.');
+    } catch (MailerHttpException $exception) {
+        expect($exception->getMessage())->toBe('Outlook message create failed.')
+            ->and($exception->status)->toBe(400)
+            ->and($exception->errorCode)->toBe('ErrorInvalidRecipients')
+            ->and(app(SendFailureClassifier::class)->classify($exception))->toBe(SendFailureType::Recipient);
+    }
+});
+
+test('a revoked refresh token is classified as a connection failure', function () {
+    config([
+        'services.google.client_id' => 'google-client-id',
+        'services.google.client_secret' => 'google-client-secret',
+    ]);
+
+    $connection = MailerConnection::factory()->create([
+        'mailer_type' => MailerType::Gmail,
+        'smtp_setting' => [
+            'access_token' => 'old-access',
+            'refresh_token' => 'revoked-token',
+            'expires_at' => CarbonImmutable::now()->subMinute()->toIso8601String(),
+            'email' => 'user@gmail.com',
+        ],
+    ]);
+
+    Http::fake([
+        'oauth2.googleapis.com/token' => Http::response([
+            'error' => 'invalid_grant',
+            'error_description' => 'Token has been expired or revoked.',
+        ], 400),
+    ]);
+
+    try {
+        app(OAuthTokenManager::class)->accessToken($connection);
+        $this->fail('Expected the refresh to fail.');
+    } catch (MailerHttpException $exception) {
+        expect($exception->getMessage())->toBe('Google token refresh failed.')
+            ->and($exception->errorCode)->toBe('invalid_grant')
+            ->and(app(SendFailureClassifier::class)->classify($exception))->toBe(SendFailureType::Connection);
+    }
 });

@@ -38,6 +38,15 @@ A connection left on **Team default** uses the team's default signature. With no
 
 The tag is filled only in the email body; in a subject it renders empty.
 
+## When sending fails
+
+A send failure only deactivates a connection when its credentials or configuration are rejected (a failed SMTP login, an expired or revoked OAuth grant, HTTP 401/403). Emails due on an inactive connection stay scheduled and are re-checked hourly; once you **Verify** the connection (or reconnect Gmail/Outlook) they resume within the campaign's sending window.
+
+Other failures leave the connection active:
+
+- A rejected address (for example SMTP 550 "user unknown") bounces that recipient only.
+- Temporary problems (timeouts, SMTP 4xx, provider throttling or outages) are retried with increasing delays, up to five attempts, before the email is marked failed.
+
 ## If the buttons are missing
 
 Gmail/Outlook buttons stay hidden when credentials are not set, or when containers were not recreated after editing `.env`.

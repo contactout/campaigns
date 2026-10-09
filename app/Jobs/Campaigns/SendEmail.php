@@ -2,24 +2,32 @@
 
 namespace App\Jobs\Campaigns;
 
+use App\Actions\MailerConnections\ResumeDeferredEmails;
 use App\Contracts\Mail\CampaignMailer;
+use App\Data\CampaignSettings;
 use App\Data\EmailThread;
 use App\Enums\CampaignStatus;
+use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
 use App\Enums\MailerConnectionStatus;
 use App\Enums\RecipientStatus;
+use App\Enums\SendFailureType;
 use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
 use App\Models\Unsubscribe;
 use App\Services\Mail\CampaignBodyBuilder;
 use App\Services\Mail\CampaignStepScheduler;
 use App\Services\Mail\PlaceholderRenderer;
+use App\Services\Mail\SendFailureClassifier;
+use App\Services\Mail\SendingWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Throwable;
 
 class SendEmail implements ShouldBeUnique, ShouldQueue
@@ -64,6 +72,33 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     private const int RATE_LIMIT_RETRY_MINUTES = 15;
 
     /**
+     * Minutes to wait before retrying an email whose connection is not active.
+     */
+    private const int CONNECTION_DEFER_MINUTES = 60;
+
+    /**
+     * Minutes before the first retry of a transient failure; doubles per attempt.
+     */
+    private const int TRANSIENT_RETRY_BASE_MINUTES = 15;
+
+    /**
+     * Longest wait between retries of a transient failure.
+     */
+    private const int TRANSIENT_RETRY_MAX_MINUTES = 360;
+
+    /**
+     * Send attempts after which a transient failure fails the email for good.
+     */
+    private const int MAX_SEND_ATTEMPTS = 5;
+
+    /**
+     * The `data` key holding the id of the inactive connection an email waits on.
+     *
+     * Read by {@see ResumeDeferredEmails} when the connection is reactivated.
+     */
+    public const string DEFERRED_FOR_CONNECTION = 'deferred_for_connection';
+
+    /**
      * Cache key prefix for the per-email send lock.
      */
     private const string LOCK_PREFIX = 'campaign-email-send:';
@@ -89,6 +124,8 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         PlaceholderRenderer $renderer,
         CampaignBodyBuilder $bodyBuilder,
         CampaignMailer $mailer,
+        SendingWindow $window,
+        SendFailureClassifier $classifier,
     ): void {
         // Two workers must not send the same email. Uniqueness only guards
         // dispatch, and its lock can expire while a job waits in a backlog, so
@@ -102,7 +139,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $this->send($scheduler, $renderer, $bodyBuilder, $mailer);
+            $this->send($scheduler, $renderer, $bodyBuilder, $mailer, $window, $classifier);
         } finally {
             $lock->release();
         }
@@ -116,6 +153,8 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         PlaceholderRenderer $renderer,
         CampaignBodyBuilder $bodyBuilder,
         CampaignMailer $mailer,
+        SendingWindow $window,
+        SendFailureClassifier $classifier,
     ): void {
         // Re-read the row: the job may have sat in the queue while the email was
         // sent, failed, or pushed back by a rate limit.
@@ -152,8 +191,16 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
 
         $connection = $email->mailerConnection ?? $email->campaign->mailerConnection;
 
-        if (! $connection instanceof MailerConnection || $connection->status !== MailerConnectionStatus::Active) {
+        // With no connection at all there is nothing to reactivate and resume
+        // the email from, so it fails rather than being deferred forever.
+        if (! $connection instanceof MailerConnection) {
             $this->markFailed($email);
+
+            return;
+        }
+
+        if ($connection->status !== MailerConnectionStatus::Active) {
+            $this->deferForConnection($email, $connection, $scheduler, $window);
 
             return;
         }
@@ -161,11 +208,13 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $this->refreshSendingWindow($connection);
 
         if ($this->isRateLimited($connection)) {
-            $email->scheduled_at = now()->addMinutes(self::RATE_LIMIT_RETRY_MINUTES);
+            $retryAt = CarbonImmutable::now()->addMinutes(self::RATE_LIMIT_RETRY_MINUTES);
+
+            $email->scheduled_at = $this->nextAllowedAt($email, $retryAt, $scheduler, $window);
             $email->save();
 
             // When the connection may try again, not when it was throttled.
-            $connection->rate_limit_expired_at = $email->scheduled_at;
+            $connection->rate_limit_expired_at = $retryAt;
             $connection->save();
 
             return;
@@ -178,14 +227,18 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         try {
             $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
         } catch (Throwable $exception) {
-            $this->markFailed($email);
-            $this->recordConnectionFailure($connection, $exception);
+            match ($classifier->classify($exception)) {
+                SendFailureType::Recipient => $this->markBounced($email, $exception),
+                SendFailureType::Transient => $this->retryLater($email, $exception, $scheduler, $window),
+                SendFailureType::Connection => $this->failConnection($email, $connection, $exception, $scheduler, $window),
+            };
 
             return;
         }
 
         $email->status = EmailStatus::Sent;
         $email->dispatched_at = now();
+        $email->data = $this->withoutDeferral($email->data);
 
         if ($result->messageId !== null && $result->messageId !== '') {
             $email->message_id = $result->messageId;
@@ -342,6 +395,152 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     {
         $email->status = EmailStatus::Failed;
         $email->save();
+    }
+
+    /**
+     * Bounce the email, recipient and contact after the provider rejected the address.
+     *
+     * The recipient gets no further steps; the connection is left alone because
+     * one bad address says nothing about it.
+     */
+    private function markBounced(CampaignEmail $email, Throwable $exception): void
+    {
+        DB::transaction(function () use ($email, $exception): void {
+            $email->status = EmailStatus::Bounced;
+            $email->data = $this->withError($email->data, SendFailureType::Recipient, $exception);
+            $email->save();
+
+            $recipient = $email->recipient;
+            $recipient->status = RecipientStatus::Bounced;
+            $recipient->save();
+
+            $contact = $recipient->contact;
+            $contact->status = ContactStatus::Bounced;
+            $contact->save();
+        });
+    }
+
+    /**
+     * Retry the email later with exponential backoff, or fail it once the attempts run out.
+     */
+    private function retryLater(
+        CampaignEmail $email,
+        Throwable $exception,
+        CampaignStepScheduler $scheduler,
+        SendingWindow $window,
+    ): void {
+        $data = $this->withError($email->data, SendFailureType::Transient, $exception);
+        $attempts = (int) ($data['send_attempts'] ?? 0) + 1;
+        $data['send_attempts'] = $attempts;
+
+        $email->data = $data;
+
+        if ($attempts >= self::MAX_SEND_ATTEMPTS) {
+            $this->markFailed($email);
+
+            return;
+        }
+
+        $minutes = min(
+            self::TRANSIENT_RETRY_BASE_MINUTES * 2 ** ($attempts - 1),
+            self::TRANSIENT_RETRY_MAX_MINUTES,
+        );
+
+        $email->scheduled_at = $this->nextAllowedAt($email, CarbonImmutable::now()->addMinutes($minutes), $scheduler, $window);
+        $email->save();
+    }
+
+    /**
+     * Deactivate the connection and hold the email until it is reconnected.
+     */
+    private function failConnection(
+        CampaignEmail $email,
+        MailerConnection $connection,
+        Throwable $exception,
+        CampaignStepScheduler $scheduler,
+        SendingWindow $window,
+    ): void {
+        $this->recordConnectionFailure($connection, $exception);
+
+        $email->data = $this->withError($email->data, SendFailureType::Connection, $exception);
+        $this->deferForConnection($email, $connection, $scheduler, $window);
+    }
+
+    /**
+     * Keep the email scheduled but out of the way until its connection is active again.
+     *
+     * The email is flagged so {@see ResumeDeferredEmails} can bring it forward
+     * when the connection is reactivated; until then it is re-checked hourly
+     * instead of being picked up by every dispatch run.
+     */
+    private function deferForConnection(
+        CampaignEmail $email,
+        MailerConnection $connection,
+        CampaignStepScheduler $scheduler,
+        SendingWindow $window,
+    ): void {
+        $data = $email->data ?? [];
+        $data[self::DEFERRED_FOR_CONNECTION] = $connection->id;
+
+        $email->data = $data;
+        $email->scheduled_at = $this->nextAllowedAt(
+            $email,
+            CarbonImmutable::now()->addMinutes(self::CONNECTION_DEFER_MINUTES),
+            $scheduler,
+            $window,
+        );
+        $email->save();
+    }
+
+    /**
+     * Move a retry time onto the campaign's sending window for the recipient.
+     */
+    private function nextAllowedAt(
+        CampaignEmail $email,
+        CarbonImmutable $at,
+        CampaignStepScheduler $scheduler,
+        SendingWindow $window,
+    ): CarbonImmutable {
+        return $window->nextAllowedAt(
+            $at,
+            $scheduler->timezoneFor($email->campaign, $email->recipient),
+            CampaignSettings::fromArray($email->campaign->settings),
+        );
+    }
+
+    /**
+     * Record the latest send failure in the email's data.
+     *
+     * @param  array<string, mixed>|null  $data
+     * @return array<string, mixed>
+     */
+    private function withError(?array $data, SendFailureType $type, Throwable $exception): array
+    {
+        $data ??= [];
+        $data['last_error'] = [
+            'type' => $type->value,
+            'message' => Str::limit($exception->getMessage(), 255),
+            'at' => now()->toIso8601String(),
+        ];
+
+        return $data;
+    }
+
+    /**
+     * Drop the connection deferral flag from the email's data.
+     *
+     * @param  array<string, mixed>|null  $data
+     * @return array<string, mixed>|null
+     */
+    private function withoutDeferral(?array $data): ?array
+    {
+        if ($data === null) {
+            return null;
+        }
+
+        unset($data[self::DEFERRED_FOR_CONNECTION]);
+
+        return $data;
     }
 
     /**
