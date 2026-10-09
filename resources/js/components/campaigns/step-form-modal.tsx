@@ -23,6 +23,8 @@ import type {
     MergePlaceholder,
 } from '@/types';
 
+const SENDER_SIGNATURE = 'sender';
+
 type Props = {
     campaignId: number;
     step?: CampaignStep | null;
@@ -66,6 +68,12 @@ export default function StepFormModal({
     };
 
     const insertSignature = (signatureId: string) => {
+        if (signatureId === SENDER_SIGNATURE) {
+            setBody((current) => `${current}<p>{{signature}}</p>`);
+
+            return;
+        }
+
         const signature = signatures.find(
             (item) => String(item.id) === signatureId,
         );
@@ -183,30 +191,41 @@ export default function StepFormModal({
                                             </select>
                                         ) : null}
 
-                                        {signatures.length > 0 ? (
-                                            <select
-                                                value=""
-                                                aria-label="Insert signature"
-                                                onChange={(event) =>
-                                                    insertSignature(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                className="h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs"
-                                            >
-                                                <option value="">
-                                                    Insert signature
-                                                </option>
-                                                {signatures.map((signature) => (
-                                                    <option
-                                                        key={signature.id}
-                                                        value={signature.id}
-                                                    >
-                                                        {signature.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        ) : null}
+                                        <select
+                                            value=""
+                                            aria-label="Insert signature"
+                                            onChange={(event) =>
+                                                insertSignature(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            className="h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs"
+                                        >
+                                            <option value="">
+                                                Insert signature
+                                            </option>
+                                            <option value={SENDER_SIGNATURE}>
+                                                Sender's signature
+                                            </option>
+                                            {signatures.length > 0 ? (
+                                                <optgroup label="Paste a fixed signature">
+                                                    {signatures.map(
+                                                        (signature) => (
+                                                            <option
+                                                                key={
+                                                                    signature.id
+                                                                }
+                                                                value={
+                                                                    signature.id
+                                                                }
+                                                            >
+                                                                {signature.name}
+                                                            </option>
+                                                        ),
+                                                    )}
+                                                </optgroup>
+                                            ) : null}
+                                        </select>
                                     </div>
                                 </div>
                                 <RichTextEditor

@@ -4,16 +4,21 @@ import { useState } from 'react';
 import EmptyState from '@/components/empty-state';
 import ConnectionFormModal from '@/components/mailer-connections/connection-form-modal';
 import DeleteConnectionModal from '@/components/mailer-connections/delete-connection-modal';
+import SignatureSelect from '@/components/mailer-connections/signature-select';
 import MailerConnectionStatusBadge from '@/components/mailer-connections/status-badge';
 import Heading from '@/components/heading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { index, verify } from '@/routes/mailer-connections';
 import { redirect as oauthRedirect } from '@/routes/mailer-connections/oauth';
-import type { MailerConnection } from '@/types';
+import type {
+    MailerConnection,
+    MailerConnectionSignatureOption,
+} from '@/types';
 
 type Props = {
     connections: MailerConnection[];
+    signatures: MailerConnectionSignatureOption[];
     oauth: {
         gmail: boolean;
         outlook: boolean;
@@ -41,6 +46,7 @@ function serverLabel(connection: MailerConnection): string {
 
 export default function MailerConnectionsIndex({
     connections,
+    signatures,
     oauth,
     can,
 }: Props) {
@@ -180,6 +186,9 @@ export default function MailerConnectionsIndex({
                                         From
                                     </th>
                                     <th className="px-4 py-2 font-medium">
+                                        Signature
+                                    </th>
+                                    <th className="px-4 py-2 font-medium">
                                         Status
                                     </th>
                                     <th className="px-4 py-2 font-medium">
@@ -208,6 +217,13 @@ export default function MailerConnectionsIndex({
                                         </td>
                                         <td className="px-4 py-2 text-muted-foreground">
                                             {connection.from_email}
+                                        </td>
+                                        <td className="px-4 py-2">
+                                            <SignatureSelect
+                                                connection={connection}
+                                                signatures={signatures}
+                                                disabled={!can.create}
+                                            />
                                         </td>
                                         <td className="px-4 py-2">
                                             <MailerConnectionStatusBadge

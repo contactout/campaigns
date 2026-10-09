@@ -30,6 +30,14 @@ Register these redirect URIs in Google Cloud / Azure app settings:
 
 Then recreate containers: `docker compose up -d`.
 
+## Signatures
+
+Each connection can use one of the team's signatures, chosen in the **Signature** column on the Connections page. Put `{{signature}}` in a step body (the step editor's **Insert signature → Sender's signature** adds it) and every email gets the signature of the connection that sends it.
+
+A connection left on **Team default** uses the team's default signature. With no default either, the tag renders empty. Deleting a signature moves the connections using it back to the team default.
+
+The tag is filled only in the email body; in a subject it renders empty.
+
 ## If the buttons are missing
 
 Gmail/Outlook buttons stay hidden when credentials are not set, or when containers were not recreated after editing `.env`.

@@ -5,12 +5,15 @@ namespace App\Http\Controllers\MailerConnections;
 use App\Actions\MailerConnections\CreateMailerConnection;
 use App\Actions\MailerConnections\DeleteMailerConnection;
 use App\Actions\MailerConnections\UpdateMailerConnection;
+use App\Actions\MailerConnections\UpdateMailerConnectionSignature;
 use App\Actions\MailerConnections\VerifyMailerConnection;
 use App\Enums\MailerConnectionStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\MailerConnections\StoreMailerConnectionRequest;
 use App\Http\Requests\MailerConnections\UpdateMailerConnectionRequest;
+use App\Http\Requests\MailerConnections\UpdateMailerConnectionSignatureRequest;
 use App\Models\MailerConnection;
+use App\Models\Signature;
 use App\Models\Team;
 use App\Services\OAuth\GoogleOAuthClient;
 use App\Services\OAuth\MicrosoftOAuthClient;
@@ -41,8 +44,22 @@ class MailerConnectionController extends Controller
             ->values()
             ->all();
 
+        $signatures = Signature::query()
+            ->forTeam($currentTeam->id)
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Signature $signature): array => [
+                'id' => $signature->id,
+                'name' => $signature->name,
+                'is_default' => $signature->is_default,
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('mailer-connections/index', [
             'connections' => $connections,
+            'signatures' => $signatures,
             'oauth' => [
                 'gmail' => $google->configured(),
                 'outlook' => $microsoft->configured(),
@@ -96,6 +113,24 @@ class MailerConnectionController extends Controller
     }
 
     /**
+     * Assign the signature used by the given mailer connection.
+     */
+    public function updateSignature(UpdateMailerConnectionSignatureRequest $request, Team $currentTeam, MailerConnection $mailerConnection, UpdateMailerConnectionSignature $updateSignature): RedirectResponse
+    {
+        $mailerConnection = MailerConnection::forTeam($currentTeam->id)->findOrFail($mailerConnection->id);
+
+        Gate::authorize('update', $mailerConnection);
+
+        $signatureId = $request->validated('signature_id');
+
+        $updateSignature->handle($mailerConnection, $signatureId === null ? null : (int) $signatureId);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Signature updated.')]);
+
+        return back();
+    }
+
+    /**
      * Delete the given mailer connection.
      */
     public function destroy(Team $currentTeam, MailerConnection $mailerConnection, DeleteMailerConnection $deleteMailerConnection): RedirectResponse
@@ -139,7 +174,7 @@ class MailerConnectionController extends Controller
      *
      * SMTP/IMAP credentials (including both passwords) are never serialized.
      *
-     * @return array{id: int, name: string, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, last_error: string|null, created_at: string|null}
+     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, last_error: string|null, created_at: string|null}
      */
     protected function connectionSummary(MailerConnection $connection): array
     {
@@ -148,6 +183,7 @@ class MailerConnectionController extends Controller
         return [
             'id' => $connection->id,
             'name' => $connection->name,
+            'signature_id' => $connection->signature_id,
             'mailer_type' => $connection->mailer_type->value,
             'mailer_type_label' => $connection->mailer_type->label(),
             'host' => $settings['host'] ?? null,

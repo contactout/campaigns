@@ -21,6 +21,8 @@ All notable changes to this project are documented here. The format is based on
 - One-click unsubscribe: `List-Unsubscribe` headers on every campaign email.
 - Follow-up steps marked as threaded reply in the same conversation: SMTP sets `In-Reply-To`/
   `References`, Gmail uses the thread id, and Outlook creates a reply on the previous message.
+- Signature per connection: a `{{signature}}` tag in a step body is filled at send time with the
+  sending connection's signature, falling back to the team default.
 - Per-campaign sending window (allowed weekdays and an hour range) and switches for open and link
   tracking, both edited from the campaign dialog.
 - `REGISTRATION_ENABLED` setting to control open sign-up; the first user can always register.
