@@ -7,6 +7,7 @@ export type MailerConnectionStatus =
 export type MailerConnection = {
     id: number;
     name: string;
+    signature_id: number | null;
     mailer_type: string;
     mailer_type_label: string;
     host: string | null;
@@ -25,6 +26,12 @@ export type MailerConnection = {
     sending_limit: number | null;
     last_error: string | null;
     created_at: string | null;
+};
+
+export type MailerConnectionSignatureOption = {
+    id: number;
+    name: string;
+    is_default: boolean;
 };
 
 export type MailerConnectionOption = {
