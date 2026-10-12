@@ -237,3 +237,120 @@ test('a non bounce message is ignored', function () {
     expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
         ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Active);
 });
+
+test('a bounce report carrying threading headers is recorded as a bounce not a reply', function () {
+    $fixture = mmosInboundFixture();
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'bounce-message-id@example.com',
+        inReplyTo: 'sent-message-id@example.com',
+        references: ['sent-message-id@example.com'],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: '<ada@example.com>: 550 5.1.1 User unknown',
+    ));
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Bounced)
+        ->and($email->replied_at)->toBeNull()
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Bounced)
+        ->and($fixture['contact']->fresh()->status)->toBe(ContactStatus::Bounced);
+});
+
+test('a bounce matches the original email by the message id quoted in the report', function () {
+    $fixture = mmosInboundFixture();
+
+    // The same contact was emailed later by another campaign on this connection.
+    $otherCampaign = Campaign::factory()->forTeam($fixture['team'])->active()->create([
+        'mailer_connection_id' => $fixture['connection']->id,
+    ]);
+
+    $later = CampaignEmail::factory()->create([
+        'campaign_id' => $otherCampaign->id,
+        'recipient_id' => Recipient::factory()->create([
+            'campaign_id' => $otherCampaign->id,
+            'contact_id' => $fixture['contact']->id,
+        ])->id,
+        'mailer_connection_id' => $fixture['connection']->id,
+        'message_id' => 'later-message-id@example.com',
+        'status' => EmailStatus::Sent,
+        'dispatched_at' => CarbonImmutable::now()->addMinute(),
+    ]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'bounce-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: "<ada@example.com>: 550 5.1.1 User unknown\n\nMessage-ID: <sent-message-id@example.com>\nSubject: Hello",
+    ));
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Bounced)
+        ->and($later->fresh()->status)->toBe(EmailStatus::Sent);
+});
+
+test('a bounce matched by address picks the latest email the connection sent', function () {
+    $fixture = mmosInboundFixture();
+
+    $nextStep = CampaignStep::factory()->forCampaign($fixture['campaign'])->create([
+        'sequence' => 2,
+        'day' => 1,
+        'time' => '09:00:00',
+    ]);
+
+    $followUp = CampaignEmail::factory()->create([
+        'campaign_id' => $fixture['campaign']->id,
+        'campaign_step_id' => $nextStep->id,
+        'recipient_id' => $fixture['recipient']->id,
+        'mailer_connection_id' => $fixture['connection']->id,
+        'message_id' => 'follow-up-id@example.com',
+        'status' => EmailStatus::Sent,
+        'dispatched_at' => CarbonImmutable::now()->addDay(),
+    ]);
+
+    $thirdStep = CampaignStep::factory()->forCampaign($fixture['campaign'])->create([
+        'sequence' => 3,
+        'day' => 2,
+        'time' => '09:00:00',
+    ]);
+
+    $unsent = CampaignEmail::factory()->create([
+        'campaign_id' => $fixture['campaign']->id,
+        'campaign_step_id' => $thirdStep->id,
+        'recipient_id' => $fixture['recipient']->id,
+        'mailer_connection_id' => $fixture['connection']->id,
+        'status' => EmailStatus::Scheduled,
+        'dispatched_at' => null,
+    ]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'bounce-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'postmaster@example.com',
+        subject: 'Delivery Status Notification (Failure)',
+        text: 'Your message to ada@example.com could not be delivered.',
+    ));
+
+    expect($followUp->fresh()->status)->toBe(EmailStatus::Bounced)
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
+        ->and($unsent->fresh()->status)->toBe(EmailStatus::Scheduled);
+});
+
+test('a reply to a step whose subject reads like a bounce is still recorded as a reply', function () {
+    $fixture = mmosInboundFixture();
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'reply-message-id@example.com',
+        inReplyTo: 'sent-message-id@example.com',
+        references: ['sent-message-id@example.com'],
+        fromEmail: 'ada@example.com',
+        subject: 'Re: Undelivered parcels cost you money',
+        text: 'Tell me more, ada@example.com is the best address.',
+    ));
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Replied)
+        ->and($fixture['contact']->fresh()->status)->toBe(ContactStatus::Replied);
+});

@@ -5,6 +5,7 @@ use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\CampaignStatus;
 use App\Enums\ContactIdentityType;
+use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
 use App\Enums\MailerConnectionStatus;
 use App\Enums\RecipientStatus;
@@ -23,6 +24,8 @@ use App\Models\Team;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\Exception\UnexpectedResponseException;
 
 /**
  * Test double capturing everything sent through the campaign mailer.
@@ -120,6 +123,20 @@ function mmosSendEmailFixture(bool $activeConnection = true): array
 }
 
 /**
+ * Campaign settings allowing sends 09:00-17:00 on weekdays.
+ *
+ * @return array<string, mixed>
+ */
+function mmosWeekdayWindow(): array
+{
+    return [
+        'sending_days' => [1, 2, 3, 4, 5],
+        'sending_hour_from' => 9,
+        'sending_hour_to' => 17,
+    ];
+}
+
+/**
  * Run the SendEmail job through the container so dependencies (and the bound
  * mailer fake) are resolved.
  */
@@ -213,11 +230,45 @@ test('does nothing when the campaign is not active', function () {
         ->and($fake->sent)->toBeEmpty();
 });
 
-test('fails the email when there is no active mailer connection', function () {
+test('defers the email while its mailer connection is not active', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
     $fake = new FakeCampaignMailer;
     $this->app->instance(CampaignMailer::class, $fake);
 
     $fixture = mmosSendEmailFixture(activeConnection: false);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-02 13:00:00')
+        ->and($email->data[SendEmail::DEFERRED_FOR_CONNECTION])->toBe($fixture['connection']->id)
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('defers the email for an inactive connection inside the sending window', function () {
+    // Friday 16:30; an hour later is past the 09:00-17:00 weekday window.
+    $this->travelTo(CarbonImmutable::parse('2026-02-06 16:30:00'));
+
+    $this->app->instance(CampaignMailer::class, new FakeCampaignMailer);
+
+    $fixture = mmosSendEmailFixture(activeConnection: false);
+    $fixture['campaign']->update(['settings' => mmosWeekdayWindow()]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00');
+});
+
+test('fails the email when no mailer connection is set at all', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['campaign']->update(['mailer_connection_id' => null]);
+    $fixture['email']->update(['mailer_connection_id' => null]);
 
     mmosRunSendEmail($fixture['email']);
 
@@ -255,25 +306,153 @@ test('reschedules the email when the connection is rate limited', function () {
         ->and($fake->sent)->toBeEmpty();
 });
 
-test('marks the email failed and deactivates the connection when sending throws', function () {
+test('reschedules the email within the sending window when the connection is rate limited', function () {
+    // Friday 16:50; the 15 minute retry lands after the 17:00 close.
+    $this->travelTo(CarbonImmutable::parse('2026-02-06 16:50:00'));
+
+    $this->app->instance(CampaignMailer::class, new FakeCampaignMailer);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['campaign']->update(['settings' => mmosWeekdayWindow()]);
+    $fixture['connection']->update([
+        'sending_limit' => 1,
+        'sent_count' => 1,
+        'sending_limit_refreshed_at' => CarbonImmutable::now()->addDay(),
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00')
+        ->and($fixture['connection']->fresh()->rate_limit_expired_at->toDateTimeString())->toBe('2026-02-06 17:05:00');
+});
+
+test('bounces only the email when the provider rejects the recipient', function () {
     $fake = new FakeCampaignMailer;
-    $fake->exception = new RuntimeException('SMTP is down');
+    $fake->exception = new UnexpectedResponseException('Expected response code "250/251/252" but got code "550", with message "550 5.1.1 User unknown".', 550);
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    CampaignStep::factory()->forCampaign($fixture['campaign'])->create([
+        'sequence' => 2,
+        'day' => 1,
+        'time' => '09:00:00',
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Bounced)
+        ->and($email->data['last_error']['type'])->toBe('recipient')
+        ->and($email->data['last_error']['message'])->toContain('User unknown')
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Bounced)
+        ->and($fixture['contact']->fresh()->status)->toBe(ContactStatus::Bounced)
+        ->and($fixture['connection']->fresh()->status)->toBe(MailerConnectionStatus::Active)
+        ->and(CampaignEmail::query()->count())->toBe(1);
+});
+
+test('retries a transient failure with backoff and keeps the connection active', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $fake->exception = new UnexpectedResponseException('Expected response code "250" but got code "451".', 451);
     $this->app->instance(CampaignMailer::class, $fake);
 
     $fixture = mmosSendEmailFixture();
 
     mmosRunSendEmail($fixture['email']);
 
-    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Failed);
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-02 12:15:00')
+        ->and($email->data['send_attempts'])->toBe(1)
+        ->and($email->data['last_error']['type'])->toBe('transient')
+        ->and($fixture['connection']->fresh()->status)->toBe(MailerConnectionStatus::Active);
+
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:15:00'));
+
+    mmosRunSendEmail($email);
+
+    $email = $email->fresh();
+
+    expect($email->scheduled_at->toDateTimeString())->toBe('2026-02-02 12:45:00')
+        ->and($email->data['send_attempts'])->toBe(2);
+});
+
+test('retries a transient failure inside the sending window', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-06 16:50:00'));
+
+    $fake = new FakeCampaignMailer;
+    $fake->exception = new TransportException('Connection to "smtp.example.com:587" timed out.');
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['campaign']->update(['settings' => mmosWeekdayWindow()]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00');
+});
+
+test('fails the email once transient failures use up the attempts', function () {
+    $fake = new FakeCampaignMailer;
+    $fake->exception = new RuntimeException('Something unexpected');
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['email']->update(['data' => ['send_attempts' => 4]]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Failed)
+        ->and($email->data['send_attempts'])->toBe(5)
+        ->and($fixture['connection']->fresh()->status)->toBe(MailerConnectionStatus::Active);
+});
+
+test('deactivates the connection and defers the email when authentication fails', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $fake->exception = new TransportException('Failed to authenticate on SMTP server with username "mailer-user".', 535);
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-02 13:00:00')
+        ->and($email->data[SendEmail::DEFERRED_FOR_CONNECTION])->toBe($fixture['connection']->id)
+        ->and($email->data['last_error']['type'])->toBe('connection');
 
     $connection = $fixture['connection']->fresh();
 
     expect($connection->status)->toBe(MailerConnectionStatus::Deactivated)
-        ->and($connection->exception_type)->toBe(RuntimeException::class)
-        ->and($connection->exception_data)->toBe(['message' => 'SMTP is down'])
+        ->and($connection->exception_type)->toBe(TransportException::class)
+        ->and($connection->exception_data['message'])->toContain('Failed to authenticate')
         ->and($connection->threw_at)->not->toBeNull();
 
     expect($fake->sent)->toBeEmpty();
+});
+
+test('clears the deferral flag once the email is sent', function () {
+    $this->app->instance(CampaignMailer::class, new FakeCampaignMailer);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['email']->update(['data' => [SendEmail::DEFERRED_FOR_CONNECTION => $fixture['connection']->id]]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Sent)
+        ->and($email->data)->not->toHaveKey(SendEmail::DEFERRED_FOR_CONNECTION);
 });
 
 test('persists message_id and thread_id when the mailer returns them', function () {

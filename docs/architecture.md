@@ -44,9 +44,10 @@ scheduler (every minute)
    -> SendEmail job per email (queue worker)
         - skip unless the email is still scheduled and due (one queued job per email)
         - skip if the campaign is not active
-        - fail if the address is missing or suppressed, or the connection is inactive
+        - fail if the address is missing or suppressed, or no connection is set
+        - defer an hour if the connection is not active (flagged for resume)
         - reset the connection's daily send counter when the UTC day rolls over
-        - defer 15 minutes if the connection is rate limited
+        - defer 15 minutes if the connection is rate limited (within the sending window)
         - render placeholders (PlaceholderRenderer)
         - rewrite links, add the unsubscribe link and the open pixel (CampaignBodyBuilder)
         - send via the CampaignMailer for the connection type
@@ -59,8 +60,24 @@ the allowed weekdays and hour range, evaluated in the recipient's timezone when 
 
 `CampaignMailerResolver` picks the implementation of the `CampaignMailer` contract:
 `SmtpCampaignMailer`, `GmailCampaignMailer` (Gmail API), or `OutlookCampaignMailer`.
-OAuth tokens are refreshed by `OAuthTokenManager`. Send jobs make a single attempt; failures are
-recorded on the email and the connection instead of being retried blindly.
+OAuth tokens are refreshed by `OAuthTokenManager`. Send jobs make a single queue attempt; when the
+mailer throws, `SendFailureClassifier` decides what the failure means:
+
+- **Recipient** (SMTP 550/551/553/554 answering `RCPT TO`, unless it is a 5.7.x or relay policy
+  refusal; Gmail 400 "Invalid To header"; Graph 400 `ErrorInvalidRecipients`): the email,
+  recipient, and contact are marked bounced. The connection is left alone and no further steps are
+  scheduled. The same SMTP codes after `MAIL FROM` or `DATA` reject the sender or the content, so
+  they are retried as transient rather than bouncing every contact in turn.
+- **Transient** (SMTP 4xx, timeouts and dropped connections, HTTP 429 and 5xx, Gmail 403 rate-limit
+  reasons, and anything unrecognised): the email stays scheduled and is retried with exponential
+  backoff (15 minutes doubling, capped at 6 hours, within the sending window). The fifth failed
+  attempt marks it failed. The attempt count and last error are kept in `campaign_emails.data`.
+- **Connection** (SMTP 530/534/535 or a failed login, HTTP 401 or non-rate-limit 403, missing OAuth
+  tokens, `invalid_grant` on refresh): the connection is deactivated and the email is deferred.
+
+Deferred emails carry `deferred_for_connection` in `data` and are re-checked hourly. When the
+connection is verified again, or an OAuth connection is reconnected, `ResumeDeferredEmails`
+reschedules them for the next moment the sending window allows.
 
 ## Threading follow-up steps
 
@@ -77,10 +94,11 @@ no ids, starts a new conversation.
 The scheduler runs `campaigns:check-mailboxes` every ten minutes, which queues a
 `CheckConnectionMailbox` job per connection. `MailboxReaderResolver` selects a reader
 (`ImapMailboxReader`, `GmailMailboxReader`, or `OutlookMailboxReader`) that produces
-`InboundMessage` objects. The `ProcessInboundMessage` action matches each message to a sent
-email via the `In-Reply-To`/`References` headers (a reply) or recognizes a bounce report naming
-a failed recipient, then updates the email, recipient, and contact status. Unmatched messages
-are ignored.
+`InboundMessage` objects. The `ProcessInboundMessage` action first checks for a bounce report and
+matches it to the latest email the connection sent, by the Message-ID it refers to or else by the
+failed recipient address. Bounce reports often carry `In-Reply-To`/`References`, so this runs before
+reply matching. Other messages are matched to a sent email via those headers (a reply). Either way
+the email, recipient, and contact status is updated. Unmatched messages are ignored.
 
 ## Tracking and unsubscribe
 

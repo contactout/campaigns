@@ -6,6 +6,7 @@ use App\Contracts\Mail\CampaignMailer;
 use App\Data\EmailThread;
 use App\Data\SendResult;
 use App\Enums\MailerType;
+use App\Exceptions\Mail\MailerHttpException;
 use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
 use Illuminate\Support\Arr;
@@ -32,7 +33,7 @@ class OutlookCampaignMailer implements CampaignMailer
      *
      * @param  array<string, string>  $headers  Sent as Graph internetMessageHeaders.
      *
-     * @throws RuntimeException When Graph rejects the send.
+     * @throws MailerHttpException When Graph rejects the send.
      */
     public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
     {
@@ -125,7 +126,7 @@ class OutlookCampaignMailer implements CampaignMailer
             ->post('https://graph.microsoft.com/v1.0/me/messages', $message);
 
         if (! $create->successful()) {
-            throw new RuntimeException('Outlook message create failed.');
+            throw MailerHttpException::fromResponse('Outlook message create failed.', $create);
         }
 
         $created = $create->json();
@@ -152,7 +153,7 @@ class OutlookCampaignMailer implements CampaignMailer
             ->post('https://graph.microsoft.com/v1.0/me/messages/'.$replyToId.'/createReply');
 
         if (! $create->successful()) {
-            throw new RuntimeException('Outlook reply create failed.');
+            throw MailerHttpException::fromResponse('Outlook reply create failed.', $create);
         }
 
         $created = $create->json();
@@ -169,7 +170,7 @@ class OutlookCampaignMailer implements CampaignMailer
             );
 
         if (! $patch->successful()) {
-            throw new RuntimeException('Outlook reply update failed.');
+            throw MailerHttpException::fromResponse('Outlook reply update failed.', $patch);
         }
 
         return $id;
@@ -184,7 +185,7 @@ class OutlookCampaignMailer implements CampaignMailer
             ->post('https://graph.microsoft.com/v1.0/me/messages/'.$id.'/send');
 
         if (! $send->successful()) {
-            throw new RuntimeException('Outlook message send failed.');
+            throw MailerHttpException::fromResponse('Outlook message send failed.', $send);
         }
     }
 }

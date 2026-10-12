@@ -15,28 +15,32 @@ use Illuminate\Support\Facades\DB;
 /**
  * Records replies and bounces from inbound mailbox messages.
  *
- * A message is matched either as a reply to an email we sent (via the
- * `In-Reply-To`/`References` headers) or as a bounce report naming a failed
- * recipient address. Unmatched messages are ignored.
+ * A message is matched either as a bounce report about an email we sent (by
+ * Message-ID or failed recipient address) or as a reply to one (via the
+ * `In-Reply-To`/`References` headers). Unmatched messages are ignored.
  */
 class ProcessInboundMessage
 {
     /**
      * Process a single inbound message for the given connection.
+     *
+     * A bounce report that matches no sent email falls through to reply
+     * matching, so a human reply that merely looks like a bounce is kept.
      */
     public function handle(MailerConnection $connection, InboundMessage $message): void
     {
         DB::transaction(function () use ($connection, $message): void {
+            // Bounce reports usually carry In-Reply-To/References pointing at
+            // the original email, so they must be checked before replies or
+            // they would be recorded as one.
+            if ($this->looksLikeBounce($message) && $this->markBounced($connection, $message)) {
+                return;
+            }
+
             $reply = $this->findReply($connection, $message);
 
             if ($reply instanceof CampaignEmail) {
                 $this->markReplied($reply);
-
-                return;
-            }
-
-            if ($this->looksLikeBounce($message)) {
-                $this->markBounced($connection, $message);
             }
         });
     }
@@ -100,6 +104,12 @@ class ProcessInboundMessage
             return true;
         }
 
+        // A person replying to a step whose subject contains these words would
+        // otherwise be bounced, since bounces are checked before replies.
+        if (preg_match('/^\s*(re|fwd?|aw|sv)\s*:/i', $message->subject) === 1) {
+            return false;
+        }
+
         return preg_match(
             '/undeliver|delivery status|returned to sender|failure notice|delivery has failed/i',
             $message->subject,
@@ -107,25 +117,16 @@ class ProcessInboundMessage
     }
 
     /**
-     * Mark the campaign email, recipient and contact tied to a bounced address.
+     * Mark the campaign email, recipient and contact tied to a bounce report.
+     *
+     * @return bool Whether a bounced email was found.
      */
-    private function markBounced(MailerConnection $connection, InboundMessage $message): void
+    private function markBounced(MailerConnection $connection, InboundMessage $message): bool
     {
-        $failedEmail = $this->extractFailedAddress($connection, $message);
-
-        if ($failedEmail === null) {
-            return;
-        }
-
-        $email = CampaignEmail::query()
-            ->where('mailer_connection_id', $connection->id)
-            ->whereHas('recipient.contact.identities', fn (Builder $query): Builder => $query
-                ->where('identity_type', ContactIdentityType::Email->value)
-                ->where('normalized_value', $failedEmail))
-            ->first();
+        $email = $this->findBouncedEmail($connection, $message);
 
         if (! $email instanceof CampaignEmail) {
-            return;
+            return false;
         }
 
         $email->status = EmailStatus::Bounced;
@@ -138,6 +139,92 @@ class ProcessInboundMessage
         $contact = $recipient->contact;
         $contact->status = ContactStatus::Bounced;
         $contact->save();
+
+        return true;
+    }
+
+    /**
+     * Find the sent email a bounce report is about.
+     *
+     * The original message is matched by Message-ID first, from the report's
+     * threading headers or any Message-ID quoted in its text, then by the
+     * failed recipient address. Only emails this connection actually sent are
+     * considered, latest first, so a contact in several campaigns resolves to
+     * the same email every time.
+     */
+    private function findBouncedEmail(MailerConnection $connection, InboundMessage $message): ?CampaignEmail
+    {
+        $messageIds = $this->referencedMessageIds($message);
+
+        if ($messageIds !== []) {
+            $email = $this->sentEmails($connection)
+                ->whereIn('message_id', $messageIds)
+                ->first();
+
+            if ($email instanceof CampaignEmail) {
+                return $email;
+            }
+        }
+
+        $failedEmail = $this->extractFailedAddress($connection, $message);
+
+        if ($failedEmail === null) {
+            return null;
+        }
+
+        return $this->sentEmails($connection)
+            ->whereHas('recipient.contact.identities', fn (Builder $query): Builder => $query
+                ->where('identity_type', ContactIdentityType::Email->value)
+                ->where('normalized_value', $failedEmail))
+            ->first();
+    }
+
+    /**
+     * Query the emails the connection has sent, latest first.
+     *
+     * @return Builder<CampaignEmail>
+     */
+    private function sentEmails(MailerConnection $connection): Builder
+    {
+        return CampaignEmail::query()
+            ->where('mailer_connection_id', $connection->id)
+            ->whereNotNull('dispatched_at')
+            ->orderByDesc('dispatched_at')
+            ->orderByDesc('id');
+    }
+
+    /**
+     * Collect the Message-IDs a bounce report refers to.
+     *
+     * Ids are kept both with and without angle brackets, since stored ids and
+     * headers do not agree on the format across providers.
+     *
+     * @return array<int, string>
+     */
+    private function referencedMessageIds(InboundMessage $message): array
+    {
+        $ids = $message->references;
+
+        if ($message->inReplyTo !== null && $message->inReplyTo !== '') {
+            $ids[] = $message->inReplyTo;
+        }
+
+        if (preg_match_all('/^\s*Message-ID:\s*(\S+)/im', $message->text ?? '', $matches) > 0) {
+            array_push($ids, ...$matches[1]);
+        }
+
+        $variants = [];
+
+        foreach ($ids as $id) {
+            $bare = trim($id, '<> ');
+
+            if ($bare !== '') {
+                $variants[] = $bare;
+                $variants[] = '<'.$bare.'>';
+            }
+        }
+
+        return array_values(array_unique($variants));
     }
 
     /**

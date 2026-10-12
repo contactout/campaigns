@@ -58,6 +58,18 @@ All notable changes to this project are documented here. The format is based on
 - `campaign_emails` had no uniqueness on (recipient_id, campaign_step_id), so two seed jobs running
   at once could insert the same step twice. Existing duplicates are merged into the earliest row,
   keeping their opens, clicks and tracked links.
+- Any send error deactivated the connection and failed the email, so one bad address, a timeout,
+  or provider throttling stopped the whole connection. Errors are now classified: a rejected
+  recipient bounces only that recipient, temporary errors retry with backoff (up to five attempts),
+  and only authentication or configuration errors deactivate the connection.
+- Emails due while their connection was inactive were failed for good. They now stay scheduled and
+  resume when the connection is verified or reconnected.
+- Rate-limit retries could be scheduled outside the campaign's sending window.
+- The campaign "Sent" stat dropped emails once they were opened, replied to, or bounced; it now
+  counts every dispatched email.
+- Bounce reports carrying `In-Reply-To`/`References` were recorded as replies, and a bounce could be
+  matched to an arbitrary email of the contact. Bounces are now checked first and matched to the
+  latest sent email by Message-ID, then by address.
 - Docker build for PHP 8.4 IMAP support.
 
 ### Security

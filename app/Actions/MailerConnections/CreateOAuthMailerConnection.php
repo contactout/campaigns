@@ -12,7 +12,15 @@ use InvalidArgumentException;
 class CreateOAuthMailerConnection
 {
     /**
+     * Create a new action instance.
+     */
+    public function __construct(private readonly ResumeDeferredEmails $resumeDeferredEmails) {}
+
+    /**
      * Create or update an OAuth mailer connection for the given team.
+     *
+     * Reconnecting an existing connection reactivates it and resumes the
+     * emails held back while it was inactive.
      *
      * @param  array{
      *     access_token: string,
@@ -67,6 +75,8 @@ class CreateOAuthMailerConnection
                 'exception_data' => null,
                 'threw_at' => null,
             ])->save();
+
+            $this->resumeDeferredEmails->handle($connection);
 
             return $connection->refresh();
         }

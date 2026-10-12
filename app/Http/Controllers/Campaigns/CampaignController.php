@@ -229,7 +229,7 @@ class CampaignController extends Controller
             'stats' => [
                 'steps_count' => $campaign->steps->count(),
                 'recipients_count' => $campaign->recipients()->count(),
-                'emails_sent' => $campaign->emails()->where('status', EmailStatus::Sent)->count(),
+                'emails_sent' => $campaign->emails()->whereNotNull('dispatched_at')->count(),
                 'emails_failed' => $campaign->emails()->where('status', EmailStatus::Failed)->count(),
                 'opened' => $campaign->emails()->whereNotNull('opened_at')->count(),
                 'clicked' => LinkClick::query()

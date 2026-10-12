@@ -2,6 +2,7 @@
 
 namespace App\Services\OAuth;
 
+use App\Exceptions\Mail\MailerHttpException;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -100,7 +101,7 @@ class GoogleOAuthClient
         ]);
 
         if (! $response->successful()) {
-            throw new RuntimeException('Google token refresh failed.');
+            throw MailerHttpException::fromResponse('Google token refresh failed.', $response);
         }
 
         $payload = $response->json();
