@@ -28,6 +28,9 @@ All notable changes to this project are documented here. The format is based on
 - `REGISTRATION_ENABLED` setting to control open sign-up; the first user can always register.
 - `campaigns:verify-user` command to verify a user when system mail is not configured.
 - Architecture overview in `docs/architecture.md`, issue and pull request templates, Code of Conduct.
+- Team-wide suppression across campaigns: hard bounces join the team's unsubscribe list, `@domain`
+  entries suppress a whole domain, and contacts that are do-not-contact, bounced, unsubscribed, or
+  listed are skipped when added to a campaign and never emailed.
 
 ### Changed
 
