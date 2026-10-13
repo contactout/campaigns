@@ -29,6 +29,24 @@ class StoreMailerConnectionRequest extends FormRequest
             'imap_encryption' => ['nullable', Rule::in(['ssl', 'tls', 'starttls', 'none'])],
             'imap_username' => ['nullable', 'string', 'max:255'],
             'imap_password' => ['nullable', 'string', 'max:255'],
+            'sending_limit' => ['nullable', 'integer', 'min:1'],
+            'min_seconds_between_sends' => ['nullable', 'integer', 'min:1'],
+        ];
+    }
+
+    /**
+     * Build the connection's sending caps; a blank value means no cap.
+     *
+     * @return array{sending_limit: int|null, min_seconds_between_sends: int|null}
+     */
+    public function limits(): array
+    {
+        /** @var array<string, mixed> $data */
+        $data = $this->validated();
+
+        return [
+            'sending_limit' => isset($data['sending_limit']) ? (int) $data['sending_limit'] : null,
+            'min_seconds_between_sends' => isset($data['min_seconds_between_sends']) ? (int) $data['min_seconds_between_sends'] : null,
         ];
     }
 

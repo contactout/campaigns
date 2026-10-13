@@ -40,7 +40,8 @@ Everything is owned by a **team**. Routes live under `/{current_team}/...`, and 
 Start campaign
    -> SeedCampaignEmails job: CampaignStepScheduler creates first-step CampaignEmail rows
 scheduler (every minute)
-   -> campaigns:dispatch-due: due, scheduled emails of active campaigns (batches of 200)
+   -> campaigns:dispatch-due: due, scheduled emails of active campaigns (batches of 200),
+      at most one per run for a connection with a minimum interval, none while it is still within it
    -> SendEmail job per email (queue worker)
         - skip unless the email is still scheduled and due (one queued job per email)
         - skip if the campaign is not active
@@ -48,6 +49,7 @@ scheduler (every minute)
         - defer an hour if the connection is not active (flagged for resume)
         - reset the connection's daily send counter when the UTC day rolls over
         - defer 15 minutes if the connection is rate limited (within the sending window)
+        - defer to the end of the connection's minimum interval since its last send (within the sending window)
         - render placeholders (PlaceholderRenderer)
         - rewrite links, add the unsubscribe link and the open pixel (CampaignBodyBuilder)
         - send via the CampaignMailer for the connection type

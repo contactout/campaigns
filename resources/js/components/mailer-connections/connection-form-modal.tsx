@@ -210,6 +210,49 @@ export default function ConnectionFormModal({
                                     </div>
                                 </div>
 
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="sending_limit">
+                                            Daily sending limit
+                                        </Label>
+                                        <Input
+                                            id="sending_limit"
+                                            name="sending_limit"
+                                            type="number"
+                                            min={1}
+                                            defaultValue={
+                                                connection?.sending_limit ?? ''
+                                            }
+                                            placeholder="Unlimited"
+                                        />
+                                        <InputError
+                                            message={errors.sending_limit}
+                                        />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="min_seconds_between_sends">
+                                            Seconds between sends
+                                        </Label>
+                                        <Input
+                                            id="min_seconds_between_sends"
+                                            name="min_seconds_between_sends"
+                                            type="number"
+                                            min={1}
+                                            defaultValue={
+                                                connection?.min_seconds_between_sends ??
+                                                ''
+                                            }
+                                            placeholder="No minimum"
+                                        />
+                                        <InputError
+                                            message={
+                                                errors.min_seconds_between_sends
+                                            }
+                                        />
+                                    </div>
+                                </div>
+
                                 <div className="space-y-4 rounded-md border p-4">
                                     <div>
                                         <p className="text-sm font-medium">

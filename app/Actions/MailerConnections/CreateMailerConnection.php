@@ -13,7 +13,7 @@ class CreateMailerConnection
     /**
      * Create a mailer connection owned by the given team.
      *
-     * @param  array{name: string, settings: array<string, mixed>}  $data
+     * @param  array{name: string, settings: array<string, mixed>, sending_limit: int|null, min_seconds_between_sends: int|null}  $data
      */
     public function handle(Team $team, User $user, array $data): MailerConnection
     {
@@ -22,6 +22,8 @@ class CreateMailerConnection
             'name' => $data['name'],
             'mailer_type' => MailerType::Smtp,
             'smtp_setting' => $data['settings'],
+            'sending_limit' => $data['sending_limit'],
+            'min_seconds_between_sends' => $data['min_seconds_between_sends'],
             'status' => MailerConnectionStatus::Pending,
         ]);
     }

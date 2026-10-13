@@ -6,6 +6,7 @@ use App\Jobs\Campaigns\SendEmail;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
+use App\Models\MailerConnection;
 use App\Models\Recipient;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Queue;
@@ -46,6 +47,41 @@ test('dispatches send jobs for due emails on active campaigns', function () {
     Queue::assertPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($due));
     Queue::assertNotPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($future));
     Queue::assertNotPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($stoppedEmail));
+});
+
+test('dispatches at most one email per interval for a spaced connection', function () {
+    Queue::fake();
+
+    $spaced = MailerConnection::factory()->create(['min_seconds_between_sends' => 60]);
+    $waiting = MailerConnection::factory()->create([
+        'min_seconds_between_sends' => 60,
+        'last_sent_at' => now()->subSeconds(30),
+    ]);
+    $unspaced = MailerConnection::factory()->create();
+
+    $campaign = Campaign::factory()->active()->create(['mailer_connection_id' => $spaced->id]);
+    $first = mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinutes(2));
+    $second = mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinute());
+
+    $waitingEmail = mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinute());
+    $waitingEmail->update(['mailer_connection_id' => $waiting->id]);
+
+    $unspacedEmails = collect([
+        mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinute()),
+        mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinute()),
+    ])->each(fn (CampaignEmail $email) => $email->update(['mailer_connection_id' => $unspaced->id]));
+
+    $this->artisan('campaigns:dispatch-due')
+        ->expectsOutputToContain('Dispatched 3')
+        ->assertSuccessful();
+
+    Queue::assertPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($first));
+    Queue::assertNotPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($second));
+    Queue::assertNotPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($waitingEmail));
+    $unspacedEmails->each(fn (CampaignEmail $email) => Queue::assertPushed(
+        SendEmail::class,
+        fn (SendEmail $job): bool => $job->email->is($email),
+    ));
 });
 
 test('reports gracefully when nothing is due', function () {

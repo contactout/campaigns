@@ -326,6 +326,47 @@ test('reschedules the email within the sending window when the connection is rat
         ->and($fixture['connection']->fresh()->rate_limit_expired_at->toDateTimeString())->toBe('2026-02-06 17:05:00');
 });
 
+test('defers the email within the sending window while the connection is spacing out sends', function () {
+    // Friday 16:59; the interval ends after the 17:00 close.
+    $this->travelTo(CarbonImmutable::parse('2026-02-06 16:59:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['campaign']->update(['settings' => mmosWeekdayWindow()]);
+    $fixture['connection']->update([
+        'min_seconds_between_sends' => 120,
+        'last_sent_at' => CarbonImmutable::now()->subSeconds(30),
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00')
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('records the send time once the connection interval has passed', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['connection']->update([
+        'min_seconds_between_sends' => 120,
+        'last_sent_at' => CarbonImmutable::now()->subSeconds(120),
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent)->toHaveCount(1)
+        ->and($fixture['connection']->fresh()->last_sent_at->toDateTimeString())->toBe('2026-02-02 12:00:00');
+});
+
 test('bounces only the email when the provider rejects the recipient', function () {
     $fake = new FakeCampaignMailer;
     $fake->exception = new UnexpectedResponseException('Expected response code "250/251/252" but got code "550", with message "550 5.1.1 User unknown".', 550);

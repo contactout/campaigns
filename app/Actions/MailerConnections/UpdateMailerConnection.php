@@ -12,7 +12,7 @@ class UpdateMailerConnection
      * A blank password is not present in the incoming settings, so the existing
      * credential is preserved unless a replacement is supplied.
      *
-     * @param  array{name: string, settings: array<string, mixed>}  $data
+     * @param  array{name: string, settings: array<string, mixed>, sending_limit: int|null, min_seconds_between_sends: int|null}  $data
      */
     public function handle(MailerConnection $connection, array $data): MailerConnection
     {
@@ -21,6 +21,8 @@ class UpdateMailerConnection
         $connection->fill([
             'name' => $data['name'],
             'smtp_setting' => $settings,
+            'sending_limit' => $data['sending_limit'],
+            'min_seconds_between_sends' => $data['min_seconds_between_sends'],
         ])->save();
 
         return $connection;
