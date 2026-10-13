@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Tracking\TrackingController;
 use App\Http\Controllers\UnsubscribeController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -23,5 +24,9 @@ Route::get('unsubscribe/done', fn () => Inertia::render('unsubscribed'))->name('
 
 Route::middleware('signed')->group(function () {
     Route::get('unsubscribe/{recipient}', [UnsubscribeController::class, 'show'])->name('unsubscribe.show');
-    Route::post('unsubscribe/{recipient}', [UnsubscribeController::class, 'store'])->name('unsubscribe.store');
+    // Mail providers POST RFC 8058 one-click unsubscribes without a CSRF
+    // token; the route is protected by its signed URL instead.
+    Route::post('unsubscribe/{recipient}', [UnsubscribeController::class, 'store'])
+        ->withoutMiddleware(PreventRequestForgery::class)
+        ->name('unsubscribe.store');
 });

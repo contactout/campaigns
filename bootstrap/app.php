@@ -18,12 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        // Trust the Compose reverse proxy (Caddy) for HTTPS / client IP headers.
-        $middleware->trustProxies(at: '*');
-
-        // Mail providers POST RFC 8058 one-click unsubscribes without a CSRF
-        // token; the route is protected by its signed URL instead.
-        $middleware->validateCsrfTokens(except: ['unsubscribe/*']);
+        // Trusted proxies need config, which is not loaded yet here; see AppServiceProvider.
+        // Loopback hosts stay trusted for the container healthcheck (curl 127.0.0.1:8080/up).
+        $middleware->trustHosts(at: fn (): array => array_map(
+            fn (string $host): string => '^'.preg_quote($host).'$',
+            [...config('app.trusted_hosts'), 'localhost', '127.0.0.1'],
+        ));
 
         $middleware->web(append: [
             HandleAppearance::class,
