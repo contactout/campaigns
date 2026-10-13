@@ -159,7 +159,27 @@ test('a delayed delivery report does not add the address to the suppression list
     ));
 
     expect(Unsubscribe::query()->where('team_id', $team->id)->exists())->toBeFalse()
-        ->and($contact->fresh()->status)->toBe(ContactStatus::Bounced);
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Bounced)
+        ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted);
+});
+
+test('numbers quoted in a delayed delivery report are not read as a permanent failure', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'delay-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'mailer-daemon@googlemail.com',
+        subject: 'Delivery Status Notification (Delay)',
+        text: "Delivery to ada@example.com is delayed.\nStatus: 4.4.7\n\n----- Original message -----\nCall us on 555-0100.\nUser-Agent: Thunderbird/5.2.1",
+    ));
+
+    expect(Unsubscribe::query()->where('team_id', $team->id)->exists())->toBeFalse()
+        ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted);
 });
 
 test('a permanent failure identified by its enhanced status code is added to the suppression list', function () {

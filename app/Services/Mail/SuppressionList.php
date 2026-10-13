@@ -49,17 +49,13 @@ class SuppressionList
             return;
         }
 
-        $now = now();
-
-        Unsubscribe::query()->insertOrIgnore([
+        Unsubscribe::query()->upsert([
             'team_id' => $teamId,
             'campaign_id' => $campaignId,
             'recipient_id' => $recipientId,
             'email' => $email,
             'reason' => $reason,
-            'created_at' => $now,
-            'updated_at' => $now,
-        ]);
+        ], ['team_id', 'email'], ['updated_at']);
     }
 
     /**

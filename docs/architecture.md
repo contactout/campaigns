@@ -58,7 +58,8 @@ scheduler (every minute)
 (`AddCampaignRecipients`): a contact is skipped when it has `do_not_contact_at` set, a bounced,
 unsubscribed, or do-not-contact status, or an address that matches the team's `unsubscribes` list
 exactly or by an `@domain` entry (case-insensitive). Hard bounces, from a send-time rejection or an
-inbound bounce report, are added to that list.
+inbound report with a `Status: 5.x.x` line or a `55x 5.x.x` reply, bounce the contact and are added
+to that list; other bounce reports bounce only the recipient.
 
 `CampaignStepScheduler` counts a step's `day` from the later of the campaign start and the moment
 the recipient joined, then moves the result onto the campaign's sending window (`SendingWindow`):

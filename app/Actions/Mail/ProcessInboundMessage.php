@@ -123,10 +123,11 @@ class ProcessInboundMessage
     }
 
     /**
-     * Mark the campaign email, recipient and contact tied to a bounce report.
+     * Mark the campaign email and recipient tied to a bounce report.
      *
-     * Only a permanent failure adds the contact's address to the team's
-     * suppression list; a delay or other soft failure must not block it for good.
+     * Only a permanent failure also bounces the contact and adds its address
+     * to the team's suppression list; a delay or other soft failure stops this
+     * campaign but must not block the contact everywhere.
      *
      * @return bool Whether a bounced email was found.
      */
@@ -145,31 +146,36 @@ class ProcessInboundMessage
         $recipient->status = RecipientStatus::Bounced;
         $recipient->save();
 
+        if (! $this->isPermanentFailure($message)) {
+            return true;
+        }
+
         $contact = $recipient->contact;
         $contact->status = ContactStatus::Bounced;
         $contact->save();
 
-        if ($this->isPermanentFailure($message)) {
-            $this->suppressionList->add(
-                $email->campaign->team_id,
-                (string) ($contact->email() ?? ''),
-                'bounce',
-                $email->campaign_id,
-                $recipient->id,
-            );
-        }
+        $this->suppressionList->add(
+            $email->campaign->team_id,
+            (string) ($contact->email() ?? ''),
+            'bounce',
+            $email->campaign_id,
+            $recipient->id,
+        );
 
         return true;
     }
 
     /**
-     * Determine whether the bounce report carries a permanent failure: a 5.x.x
-     * enhanced status code or a 55x SMTP reply.
+     * Determine whether the bounce report carries a permanent failure.
+     *
+     * The code must sit where DSNs put it, a `Status: 5.x.x` line or a 55x
+     * reply followed by its 5.x.x code, so numbers in quoted text such as
+     * phone numbers or version strings do not count.
      */
     private function isPermanentFailure(InboundMessage $message): bool
     {
         return preg_match(
-            '/(?<![\d.])5\.\d{1,3}\.\d{1,3}(?![\d.])|(?<!\d)55\d(?!\d)/',
+            '/^\s*Status:\s*5\.\d{1,3}\.\d{1,3}\b|\b55\d[ -]5\.\d{1,3}\.\d{1,3}\b/im',
             $message->text ?? '',
         ) === 1;
     }
