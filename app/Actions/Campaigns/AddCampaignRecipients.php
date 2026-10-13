@@ -8,16 +8,22 @@ use App\Jobs\Campaigns\SeedCampaignEmails;
 use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\Recipient;
+use App\Services\Mail\SuppressionList;
 use Illuminate\Support\Facades\DB;
 
 class AddCampaignRecipients
 {
     /**
+     * Create a new action instance.
+     */
+    public function __construct(private readonly SuppressionList $suppressionList) {}
+
+    /**
      * Add the given contacts and list contacts as recipients of the campaign.
      *
-     * Contacts that are already recipients of the campaign are skipped. The
-     * source is recorded as "manual" whenever explicit contacts were provided,
-     * otherwise "list".
+     * Contacts that are already recipients of the campaign, or that the team's
+     * suppression list rules out, are skipped. The source is recorded as
+     * "manual" whenever explicit contacts were provided, otherwise "list".
      *
      * Adding recipients to a running campaign queues their first step; a draft
      * or stopped campaign keeps them queued for its next start.
@@ -48,6 +54,7 @@ class AddCampaignRecipients
                 ->all();
 
             $newIds = array_values(array_diff($candidateIds, $existingIds));
+            $newIds = array_values(array_diff($newIds, $this->suppressionList->suppressedContactIds($campaign->team_id, $newIds)));
 
             if ($newIds === []) {
                 return 0;

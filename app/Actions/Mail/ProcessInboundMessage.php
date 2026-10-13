@@ -9,6 +9,7 @@ use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
+use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +22,11 @@ use Illuminate\Support\Facades\DB;
  */
 class ProcessInboundMessage
 {
+    /**
+     * Create a new action instance.
+     */
+    public function __construct(private readonly SuppressionList $suppressionList) {}
+
     /**
      * Process a single inbound message for the given connection.
      *
@@ -117,7 +123,8 @@ class ProcessInboundMessage
     }
 
     /**
-     * Mark the campaign email, recipient and contact tied to a bounce report.
+     * Mark the campaign email, recipient and contact tied to a bounce report,
+     * and add the contact's address to the team's suppression list.
      *
      * @return bool Whether a bounced email was found.
      */
@@ -139,6 +146,14 @@ class ProcessInboundMessage
         $contact = $recipient->contact;
         $contact->status = ContactStatus::Bounced;
         $contact->save();
+
+        $this->suppressionList->add(
+            $email->campaign->team_id,
+            (string) ($contact->email() ?? ''),
+            'bounce',
+            $email->campaign_id,
+            $recipient->id,
+        );
 
         return true;
     }
