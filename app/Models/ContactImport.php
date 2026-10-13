@@ -25,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property int $skipped_count
  * @property int $invalid_count
  * @property array<int, array{row: int, reason: string}>|null $failures
+ * @property int $byte_offset
+ * @property int $rows_read
  * @property Carbon|null $completed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -46,6 +48,8 @@ use Illuminate\Support\Carbon;
     'skipped_count',
     'invalid_count',
     'failures',
+    'byte_offset',
+    'rows_read',
     'completed_at',
 ])]
 class ContactImport extends Model
@@ -103,6 +107,8 @@ class ContactImport extends Model
             'duplicate_action' => ContactImportDuplicateAction::class,
             'status' => ContactImportStatus::class,
             'failures' => 'array',
+            'byte_offset' => 'integer',
+            'rows_read' => 'integer',
             'completed_at' => 'datetime',
         ];
     }

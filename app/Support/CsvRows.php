@@ -8,13 +8,13 @@ use RuntimeException;
 class CsvRows
 {
     /**
-     * Read the header row of the CSV file at the given path.
+     * Read the header (first non-blank) row of the CSV file at the given path.
      *
      * @return array<int, string>
      */
     public static function header(string $path): array
     {
-        foreach (self::read($path) as $row) {
+        foreach (self::read($path) as [$row]) {
             return $row;
         }
 
@@ -22,11 +22,14 @@ class CsvRows
     }
 
     /**
-     * Yield each non-blank row keyed by its 1-based line number, header included.
+     * Yield each non-blank row starting at the given byte offset, keyed by its 1-based line number.
      *
-     * @return Generator<int, array<int, string>>
+     * Each value holds the trimmed cells and the byte offset just after the row,
+     * so reading can resume from there. A leading UTF-8 byte order mark is skipped.
+     *
+     * @return Generator<int, array{0: array<int, string>, 1: int}>
      */
-    public static function read(string $path): Generator
+    public static function read(string $path, int $offset = 0, int $line = 0): Generator
     {
         $handle = fopen($path, 'r');
 
@@ -35,7 +38,11 @@ class CsvRows
         }
 
         try {
-            $line = 0;
+            if ($offset > 0) {
+                fseek($handle, $offset);
+            } elseif (fread($handle, 3) !== "\xEF\xBB\xBF") {
+                rewind($handle);
+            }
 
             while (($row = fgetcsv($handle, null, ',', '"', '')) !== false) {
                 $line++;
@@ -44,13 +51,10 @@ class CsvRows
                     continue;
                 }
 
-                $row = array_map(fn (?string $value): string => trim((string) $value), $row);
-
-                if ($line === 1) {
-                    $row[0] = preg_replace('/^\xEF\xBB\xBF/', '', $row[0]) ?? $row[0];
-                }
-
-                yield $line => $row;
+                yield $line => [
+                    array_map(fn (?string $value): string => trim((string) $value), $row),
+                    (int) ftell($handle),
+                ];
             }
         } finally {
             fclose($handle);

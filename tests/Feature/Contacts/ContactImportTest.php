@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Contacts\ImportContacts;
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactImportStatus;
 use App\Enums\TeamRole;
@@ -13,6 +14,7 @@ use App\Models\Team;
 use App\Models\Unsubscribe;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -282,6 +284,102 @@ test('non members cannot import contacts', function () {
         ->assertForbidden();
 
     Queue::assertNothingPushed();
+});
+
+test('a byte order mark and blank lines before the header are skipped', function () {
+    [$team, $user] = importTeamWithMember();
+
+    postImport($team, $user, "\xEF\xBB\xBF\n\nName,Email\nAda,ada@example.com\n");
+
+    $import = ContactImport::sole();
+
+    expect($import->created_count)->toBe(1)
+        ->and($import->invalid_count)->toBe(0)
+        ->and($import->failures)->toBe([]);
+});
+
+test('large imports resume across bounded runs', function () {
+    Queue::fake();
+    [$team, $user] = importTeamWithMember();
+
+    postImport($team, $user, "Name,Email\nAda,ada@example.com\nGrace,grace@example.com\nAlan,alan@example.com\nAda Again,ada@example.com\nKaty,katy@example.com\n");
+
+    $import = ContactImport::sole();
+    $runs = 0;
+    $job = new ImportContactsFromCsv($import, 0, 2);
+
+    while ($job !== null) {
+        Queue::fake();
+        $job->handle(app(ImportContacts::class));
+        $runs++;
+
+        $next = Queue::pushed(ImportContactsFromCsv::class)->first();
+        $job = $next;
+    }
+
+    $import->refresh();
+
+    expect($runs)->toBe(3)
+        ->and($import->status)->toBe(ContactImportStatus::Completed)
+        ->and($import->created_count)->toBe(4)
+        ->and($import->skipped_count)->toBe(1)
+        ->and($import->failures)->toBe([['row' => 5, 'reason' => 'Duplicate of row 2 in this file.']])
+        ->and($import->rows_read)->toBe(6)
+        ->and(DB::table('contact_import_emails')->count())->toBe(0)
+        ->and(Contact::forTeam($team->id)->count())->toBe(4);
+
+    Storage::disk('local')->assertMissing($import->file_path);
+});
+
+test('a duplicate or stale run does not reimport or overwrite progress', function () {
+    Queue::fake();
+    [$team, $user] = importTeamWithMember();
+
+    postImport($team, $user, "Name,Email\nAda,ada@example.com\nGrace,grace@example.com\nAlan,alan@example.com\n");
+
+    $import = ContactImport::sole();
+    Queue::fake();
+
+    (new ImportContactsFromCsv($import, 0, 2))->handle(app(ImportContacts::class));
+    $afterFirstRun = $import->fresh();
+
+    (new ImportContactsFromCsv($import, 0, 2))->handle(app(ImportContacts::class));
+    (new ImportContactsFromCsv($import, 0, 2))->failed(new RuntimeException('Stale delivery.'));
+
+    $import->refresh();
+
+    expect($afterFirstRun->status)->toBe(ContactImportStatus::Processing)
+        ->and($afterFirstRun->byte_offset)->toBeGreaterThan(0)
+        ->and($import->status)->toBe(ContactImportStatus::Processing)
+        ->and($import->byte_offset)->toBe($afterFirstRun->byte_offset)
+        ->and($import->created_count)->toBe(2)
+        ->and(Contact::forTeam($team->id)->count())->toBe(2);
+
+    Storage::disk('local')->assertExists($import->file_path);
+    Queue::assertPushed(ImportContactsFromCsv::class, 1);
+});
+
+test('a failed run marks the import failed and discards the file', function () {
+    Queue::fake();
+    [$team, $user] = importTeamWithMember();
+
+    postImport($team, $user, "Name,Email\nAda,ada@example.com\nGrace,grace@example.com\nAlan,alan@example.com\n");
+
+    $import = ContactImport::sole();
+
+    (new ImportContactsFromCsv($import, 0, 2))->handle(app(ImportContacts::class));
+    $offset = $import->fresh()->byte_offset;
+
+    (new ImportContactsFromCsv($import, $offset, 2))->failed(new RuntimeException('Database went away.'));
+
+    $import->refresh();
+
+    expect($import->status)->toBe(ContactImportStatus::Failed)
+        ->and($import->completed_at)->not->toBeNull()
+        ->and($import->created_count)->toBe(2)
+        ->and(DB::table('contact_import_emails')->count())->toBe(0);
+
+    Storage::disk('local')->assertMissing($import->file_path);
 });
 
 test('the contacts index shows the users latest import summary', function () {

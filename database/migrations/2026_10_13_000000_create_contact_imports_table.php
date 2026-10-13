@@ -26,10 +26,20 @@ return new class extends Migration
             $table->unsignedInteger('skipped_count')->default(0);
             $table->unsignedInteger('invalid_count')->default(0);
             $table->json('failures')->nullable();
+            $table->unsignedBigInteger('byte_offset')->default(0);
+            $table->unsignedInteger('rows_read')->default(0);
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
 
             $table->index(['team_id', 'user_id', 'created_at']);
+        });
+
+        Schema::create('contact_import_emails', function (Blueprint $table) {
+            $table->foreignId('contact_import_id')->constrained()->cascadeOnDelete();
+            $table->string('email');
+            $table->unsignedInteger('row');
+
+            $table->unique(['contact_import_id', 'email']);
         });
     }
 
@@ -38,6 +48,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('contact_import_emails');
         Schema::dropIfExists('contact_imports');
     }
 };

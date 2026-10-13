@@ -34,14 +34,11 @@ class ImportContacts
 
     protected ?ContactList $list = null;
 
-    /** @var array<string, int> */
-    protected array $seenEmails = [];
-
     /** @var array{created_count: int, updated_count: int, skipped_count: int, invalid_count: int} */
-    protected array $counts = ['created_count' => 0, 'updated_count' => 0, 'skipped_count' => 0, 'invalid_count' => 0];
+    protected array $counts;
 
     /** @var array<int, array{row: int, reason: string}> */
-    protected array $failures = [];
+    protected array $failures;
 
     public function __construct(
         protected CreateContact $createContact,
@@ -50,26 +47,50 @@ class ImportContacts
     ) {}
 
     /**
-     * Import every data row of the stored CSV into the import's team.
+     * Import up to the given number of data rows from the import's saved file offset.
      *
      * Rows are deduplicated on normalized email against the team's existing
      * identities and earlier rows of the same file, and addresses on the team's
-     * unsubscribe list are skipped.
+     * unsubscribe list are skipped. The counters, offset and status are saved on
+     * the import; it is completed once the end of the file is reached.
      */
-    public function handle(ContactImport $import): void
+    public function handle(ContactImport $import, int $maxRows): void
     {
         $this->import = $import;
-        $import->update(['status' => ContactImportStatus::Processing]);
+        $this->counts = [
+            'created_count' => $import->created_count,
+            'updated_count' => $import->updated_count,
+            'skipped_count' => $import->skipped_count,
+            'invalid_count' => $import->invalid_count,
+        ];
+        $this->failures = $import->failures ?? [];
 
         $this->resolveMapping();
 
+        $offset = $import->byte_offset;
+        $line = $import->rows_read;
+        $isHeader = $offset === 0;
+        $rowsRead = 0;
+        $finished = true;
         $chunk = [];
 
-        foreach (CsvRows::read(Storage::disk('local')->path($import->file_path)) as $row => $values) {
-            if ($row === 1) {
+        foreach (CsvRows::read(Storage::disk('local')->path($import->file_path), $offset, $line) as $row => [$values, $end]) {
+            if ($rowsRead === $maxRows) {
+                $finished = false;
+
+                break;
+            }
+
+            $offset = $end;
+            $line = $row;
+
+            if ($isHeader) {
+                $isHeader = false;
+
                 continue;
             }
 
+            $rowsRead++;
             $chunk[$row] = $values;
 
             if (count($chunk) === self::CHUNK_SIZE) {
@@ -81,12 +102,17 @@ class ImportContacts
         $this->processChunk($chunk);
 
         $import->update([
-            ...$this->progress(),
-            'status' => ContactImportStatus::Completed,
-            'completed_at' => now(),
+            ...$this->counts,
+            'failures' => $this->failures,
+            'byte_offset' => $offset,
+            'rows_read' => $line,
+            'status' => $finished ? ContactImportStatus::Completed : ContactImportStatus::Processing,
+            'completed_at' => $finished ? now() : null,
         ]);
 
-        Storage::disk('local')->delete($import->file_path);
+        if ($finished) {
+            DB::table('contact_import_emails')->where('contact_import_id', $import->id)->delete();
+        }
     }
 
     /**
@@ -135,9 +161,9 @@ class ImportContacts
             }
         }
 
-        if ($rows === []) {
-            $this->import->update($this->progress());
+        $rows = $this->withoutFileDuplicates($rows);
 
+        if ($rows === []) {
             return;
         }
 
@@ -180,12 +206,53 @@ class ImportContacts
         if ($this->list !== null && $listContactIds !== []) {
             $this->attachContactsToList->handle($this->list, $listContactIds);
         }
-
-        $this->import->update($this->progress());
     }
 
     /**
-     * Validate a row and extract its contact data, recording invalid and in-file duplicate rows.
+     * Drop rows whose email appeared on an earlier row of the file, remembering the rest.
+     *
+     * Seen emails are stored per import so duplicates are caught across job runs.
+     *
+     * @param  array<int, array{email: string, name: string|null, properties: array<int, string>}>  $rows
+     * @return array<int, array{email: string, name: string|null, properties: array<int, string>}>
+     */
+    protected function withoutFileDuplicates(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        /** @var array<string, int> $seen */
+        $seen = DB::table('contact_import_emails')
+            ->where('contact_import_id', $this->import->id)
+            ->whereIn('email', array_column($rows, 'email'))
+            ->pluck('row', 'email')
+            ->all();
+
+        $unique = [];
+
+        foreach ($rows as $row => $data) {
+            if (isset($seen[$data['email']])) {
+                $this->skip($row, __('Duplicate of row :row in this file.', ['row' => $seen[$data['email']]]));
+
+                continue;
+            }
+
+            $seen[$data['email']] = $row;
+            $unique[$row] = $data;
+        }
+
+        DB::table('contact_import_emails')->insert(array_map(
+            fn (int $row, array $data): array => ['contact_import_id' => $this->import->id, 'email' => $data['email'], 'row' => $row],
+            array_keys($unique),
+            $unique,
+        ));
+
+        return $unique;
+    }
+
+    /**
+     * Validate a row and extract its contact data, recording invalid rows.
      *
      * @param  array<int, string>  $values
      * @return array{email: string, name: string|null, properties: array<int, string>}|null
@@ -223,14 +290,6 @@ class ImportContacts
                 $properties[$index] = $value;
             }
         }
-
-        if (isset($this->seenEmails[$email])) {
-            $this->skip($row, __('Duplicate of row :row in this file.', ['row' => $this->seenEmails[$email]]));
-
-            return null;
-        }
-
-        $this->seenEmails[$email] = $row;
 
         return ['email' => $email, 'name' => $name === '' ? null : $name, 'properties' => $properties];
     }
@@ -337,15 +396,5 @@ class ImportContacts
         if (count($this->failures) < self::MAX_FAILURES) {
             $this->failures[] = ['row' => $row, 'reason' => $reason];
         }
-    }
-
-    /**
-     * Get the current counters and failures for persisting on the import.
-     *
-     * @return array<string, mixed>
-     */
-    protected function progress(): array
-    {
-        return [...$this->counts, 'failures' => $this->failures];
     }
 }
