@@ -123,8 +123,10 @@ class ProcessInboundMessage
     }
 
     /**
-     * Mark the campaign email, recipient and contact tied to a bounce report,
-     * and add the contact's address to the team's suppression list.
+     * Mark the campaign email, recipient and contact tied to a bounce report.
+     *
+     * Only a permanent failure adds the contact's address to the team's
+     * suppression list; a delay or other soft failure must not block it for good.
      *
      * @return bool Whether a bounced email was found.
      */
@@ -147,15 +149,29 @@ class ProcessInboundMessage
         $contact->status = ContactStatus::Bounced;
         $contact->save();
 
-        $this->suppressionList->add(
-            $email->campaign->team_id,
-            (string) ($contact->email() ?? ''),
-            'bounce',
-            $email->campaign_id,
-            $recipient->id,
-        );
+        if ($this->isPermanentFailure($message)) {
+            $this->suppressionList->add(
+                $email->campaign->team_id,
+                (string) ($contact->email() ?? ''),
+                'bounce',
+                $email->campaign_id,
+                $recipient->id,
+            );
+        }
 
         return true;
+    }
+
+    /**
+     * Determine whether the bounce report carries a permanent failure: a 5.x.x
+     * enhanced status code or a 55x SMTP reply.
+     */
+    private function isPermanentFailure(InboundMessage $message): bool
+    {
+        return preg_match(
+            '/(?<![\d.])5\.\d{1,3}\.\d{1,3}(?![\d.])|(?<!\d)55\d(?!\d)/',
+            $message->text ?? '',
+        ) === 1;
     }
 
     /**

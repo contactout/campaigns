@@ -143,6 +143,43 @@ test('a hard bounce adds the address to the team suppression list', function () 
         ->and($entries->first()->recipient_id)->toBe($fixture['recipient']->id);
 });
 
+test('a delayed delivery report does not add the address to the suppression list', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'delay-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'mailer-daemon@googlemail.com',
+        subject: 'Delivery Status Notification (Delay)',
+        text: "There was a temporary problem delivering your message to ada@example.com. Gmail will retry for 47 more hours.\n\n451 4.4.1 Temporary failure, retry later",
+    ));
+
+    expect(Unsubscribe::query()->where('team_id', $team->id)->exists())->toBeFalse()
+        ->and($contact->fresh()->status)->toBe(ContactStatus::Bounced);
+});
+
+test('a permanent failure identified by its enhanced status code is added to the suppression list', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'bounce-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'postmaster@example.com',
+        subject: 'Delivery Status Notification (Failure)',
+        text: "Final-Recipient: rfc822; ada@example.com\nAction: failed\nStatus: 5.1.1",
+    ));
+
+    expect(Unsubscribe::query()->where('team_id', $team->id)->value('email'))->toBe('ada@example.com');
+});
+
 test('a recipient rejected at send time is added to the team suppression list', function () {
     $team = Team::factory()->create();
     $contact = suppressionContact($team, 'ada@example.com');
