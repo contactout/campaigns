@@ -88,6 +88,32 @@ test('team invitations can be created by admins', function () {
     $response->assertRedirect(route('teams.edit', $team));
 });
 
+test('invitations accept assignable roles and reject the owner role', function () {
+    Notification::fake();
+
+    $owner = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($owner)
+        ->post(route('teams.invitations.store', $team), [
+            'email' => 'admin@example.com',
+            'role' => TeamRole::Admin->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($owner)
+        ->post(route('teams.invitations.store', $team), [
+            'email' => 'owner@example.com',
+            'role' => TeamRole::Owner->value,
+        ])
+        ->assertSessionHasErrors('role');
+
+    $this->assertDatabaseHas('team_invitations', ['email' => 'admin@example.com', 'role' => TeamRole::Admin->value]);
+    $this->assertDatabaseMissing('team_invitations', ['email' => 'owner@example.com']);
+});
+
 test('existing team members cannot be invited', function () {
     Notification::fake();
 
