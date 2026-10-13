@@ -67,6 +67,18 @@ export type ContactDetail = {
     do_not_contact: boolean;
 };
 
+export type ContactImportSummary = {
+    id: number;
+    file_name: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    finished: boolean;
+    created_count: number;
+    updated_count: number;
+    skipped_count: number;
+    invalid_count: number;
+    failures: { row: number; reason: string }[];
+};
+
 export type ContactListSummary = {
     id: number;
     name: string;

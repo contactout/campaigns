@@ -17,10 +17,12 @@ use App\Http\Requests\Contacts\UpdateContactRequest;
 use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactIdentity;
+use App\Models\ContactImport;
 use App\Models\ContactList;
 use App\Models\ContactProperty;
 use App\Models\Recipient;
 use App\Models\Team;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -79,6 +81,7 @@ class ContactController extends Controller
                     'contacts_count' => (int) $list->getAttribute('contacts_count'),
                 ])
                 ->all(),
+            'latestImport' => $this->latestImport($currentTeam, $user),
             'can' => [
                 'create' => $user->can('create', [Contact::class, $currentTeam]),
             ],
@@ -272,6 +275,36 @@ class ContactController extends Controller
             'lists_count' => (int) $contact->getAttribute('lists_count'),
             'properties' => $this->contactProperties($contact),
             'created_at' => $contact->created_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * Summarize the user's most recent CSV import for the team from the last day.
+     *
+     * @return array{id: int, file_name: string, status: string, finished: bool, created_count: int, updated_count: int, skipped_count: int, invalid_count: int, failures: array<int, array{row: int, reason: string}>}|null
+     */
+    protected function latestImport(Team $team, User $user): ?array
+    {
+        $import = ContactImport::forTeam($team->id)
+            ->where('user_id', $user->id)
+            ->where('created_at', '>=', now()->subDay())
+            ->latest('id')
+            ->first();
+
+        if ($import === null) {
+            return null;
+        }
+
+        return [
+            'id' => $import->id,
+            'file_name' => $import->original_name,
+            'status' => $import->status->value,
+            'finished' => $import->status->isFinished(),
+            'created_count' => $import->created_count,
+            'updated_count' => $import->updated_count,
+            'skipped_count' => $import->skipped_count,
+            'invalid_count' => $import->invalid_count,
+            'failures' => $import->failures ?? [],
         ];
     }
 
