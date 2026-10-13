@@ -9,6 +9,7 @@ use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
+use App\Services\Mail\SendFailureClassifier;
 use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -170,12 +171,16 @@ class ProcessInboundMessage
      *
      * The code must sit where DSNs put it, a `Status: 5.x.x` line or a 55x
      * reply followed by its 5.x.x code, so numbers in quoted text such as
-     * phone numbers or version strings do not count.
+     * phone numbers or version strings do not count. A 5.7.x policy refusal
+     * is about the sender, as in {@see SendFailureClassifier}, and a 5.2.2 full
+     * mailbox usually clears, so neither condemns the address.
      */
     private function isPermanentFailure(InboundMessage $message): bool
     {
+        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}\b';
+
         return preg_match(
-            '/^\s*Status:\s*5\.\d{1,3}\.\d{1,3}\b|\b55\d[ -]5\.\d{1,3}\.\d{1,3}\b/im',
+            '/^\s*Status:\s*'.$code.'|\b55\d[ -]'.$code.'/im',
             $message->text ?? '',
         ) === 1;
     }

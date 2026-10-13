@@ -182,6 +182,29 @@ test('numbers quoted in a delayed delivery report are not read as a permanent fa
         ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted);
 });
 
+test('a bounce report that does not condemn the address is not added to the suppression list', function (string $text) {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'bounce-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: $text,
+    ));
+
+    expect(Unsubscribe::query()->where('team_id', $team->id)->exists())->toBeFalse()
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Bounced)
+        ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted);
+})->with([
+    'sender blocked by policy' => "<ada@example.com>: host mx.example.com said: 554 5.7.1 Service unavailable; Client host [192.0.2.1] blocked using zen.spamhaus.org\nStatus: 5.7.1",
+    'mailbox full' => "<ada@example.com>: host mx.example.com said: 552 5.2.2 Mailbox full\nStatus: 5.2.2",
+]);
+
 test('a permanent failure identified by its enhanced status code is added to the suppression list', function () {
     $team = Team::factory()->create();
     $contact = suppressionContact($team, 'ada@example.com');
