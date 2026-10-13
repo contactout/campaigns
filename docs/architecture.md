@@ -40,8 +40,9 @@ Everything is owned by a **team**. Routes live under `/{current_team}/...`, and 
 Start campaign
    -> SeedCampaignEmails job: CampaignStepScheduler creates first-step CampaignEmail rows
 scheduler (every minute)
-   -> campaigns:dispatch-due: due, scheduled emails of active campaigns (batches of 200),
-      at most one per run for a connection with a minimum interval, none while it is still within it
+   -> campaigns:dispatch-due: due, scheduled emails of active campaigns (batches of 200);
+      connections with a minimum interval stay out of the batch and get their oldest due email
+      instead, once their last send is outside the interval
    -> SendEmail job per email (queue worker)
         - skip unless the email is still scheduled and due (one queued job per email)
         - skip if the campaign is not active

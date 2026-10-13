@@ -24,27 +24,32 @@ class DispatchDueCampaignEmails extends Command
     /**
      * Dispatch every due scheduled email belonging to an active campaign.
      *
-     * A connection with a minimum interval between sends gets at most one email
-     * per run, and none while its last send is still within the interval.
+     * Connections with a minimum interval between sends stay out of the batch,
+     * so their backlog cannot crowd out other connections. Each of them gets
+     * its oldest due email instead, once its last send is outside the interval.
      */
     public function handle(): int
     {
-        $spaced = $this->connectionsWithinInterval();
+        $spaced = MailerConnection::query()
+            ->whereNotNull('min_seconds_between_sends')
+            ->get();
 
-        $emails = CampaignEmail::query()
-            ->with(['campaign.mailerConnection', 'step', 'recipient.contact', 'mailerConnection'])
-            ->where('status', EmailStatus::Scheduled)
-            ->where('scheduled_at', '<=', now())
-            ->whereHas('campaign', fn (Builder $query): Builder => $query->where('status', CampaignStatus::Active))
-            // Keep held-back emails out of the batch so they cannot crowd out other connections.
-            ->when($spaced !== [], fn (Builder $query): Builder => $query->where(
-                fn (Builder $query): Builder => $query
-                    ->whereNull('mailer_connection_id')
-                    ->orWhereNotIn('mailer_connection_id', array_keys($spaced)),
-            ))
-            ->orderBy('scheduled_at')
+        $emails = $this->dueEmails()
+            ->when($spaced->isNotEmpty(), fn (Builder $query): Builder => $this->withoutConnections($query, $spaced->modelKeys()))
             ->limit(self::BATCH_SIZE)
             ->get();
+
+        $spaced
+            ->filter(fn (MailerConnection $connection): bool => $this->mayDispatch($connection))
+            ->each(function (MailerConnection $connection) use ($emails): void {
+                $email = $this->dueEmails()
+                    ->where(fn (Builder $query): Builder => $this->forConnection($query, $connection->id))
+                    ->first();
+
+                if ($email instanceof CampaignEmail) {
+                    $emails->push($email);
+                }
+            });
 
         if ($emails->isEmpty()) {
             $this->info('No campaign emails are due.');
@@ -52,44 +57,69 @@ class DispatchDueCampaignEmails extends Command
             return self::SUCCESS;
         }
 
-        $dispatched = $emails->filter(function (CampaignEmail $email) use (&$spaced): bool {
-            $connection = $email->mailerConnection ?? $email->campaign->mailerConnection;
+        $emails->each(fn (CampaignEmail $email) => SendEmail::dispatch($email));
 
-            if ($connection?->min_seconds_between_sends === null) {
-                return true;
-            }
-
-            if (isset($spaced[$connection->id])) {
-                return false;
-            }
-
-            $spaced[$connection->id] = true;
-
-            return true;
-        });
-
-        $dispatched->each(fn (CampaignEmail $email) => SendEmail::dispatch($email));
-
-        $this->info(sprintf('Dispatched %d campaign email(s).', $dispatched->count()));
+        $this->info(sprintf('Dispatched %d campaign email(s).', $emails->count()));
 
         return self::SUCCESS;
     }
 
     /**
-     * Get the ids of connections whose last send is still within their minimum interval.
+     * Build the query for due, scheduled emails of active campaigns, oldest first.
      *
-     * @return array<int, true>
+     * @return Builder<CampaignEmail>
      */
-    private function connectionsWithinInterval(): array
+    private function dueEmails(): Builder
     {
-        return MailerConnection::query()
-            ->whereNotNull('min_seconds_between_sends')
-            ->whereNotNull('last_sent_at')
-            ->get()
-            ->filter(fn (MailerConnection $connection): bool => $connection->last_sent_at
-                ->addSeconds((int) $connection->min_seconds_between_sends)
-                ->isFuture())
-            ->mapWithKeys(fn (MailerConnection $connection): array => [$connection->id => true])
-            ->all();
+        return CampaignEmail::query()
+            ->with(['campaign', 'step', 'recipient.contact', 'mailerConnection'])
+            ->where('status', EmailStatus::Scheduled)
+            ->where('scheduled_at', '<=', now())
+            ->whereHas('campaign', fn (Builder $query): Builder => $query->where('status', CampaignStatus::Active))
+            ->orderBy('scheduled_at');
+    }
+
+    /**
+     * Leave out emails sent through any of the given connections.
+     *
+     * An email without its own connection sends through its campaign's.
+     *
+     * @param  Builder<CampaignEmail>  $query
+     * @param  array<int, int>  $connectionIds
+     * @return Builder<CampaignEmail>
+     */
+    private function withoutConnections(Builder $query, array $connectionIds): Builder
+    {
+        return $query->where(fn (Builder $query): Builder => $query
+            ->whereNotIn('mailer_connection_id', $connectionIds)
+            ->orWhere(fn (Builder $query): Builder => $query
+                ->whereNull('mailer_connection_id')
+                ->whereHas('campaign', fn (Builder $query): Builder => $query->where(fn (Builder $query): Builder => $query
+                    ->whereNull('mailer_connection_id')
+                    ->orWhereNotIn('mailer_connection_id', $connectionIds)))));
+    }
+
+    /**
+     * Limit the query to emails sent through the given connection.
+     *
+     * @param  Builder<CampaignEmail>  $query
+     * @return Builder<CampaignEmail>
+     */
+    private function forConnection(Builder $query, int $connectionId): Builder
+    {
+        return $query
+            ->where('mailer_connection_id', $connectionId)
+            ->orWhere(fn (Builder $query): Builder => $query
+                ->whereNull('mailer_connection_id')
+                ->whereHas('campaign', fn (Builder $query): Builder => $query->where('mailer_connection_id', $connectionId)));
+    }
+
+    /**
+     * Determine whether the connection's last send is outside its minimum interval.
+     */
+    private function mayDispatch(MailerConnection $connection): bool
+    {
+        return $connection->last_sent_at === null
+            || ! $connection->last_sent_at->addSeconds((int) $connection->min_seconds_between_sends)->isFuture();
     }
 }

@@ -245,6 +245,11 @@ export default function ConnectionFormModal({
                                             }
                                             placeholder="No minimum"
                                         />
+                                        <p className="text-xs text-muted-foreground">
+                                            Emails are dispatched once a minute,
+                                            so anything under 60 seconds acts as
+                                            60.
+                                        </p>
                                         <InputError
                                             message={
                                                 errors.min_seconds_between_sends

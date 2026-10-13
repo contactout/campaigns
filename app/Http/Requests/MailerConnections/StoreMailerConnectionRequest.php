@@ -29,8 +29,8 @@ class StoreMailerConnectionRequest extends FormRequest
             'imap_encryption' => ['nullable', Rule::in(['ssl', 'tls', 'starttls', 'none'])],
             'imap_username' => ['nullable', 'string', 'max:255'],
             'imap_password' => ['nullable', 'string', 'max:255'],
-            'sending_limit' => ['nullable', 'integer', 'min:1'],
-            'min_seconds_between_sends' => ['nullable', 'integer', 'min:1'],
+            'sending_limit' => ['nullable', 'integer', 'min:1', 'max:4294967295'],
+            'min_seconds_between_sends' => ['nullable', 'integer', 'min:1', 'max:4294967295'],
         ];
     }
 

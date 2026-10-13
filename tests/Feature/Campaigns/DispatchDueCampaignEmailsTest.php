@@ -84,6 +84,40 @@ test('dispatches at most one email per interval for a spaced connection', functi
     ));
 });
 
+test('a spaced connection backlog does not crowd out other connections', function () {
+    Queue::fake();
+
+    $spaced = MailerConnection::factory()->create(['min_seconds_between_sends' => 60]);
+    $other = MailerConnection::factory()->create();
+
+    $campaign = Campaign::factory()->active()->create();
+    $step = CampaignStep::factory()->forCampaign($campaign)->create();
+
+    $backlog = Recipient::factory()->count(201)->create(['campaign_id' => $campaign->id])
+        ->map(fn (Recipient $recipient): CampaignEmail => CampaignEmail::factory()->create([
+            'campaign_id' => $campaign->id,
+            'campaign_step_id' => $step->id,
+            'recipient_id' => $recipient->id,
+            'mailer_connection_id' => $spaced->id,
+            'status' => EmailStatus::Scheduled,
+            'scheduled_at' => now()->subMinutes(10),
+        ]));
+
+    $otherEmail = mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinute());
+    $otherEmail->update(['mailer_connection_id' => $other->id]);
+
+    $this->artisan('campaigns:dispatch-due')
+        ->expectsOutputToContain('Dispatched 2')
+        ->assertSuccessful();
+
+    Queue::assertPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($otherEmail));
+    Queue::assertPushed(
+        SendEmail::class,
+        fn (SendEmail $job): bool => $backlog->contains(fn (CampaignEmail $email): bool => $job->email->is($email)),
+    );
+    Queue::assertPushed(SendEmail::class, 2);
+});
+
 test('reports gracefully when nothing is due', function () {
     Queue::fake();
 

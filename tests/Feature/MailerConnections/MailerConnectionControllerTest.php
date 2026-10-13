@@ -200,6 +200,10 @@ test('members can set and clear the sending caps of a mailer connection', functi
         ->assertSessionHasErrors(['sending_limit', 'min_seconds_between_sends']);
 
     $this->actingAs($user)
+        ->patch($route, [...$payload, 'sending_limit' => 4294967296, 'min_seconds_between_sends' => 4294967296])
+        ->assertSessionHasErrors(['sending_limit', 'min_seconds_between_sends']);
+
+    $this->actingAs($user)
         ->patch($route, [...$payload, 'sending_limit' => '', 'min_seconds_between_sends' => ''])
         ->assertSessionHasNoErrors();
 
