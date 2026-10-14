@@ -174,13 +174,15 @@ class ProcessInboundMessage
      *
      * The code must sit where DSNs put it: a `Status: 5.x.x` line, a 55x reply
      * followed by its 5.x.x code, or a bare 55x reply opening a line or a
-     * `smtp;` diagnostic. Numbers in quoted text such as phone numbers or
-     * version strings therefore do not count.
+     * `smtp;` diagnostic. Only the report itself is read, not the quoted copy
+     * of our message, so numbers in quoted text such as phone numbers,
+     * version strings or a signature's street address do not count.
      *
      * Refusals aimed at the sender and full mailboxes, which usually clear, do
      * not condemn the address: 5.7.x, 5.2.2 and bare 552 replies never count,
-     * and a matched reply that {@see SendFailureClassifier} reads as a sender
-     * policy refusal, such as a relay denial, rules the report out.
+     * and a bare reply that {@see SendFailureClassifier} reads as a sender
+     * policy refusal, such as a relay denial, rules the report out. A reply
+     * carrying an enhanced code is judged by that code alone.
      */
     private function isPermanentFailure(InboundMessage $message): bool
     {
@@ -189,12 +191,32 @@ class ProcessInboundMessage
 
         preg_match_all(
             '/^\s*Status:\s*'.$code.'.*$|\b55\d[ -]'.$code.'.*$|'.$bare.'.*$/im',
-            $message->text ?? '',
+            $this->reportText($message),
             $matches,
         );
 
-        return $matches[0] !== []
-            && array_filter($matches[0], $this->classifier->isSmtpPolicyRejection(...)) === [];
+        $policyRefusals = array_filter(
+            $matches[0],
+            fn (string $reply): bool => preg_match('/\b5\.\d{1,3}\.\d{1,3}\b/', $reply) !== 1
+                && $this->classifier->isSmtpPolicyRejection($reply),
+        );
+
+        return $matches[0] !== [] && $policyRefusals === [];
+    }
+
+    /**
+     * Get the bounce report's own text, cut before the quoted copy of the
+     * original message.
+     */
+    private function reportText(InboundMessage $message): string
+    {
+        $parts = preg_split(
+            '/^\s*(?:-{2,}.*\b(?:original|copy of the|undelivered|returned)\b.*message|Original message headers:|Content-Type:\s*message\/rfc822)/im',
+            $message->text ?? '',
+            2,
+        );
+
+        return $parts === false ? '' : $parts[0];
     }
 
     /**

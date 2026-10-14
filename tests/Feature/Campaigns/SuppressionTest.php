@@ -206,7 +206,27 @@ test('a bounce report that does not condemn the address is not added to the supp
     'bare mailbox full' => "Delivery to ada@example.com failed.\n\n552 Mailbox full",
     'bare relay denial' => "Delivery to ada@example.com failed.\n\n550 Relay access denied",
     'bare relay denial in a diagnostic' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 554 Relay access denied",
+    'delay quoting a signature street address' => "Status: 4.4.7\nDelivery to ada@example.com is delayed.\n\n----- Original message -----\nAlex Smith\n555 Market Street, San Francisco",
 ]);
+
+test('a recipient-unknown reply that mentions a relay is still a permanent failure', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'relay-table-bounce@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: "Final-Recipient: rfc822; ada@example.com\nAction: failed\nStatus: 5.1.1\nDiagnostic-Code: smtp; 550 5.1.1 <ada@example.com>: Recipient address rejected: User unknown in relay recipient table",
+    ));
+
+    expect($contact->fresh()->status)->toBe(ContactStatus::Bounced)
+        ->and(Unsubscribe::query()->where('team_id', $team->id)->value('email'))->toBe('ada@example.com');
+});
 
 test('a bare 55x reply without an enhanced code bounces the contact and suppresses the address', function (string $text) {
     $team = Team::factory()->create();
