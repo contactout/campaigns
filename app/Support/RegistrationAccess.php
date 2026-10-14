@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\TeamRole;
 use App\Models\TeamInvitation;
 use App\Models\User;
 
@@ -33,6 +34,7 @@ class RegistrationAccess
         $invitation = TeamInvitation::query()
             ->where('code', $invitationCode)
             ->whereNull('accepted_at')
+            ->whereIn('role', TeamRole::assignableCases())
             ->where(fn ($query) => $query
                 ->whereNull('expires_at')
                 ->orWhere('expires_at', '>=', now()))

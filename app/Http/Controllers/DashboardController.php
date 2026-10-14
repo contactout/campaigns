@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\TeamRole;
 use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\MailerConnection;
@@ -23,6 +24,7 @@ class DashboardController extends Controller
             ->with(['inviter', 'team'])
             ->whereRaw('LOWER(email) = ?', [$email])
             ->whereNull('accepted_at')
+            ->whereIn('role', TeamRole::assignableCases())
             ->where(fn ($query) => $query
                 ->whereNull('expires_at')
                 ->orWhere('expires_at', '>=', now()))

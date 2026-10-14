@@ -37,6 +37,17 @@ test('login screen includes team invitation context', function () {
     );
 });
 
+test('login screen omits invitations with a role that can no longer be assigned', function () {
+    $invitation = TeamInvitation::factory()->create(['role' => TeamRole::Owner]);
+
+    $this->get(route('login', ['invitation' => $invitation->code]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('auth/login')
+            ->where('teamInvitation', null),
+        );
+});
+
 test('users can authenticate using the login screen', function () {
     $user = User::factory()->create();
 

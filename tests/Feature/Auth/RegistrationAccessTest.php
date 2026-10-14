@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\TeamRole;
 use App\Models\TeamInvitation;
 use App\Models\User;
 
@@ -70,7 +71,7 @@ test('an invitation for a different email does not allow registration', function
     $this->assertGuest();
 });
 
-test('invalid, expired or accepted invitations do not allow registration', function (?callable $makeCode) {
+test('invalid, expired, accepted or owner-role invitations do not allow registration', function (?callable $makeCode) {
     config(['app.registration_enabled' => false]);
     User::factory()->create();
 
@@ -85,6 +86,7 @@ test('invalid, expired or accepted invitations do not allow registration', funct
     'unknown code' => [null],
     'expired' => [fn () => TeamInvitation::factory()->expired()->create(['email' => 'new@example.com'])->code],
     'accepted' => [fn () => TeamInvitation::factory()->accepted()->create(['email' => 'new@example.com'])->code],
+    'owner role' => [fn () => TeamInvitation::factory()->create(['email' => 'new@example.com', 'role' => TeamRole::Owner])->code],
 ]);
 
 test('canRegister is shared with the frontend', function () {

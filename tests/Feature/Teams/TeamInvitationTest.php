@@ -157,6 +157,36 @@ test('duplicate invitations cannot be created', function () {
     $response->assertSessionHasErrors('email');
 });
 
+test('an email with a pending owner invitation can be invited again', function () {
+    Notification::fake();
+
+    $owner = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Owner,
+        'invited_by' => $owner->id,
+    ]);
+
+    $response = $this
+        ->actingAs($owner)
+        ->post(route('teams.invitations.store', $team), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Member->value,
+        ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('team_invitations', [
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Member->value,
+    ]);
+});
+
 test('team invitations cannot be created by members', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();
