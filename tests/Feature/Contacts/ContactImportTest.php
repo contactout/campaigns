@@ -234,6 +234,70 @@ test('created and updated contacts are attached to the chosen list', function ()
         ->and($list->contacts()->whereKey($skipped->id)->exists())->toBeFalse();
 });
 
+test('skipped existing contacts are attached to the chosen list without changes', function () {
+    [$team, $user] = importTeamWithMember();
+    $company = ContactField::factory()->forTeam($team)->create(['name' => 'Company']);
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+    $existing = importExistingContact($team, 'ada@example.com', 'Original');
+    $existing->properties()->create(['contact_field_id' => $company->id, 'value' => 'Old Co']);
+
+    postImport(
+        $team,
+        $user,
+        "Name,Email,Company\nAda Updated,ada@example.com,New Co\n",
+        ['name', 'email', "field:{$company->id}"],
+        ['list_id' => $list->id],
+    );
+
+    $import = ContactImport::sole();
+    $existing->refresh();
+
+    expect($import->skipped_count)->toBe(1)
+        ->and($import->created_count)->toBe(0)
+        ->and($import->updated_count)->toBe(0)
+        ->and($import->failures)->toBe([['row' => 2, 'reason' => 'A contact with this email already exists.']])
+        ->and($existing->name)->toBe('Original')
+        ->and($existing->propertyValue($company->id))->toBe('Old Co')
+        ->and($list->contacts()->whereKey($existing->id)->exists())->toBeTrue();
+});
+
+test('reimporting a file into the same list keeps one membership per contact', function (string $duplicateAction) {
+    [$team, $user] = importTeamWithMember();
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+    $csv = "Name,Email\nAda,ada@example.com\nGrace,grace@example.com\n";
+    $options = ['duplicate_action' => $duplicateAction, 'list_id' => $list->id];
+
+    postImport($team, $user, $csv, options: $options);
+    postImport($team, $user, $csv, options: $options);
+
+    expect(DB::table('contact_list')->where('contact_list_id', $list->id)->count())->toBe(2)
+        ->and(Contact::forTeam($team->id)->count())->toBe(2);
+})->with(['skip', 'update']);
+
+test('a contact already in the chosen list keeps a single membership', function () {
+    [$team, $user] = importTeamWithMember();
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+    $existing = importExistingContact($team, 'ada@example.com');
+    $list->contacts()->attach($existing);
+
+    postImport($team, $user, "Name,Email\nAda,ada@example.com\n", options: ['list_id' => $list->id]);
+
+    expect(ContactImport::sole()->skipped_count)->toBe(1)
+        ->and(DB::table('contact_list')->where('contact_list_id', $list->id)->where('contact_id', $existing->id)->count())->toBe(1);
+});
+
+test('deleted contacts are not attached to the chosen list', function () {
+    [$team, $user] = importTeamWithMember();
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+    $deleted = importExistingContact($team, 'ada@example.com');
+    $deleted->delete();
+
+    postImport($team, $user, "Name,Email\nAda,ada@example.com\n", options: ['list_id' => $list->id]);
+
+    expect(ContactImport::sole()->failures)->toBe([['row' => 2, 'reason' => 'Email belongs to a deleted contact.']])
+        ->and(DB::table('contact_list')->where('contact_list_id', $list->id)->count())->toBe(0);
+});
+
 test('imports are isolated to the current team', function () {
     [$team, $user] = importTeamWithMember();
     $otherTeam = Team::factory()->create();

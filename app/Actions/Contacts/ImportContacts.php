@@ -325,9 +325,10 @@ class ImportContacts
     }
 
     /**
-     * Update or skip the existing contact for the row, returning its id when it was updated.
+     * Update or skip the existing contact for the row, returning its id unless it is deleted.
      *
-     * Only mapped, non-blank cells overwrite existing values.
+     * Only mapped, non-blank cells overwrite existing values. Skipped contacts are
+     * left unchanged but their id is still returned so they join the chosen list.
      *
      * @param  array{email: string, name: string|null, properties: array<int, string>}  $data
      */
@@ -342,7 +343,7 @@ class ImportContacts
         if ($this->import->duplicate_action === ContactImportDuplicateAction::Skip) {
             $this->skip($row, __('A contact with this email already exists.'));
 
-            return null;
+            return $contact->id;
         }
 
         DB::transaction(function () use ($contact, $data): void {
