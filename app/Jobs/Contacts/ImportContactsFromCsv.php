@@ -41,20 +41,24 @@ class ImportContactsFromCsv implements ShouldQueue
     /**
      * Import the next batch of rows, then queue a run for the remainder.
      *
-     * A run commits its rows and progress atomically, and does nothing unless
-     * the import is unfinished and still at this run's offset, so retries and
-     * duplicate deliveries never import a batch twice.
+     * A run commits its rows and progress atomically and only imports when the
+     * import is still at this run's offset, so retries and duplicate deliveries
+     * never import a batch twice. A run whose import has already moved past its
+     * offset imports nothing but still queues the next run, so a retry after a
+     * lost dispatch keeps the import going.
      */
     public function handle(ImportContacts $importContacts): void
     {
         $import = DB::transaction(function () use ($importContacts): ?ContactImport {
             $import = ContactImport::query()->lockForUpdate()->find($this->import->id);
 
-            if ($import === null || $import->status->isFinished() || $import->byte_offset !== $this->offset) {
+            if ($import === null || $import->status->isFinished() || $import->byte_offset < $this->offset) {
                 return null;
             }
 
-            $importContacts->handle($import, $this->rowsPerRun);
+            if ($import->byte_offset === $this->offset) {
+                $importContacts->handle($import, $this->rowsPerRun);
+            }
 
             return $import;
         });

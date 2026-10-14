@@ -356,7 +356,39 @@ test('a duplicate or stale run does not reimport or overwrite progress', functio
         ->and(Contact::forTeam($team->id)->count())->toBe(2);
 
     Storage::disk('local')->assertExists($import->file_path);
-    Queue::assertPushed(ImportContactsFromCsv::class, 1);
+    expect(Queue::pushed(ImportContactsFromCsv::class)->map->offset->all())
+        ->toBe([$afterFirstRun->byte_offset, $afterFirstRun->byte_offset]);
+});
+
+test('a retry after a lost dispatch queues the next run without reimporting', function () {
+    Queue::fake();
+    [$team, $user] = importTeamWithMember();
+
+    postImport($team, $user, "Name,Email\nAda,ada@example.com\nGrace,grace@example.com\nAlan,alan@example.com\n");
+
+    $import = ContactImport::sole();
+    (new ImportContactsFromCsv($import, 0, 2))->handle(app(ImportContacts::class));
+    $offset = $import->fresh()->byte_offset;
+
+    Queue::fake();
+    (new ImportContactsFromCsv($import, 0, 2))->handle(app(ImportContacts::class));
+
+    $next = Queue::pushed(ImportContactsFromCsv::class)->sole();
+
+    expect($next->offset)->toBe($offset)
+        ->and($import->fresh()->created_count)->toBe(2)
+        ->and(Contact::forTeam($team->id)->count())->toBe(2);
+
+    Queue::fake();
+    $next->handle(app(ImportContacts::class));
+    $import->refresh();
+
+    expect($import->status)->toBe(ContactImportStatus::Completed)
+        ->and($import->created_count)->toBe(3)
+        ->and(Contact::forTeam($team->id)->count())->toBe(3);
+
+    Queue::assertNothingPushed();
+    Storage::disk('local')->assertMissing($import->file_path);
 });
 
 test('a failed run marks the import failed and discards the file', function () {
