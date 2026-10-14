@@ -1,10 +1,19 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowUpRight, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import {
+    ArrowUpRight,
+    Pencil,
+    Plus,
+    Search,
+    Trash2,
+    Upload,
+} from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import ContactFieldFormModal from '@/components/contacts/contact-field-form-modal';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
 import DeleteContactFieldModal from '@/components/contacts/delete-contact-field-modal';
+import ImportContactsModal from '@/components/contacts/import-contacts-modal';
+import ImportSummary from '@/components/contacts/import-summary';
 import InlineCell from '@/components/contacts/inline-cell';
 import InlinePropertyCell from '@/components/contacts/inline-property-cell';
 import InlineStatusCell from '@/components/contacts/inline-status-cell';
@@ -16,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { index, show } from '@/routes/contacts';
 import type {
     ContactField,
+    ContactImportSummary,
     ContactListSummary,
     ContactSummary,
     Paginated,
@@ -31,6 +41,7 @@ type Props = {
     fields: ContactField[];
     lists: ContactListSummary[];
     statuses: StatusOption[];
+    latestImport: ContactImportSummary | null;
     can: {
         create: boolean;
     };
@@ -42,6 +53,7 @@ export default function ContactsIndex({
     fields,
     lists,
     statuses,
+    latestImport,
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -171,6 +183,21 @@ export default function ContactsIndex({
                         ) : null}
 
                         {can.create ? (
+                            <ImportContactsModal
+                                fields={fields}
+                                lists={listOptions}
+                                defaultListId={filters.list}
+                            >
+                                <Button
+                                    variant="secondary"
+                                    data-test="contacts-import-button"
+                                >
+                                    <Upload /> Import CSV
+                                </Button>
+                            </ImportContactsModal>
+                        ) : null}
+
+                        {can.create ? (
                             <CreateContactModal
                                 lists={listOptions}
                                 statuses={statuses}
@@ -185,6 +212,10 @@ export default function ContactsIndex({
                         ) : null}
                     </div>
                 </div>
+
+                {latestImport ? (
+                    <ImportSummary contactImport={latestImport} />
+                ) : null}
 
                 <form
                     role="search"

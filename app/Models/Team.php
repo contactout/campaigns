@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Contact> $contacts
  * @property-read Collection<int, ContactList> $contactLists
  * @property-read Collection<int, ContactField> $contactFields
+ * @property-read Collection<int, ContactImport> $contactImports
  * @property-read Collection<int, MailerConnection> $mailerConnections
  */
 #[Fillable(['name', 'slug', 'is_personal'])]
@@ -127,6 +128,16 @@ class Team extends Model
     public function contactFields(): HasMany
     {
         return $this->hasMany(ContactField::class);
+    }
+
+    /**
+     * Get all contact CSV imports for this team.
+     *
+     * @return HasMany<ContactImport, $this>
+     */
+    public function contactImports(): HasMany
+    {
+        return $this->hasMany(ContactImport::class);
     }
 
     /**
