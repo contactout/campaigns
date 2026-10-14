@@ -63,8 +63,10 @@ return [
     | default covers loopback and private networks, which includes the Docker
     | Compose network Caddy runs on. Use "*" to trust every proxy.
     |
-    | Extra hostnames the app answers to, on top of the APP_URL host and its
-    | subdomains. Only enforced outside the local and testing environments.
+    | Extra hostnames the app accepts requests for, on top of the APP_URL host
+    | and its subdomains. Only enforced outside the local and testing
+    | environments. Generated links and cookies still use APP_URL, so this does
+    | not make a second hostname a fully working domain.
     |
     */
 

@@ -80,6 +80,7 @@ All notable changes to this project are documented here. The format is based on
 - The unsubscribe endpoint accepts RFC 8058 one-click POSTs (still signature-checked).
 - Open sign-up is now opt-in via `REGISTRATION_ENABLED`; other users join through team invitations.
 - Team invitations can no longer grant the owner role; only roles assignable to members are accepted.
+  Pending invitations created earlier with the owner role are rejected when accepted.
 - Only proxies on loopback/private networks (configurable via `TRUSTED_PROXIES`) may set
   `X-Forwarded-*` headers, and requests for hosts other than the `APP_URL` host (plus
   `TRUSTED_HOSTS`) are rejected outside local/testing. Production URLs are generated from `APP_URL`.
@@ -93,4 +94,6 @@ All notable changes to this project are documented here. The format is based on
 - PHP 8.4 is now the minimum supported version.
 - If the app sits behind a proxy outside loopback/private ranges, set `TRUSTED_PROXIES`. If it is
   reached on hostnames other than the `APP_URL` host, list them in `TRUSTED_HOSTS`. Existing Docker
-  installs: confirm HTTPS works before pulling the HSTS change into `docker/Caddyfile`.
+  installs: confirm HTTPS works before pulling the HSTS change into `docker/Caddyfile`. The header
+  uses `includeSubDomains`, so drop that directive if any subdomain of `DOMAIN` is HTTP-only.
+  `TRUSTED_HOSTS` only widens accepted hosts; links and cookies still use `APP_URL`.

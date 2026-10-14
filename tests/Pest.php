@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 /*
@@ -16,6 +17,8 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
+    // Trusted hosts are static; production-env tests would otherwise leak them.
+    ->afterEach(fn () => Request::setTrustedHosts([]))
     ->in('Feature');
 
 /*

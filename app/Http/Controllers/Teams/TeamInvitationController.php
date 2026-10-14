@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TeamInvitationController extends Controller
@@ -60,6 +61,12 @@ class TeamInvitationController extends Controller
      */
     public function accept(RespondToTeamInvitationRequest $request, TeamInvitation $invitation): RedirectResponse
     {
+        if (! in_array($invitation->role->value, array_column(TeamRole::assignable(), 'value'), true)) {
+            throw ValidationException::withMessages([
+                'invitation' => __('This invitation grants a role that can no longer be assigned. Ask the team for a new invitation.'),
+            ]);
+        }
+
         $user = $request->user();
 
         DB::transaction(function () use ($user, $invitation) {

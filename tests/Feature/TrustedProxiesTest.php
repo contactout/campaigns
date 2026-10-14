@@ -3,10 +3,6 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-afterEach(function (): void {
-    Request::setTrustedHosts([]);
-});
-
 test('forwarded headers are trusted only from private network proxies', function () {
     Route::get('proxy-probe', fn (Request $request) => [
         'secure' => $request->secure(),
