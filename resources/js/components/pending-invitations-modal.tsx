@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import TeamInvitationController from '@/actions/App/Http/Controllers/Teams/TeamInvitationController';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +29,10 @@ export default function PendingInvitationsModal({
         router.visit(TeamInvitationController.accept(invitation), {
             onStart: () => setProcessingCode(invitation.code),
             onFinish: () => setProcessingCode(null),
+            onError: (errors) =>
+                toast.error(
+                    errors.invitation ?? 'Could not accept invitation.',
+                ),
         });
     };
 
@@ -35,6 +40,10 @@ export default function PendingInvitationsModal({
         router.visit(TeamInvitationController.decline(invitation), {
             onStart: () => setProcessingCode(invitation.code),
             onFinish: () => setProcessingCode(null),
+            onError: (errors) =>
+                toast.error(
+                    errors.invitation ?? 'Could not decline invitation.',
+                ),
             onSuccess: () => {
                 if (invitations.length === 1) {
                     onOpenChange(false);
