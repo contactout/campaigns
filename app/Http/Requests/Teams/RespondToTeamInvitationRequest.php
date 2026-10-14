@@ -16,7 +16,7 @@ class RespondToTeamInvitationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'invitation' => ['required', new ValidTeamInvitation($this->user())],
+            'invitation' => ['required', new ValidTeamInvitation($this->user(), requireAssignableRole: $this->routeIs('invitations.accept'))],
         ];
     }
 

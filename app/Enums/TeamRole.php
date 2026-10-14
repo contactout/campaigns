@@ -64,16 +64,33 @@ enum TeamRole: string
     }
 
     /**
+     * Determine if this role can be assigned to team members (Owner cannot).
+     */
+    public function isAssignable(): bool
+    {
+        return $this !== self::Owner;
+    }
+
+    /**
+     * Get the role cases that can be assigned to team members.
+     *
+     * @return array<self>
+     */
+    public static function assignableCases(): array
+    {
+        return array_values(array_filter(self::cases(), fn (self $role) => $role->isAssignable()));
+    }
+
+    /**
      * Get the roles that can be assigned to team members (excludes Owner).
      *
      * @return array<array{value: string, label: string}>
      */
     public static function assignable(): array
     {
-        return collect(self::cases())
-            ->filter(fn (self $role) => $role !== self::Owner)
-            ->map(fn (self $role) => ['value' => $role->value, 'label' => $role->label()])
-            ->values()
-            ->toArray();
+        return array_map(
+            fn (self $role) => ['value' => $role->value, 'label' => $role->label()],
+            self::assignableCases(),
+        );
     }
 }

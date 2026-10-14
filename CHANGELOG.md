@@ -81,6 +81,8 @@ All notable changes to this project are documented here. The format is based on
 - Open sign-up is now opt-in via `REGISTRATION_ENABLED`; other users join through team invitations.
 - Team invitations can no longer grant the owner role; only roles assignable to members are accepted.
   Pending invitations created earlier with the owner role are rejected when accepted.
+- Pending owner-role invitations no longer allow sign-up when open registration is off and are
+  hidden from the dashboard's pending invitations; they can still be declined.
 - Only proxies on loopback/private networks (configurable via `TRUSTED_PROXIES`) may set
   `X-Forwarded-*` headers, and requests for hosts other than the `APP_URL` host (plus
   `TRUSTED_HOSTS`) are rejected outside local/testing. Production URLs are generated from `APP_URL`.

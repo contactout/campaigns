@@ -10,7 +10,7 @@ use Illuminate\Translation\PotentiallyTranslatedString;
 
 class ValidTeamInvitation implements ValidationRule
 {
-    public function __construct(protected ?User $user)
+    public function __construct(protected ?User $user, protected bool $requireAssignableRole = false)
     {
         //
     }
@@ -42,6 +42,12 @@ class ValidTeamInvitation implements ValidationRule
 
         if (strtolower($value->email) !== strtolower($this->user->email)) {
             $fail(__('This invitation was sent to a different email address.'));
+
+            return;
+        }
+
+        if ($this->requireAssignableRole && ! $value->role->isAssignable()) {
+            $fail(__('This invitation grants a role that can no longer be assigned. Ask the team for a new invitation.'));
         }
     }
 }

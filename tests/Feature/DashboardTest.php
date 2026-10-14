@@ -151,6 +151,38 @@ test('dashboard does not include accepted invitations', function () {
     );
 });
 
+test('dashboard excludes invitations with a role that can no longer be assigned', function () {
+    $owner = User::factory()->create();
+    $invitedUser = User::factory()->create(['email' => 'invited@example.com']);
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Owner,
+        'invited_by' => $owner->id,
+    ]);
+
+    $memberInvitation = TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $owner->id,
+    ]);
+
+    $response = $this
+        ->actingAs($invitedUser)
+        ->get(route('dashboard'));
+
+    $response->assertOk();
+    $response->assertInertia(fn (Assert $page) => $page
+        ->component('dashboard')
+        ->has('pendingInvitations', 1)
+        ->where('pendingInvitations.0.code', $memberInvitation->code),
+    );
+});
+
 test('dashboard excludes expired invitations without deleting them', function () {
     $owner = User::factory()->create();
     $invitedUser = User::factory()->create(['email' => 'invited@example.com']);
