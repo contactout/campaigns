@@ -132,8 +132,11 @@ class SendFailureClassifier
 
     /**
      * Determine whether an SMTP reply is a policy refusal rather than an unknown mailbox.
+     *
+     * Shared with bounce report parsing, which must not condemn an address for
+     * a refusal aimed at the sender.
      */
-    private function isSmtpPolicyRejection(string $message): bool
+    public function isSmtpPolicyRejection(string $message): bool
     {
         return preg_match('/\b5\.7\.\d{1,3}\b|relay/i', $message) === 1;
     }

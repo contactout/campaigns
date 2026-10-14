@@ -26,7 +26,10 @@ class ProcessInboundMessage
     /**
      * Create a new action instance.
      */
-    public function __construct(private readonly SuppressionList $suppressionList) {}
+    public function __construct(
+        private readonly SuppressionList $suppressionList,
+        private readonly SendFailureClassifier $classifier,
+    ) {}
 
     /**
      * Process a single inbound message for the given connection.
@@ -169,20 +172,29 @@ class ProcessInboundMessage
     /**
      * Determine whether the bounce report carries a permanent failure.
      *
-     * The code must sit where DSNs put it, a `Status: 5.x.x` line or a 55x
-     * reply followed by its 5.x.x code, so numbers in quoted text such as
-     * phone numbers or version strings do not count. A 5.7.x policy refusal
-     * is about the sender, as in {@see SendFailureClassifier}, and a 5.2.2 full
-     * mailbox usually clears, so neither condemns the address.
+     * The code must sit where DSNs put it: a `Status: 5.x.x` line, a 55x reply
+     * followed by its 5.x.x code, or a bare 55x reply opening a line or a
+     * `smtp;` diagnostic. Numbers in quoted text such as phone numbers or
+     * version strings therefore do not count.
+     *
+     * Refusals aimed at the sender and full mailboxes, which usually clear, do
+     * not condemn the address: 5.7.x, 5.2.2 and bare 552 replies never count,
+     * and a matched reply that {@see SendFailureClassifier} reads as a sender
+     * policy refusal, such as a relay denial, rules the report out.
      */
     private function isPermanentFailure(InboundMessage $message): bool
     {
         $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}\b';
+        $bare = '^\s*(?:(?:Diagnostic-Code:\s*)?smtp;\s*)?(?!552)55\d[ -](?!\d)';
 
-        return preg_match(
-            '/^\s*Status:\s*'.$code.'|\b55\d[ -]'.$code.'/im',
+        preg_match_all(
+            '/^\s*Status:\s*'.$code.'.*$|\b55\d[ -]'.$code.'.*$|'.$bare.'.*$/im',
             $message->text ?? '',
-        ) === 1;
+            $matches,
+        );
+
+        return $matches[0] !== []
+            && array_filter($matches[0], $this->classifier->isSmtpPolicyRejection(...)) === [];
     }
 
     /**

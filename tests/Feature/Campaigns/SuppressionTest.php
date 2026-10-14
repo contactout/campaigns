@@ -203,6 +203,33 @@ test('a bounce report that does not condemn the address is not added to the supp
 })->with([
     'sender blocked by policy' => "<ada@example.com>: host mx.example.com said: 554 5.7.1 Service unavailable; Client host [192.0.2.1] blocked using zen.spamhaus.org\nStatus: 5.7.1",
     'mailbox full' => "<ada@example.com>: host mx.example.com said: 552 5.2.2 Mailbox full\nStatus: 5.2.2",
+    'bare mailbox full' => "Delivery to ada@example.com failed.\n\n552 Mailbox full",
+    'bare relay denial' => "Delivery to ada@example.com failed.\n\n550 Relay access denied",
+    'bare relay denial in a diagnostic' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 554 Relay access denied",
+]);
+
+test('a bare 55x reply without an enhanced code bounces the contact and suppresses the address', function (string $text) {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'bounce-message-id@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: $text,
+    ));
+
+    expect($contact->fresh()->status)->toBe(ContactStatus::Bounced)
+        ->and(Unsubscribe::query()->where('team_id', $team->id)->value('email'))->toBe('ada@example.com');
+})->with([
+    'reply line' => "Delivery to ada@example.com failed.\n\n550 User unknown",
+    'continuation reply line' => "Delivery to ada@example.com failed.\n\n550-User unknown",
+    'diagnostic code' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 550 User unknown",
+    'other 55x reply' => "Delivery to ada@example.com failed.\n\n554 delivery error: this user doesn't have an account",
 ]);
 
 test('a permanent failure identified by its enhanced status code is added to the suppression list', function () {
