@@ -18,6 +18,7 @@ use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Team;
 use App\Models\Unsubscribe;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\RecordingCampaignMailer;
@@ -218,6 +219,15 @@ test('a signed one-click post without a csrf token unsubscribes the recipient', 
     expect(Unsubscribe::query()->sole()->email)->toBe('ada@example.com')
         ->and($recipient->fresh()->status)->toBe(RecipientStatus::Unsubscribed)
         ->and($recipient->contact->fresh()->status)->toBe(ContactStatus::Unsubscribed);
+});
+
+test('other non-get routes under the unsubscribe prefix still require a csrf token', function () {
+    Route::middleware('web')->post('unsubscribe/{recipient}/other', fn () => 'ok');
+
+    // CSRF validation is skipped under the testing environment; enable it.
+    $this->app['env'] = 'production';
+
+    $this->post('unsubscribe/1/other')->assertStatus(419);
 });
 
 test('an unsigned one-click post is rejected', function () {

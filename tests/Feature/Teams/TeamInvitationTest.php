@@ -88,6 +88,32 @@ test('team invitations can be created by admins', function () {
     $response->assertRedirect(route('teams.edit', $team));
 });
 
+test('invitations accept assignable roles and reject the owner role', function () {
+    Notification::fake();
+
+    $owner = User::factory()->create();
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    $this->actingAs($owner)
+        ->post(route('teams.invitations.store', $team), [
+            'email' => 'admin@example.com',
+            'role' => TeamRole::Admin->value,
+        ])
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($owner)
+        ->post(route('teams.invitations.store', $team), [
+            'email' => 'owner@example.com',
+            'role' => TeamRole::Owner->value,
+        ])
+        ->assertSessionHasErrors('role');
+
+    $this->assertDatabaseHas('team_invitations', ['email' => 'admin@example.com', 'role' => TeamRole::Admin->value]);
+    $this->assertDatabaseMissing('team_invitations', ['email' => 'owner@example.com']);
+});
+
 test('existing team members cannot be invited', function () {
     Notification::fake();
 
@@ -194,6 +220,36 @@ test('team invitations can be accepted', function () {
 
     expect($invitedUser->fresh()->belongsToTeam($team))->toBeTrue();
     expect($invitation->fresh()->accepted_at)->not->toBeNull();
+});
+
+test('pending owner invitations cannot be accepted but can be declined', function () {
+    $owner = User::factory()->create();
+    $invitedUser = User::factory()->create(['email' => 'invited@example.com']);
+    $team = Team::factory()->create();
+
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    $invitation = TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Owner,
+        'invited_by' => $owner->id,
+    ]);
+
+    $this->actingAs($invitedUser)
+        ->post(route('invitations.accept', $invitation))
+        ->assertSessionHasErrors([
+            'invitation' => 'This invitation grants a role that can no longer be assigned. Ask the team for a new invitation.',
+        ]);
+
+    expect($invitedUser->fresh()->belongsToTeam($team))->toBeFalse()
+        ->and($invitation->fresh()->accepted_at)->toBeNull();
+
+    $this->actingAs($invitedUser)
+        ->delete(route('invitations.decline', $invitation))
+        ->assertRedirect(route('dashboard'));
+
+    $this->assertDatabaseMissing('team_invitations', ['id' => $invitation->id]);
 });
 
 test('team invitations can be declined by the invited user', function () {

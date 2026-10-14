@@ -56,6 +56,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies & Hosts
+    |--------------------------------------------------------------------------
+    |
+    | Proxies (IPs or CIDR ranges) allowed to set X-Forwarded-* headers. The
+    | default covers loopback and private networks, which includes the Docker
+    | Compose network Caddy runs on. Use "*" to trust every proxy.
+    |
+    | Extra hostnames the app accepts requests for, on top of the APP_URL host
+    | and its subdomains. Only enforced outside the local and testing
+    | environments. Generated links and cookies still use APP_URL, so this does
+    | not make a second hostname a fully working domain.
+    |
+    */
+
+    'trusted_proxies' => array_values(array_filter(array_map(
+        trim(...),
+        explode(',', (string) env('TRUSTED_PROXIES', '127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7')),
+    ))),
+
+    'trusted_hosts' => array_values(array_filter(array_map(
+        trim(...),
+        explode(',', (string) env('TRUSTED_HOSTS', '')),
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

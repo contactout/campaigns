@@ -6,8 +6,9 @@
 	encode gzip zstd
 
 	header {
-		# HSTS — enable after you confirm HTTPS works end-to-end
-		# Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# HSTS — browsers will refuse plain HTTP for this domain for a year.
+		# Confirm HTTPS works end-to-end before first deploy.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 	}

@@ -43,6 +43,20 @@ Paste into `APP_KEY=...`, then:
 docker compose up -d --build
 ```
 
+> **Confirm HTTPS first.** `docker/Caddyfile` sends a one-year `Strict-Transport-Security`
+> (HSTS) header (`max-age=31536000; includeSubDomains`) and `.env.docker.example` sets
+> `SESSION_SECURE_COOKIE=true`. Once a browser sees HSTS it refuses plain HTTP for the domain
+> and its subdomains, so make sure `DOMAIN` resolves to this host and Caddy obtains a
+> certificate before real users visit. If unsure, comment out the HSTS line for the first
+> boot, confirm `https://YOUR_DOMAIN` loads with a valid certificate, then re-enable it and
+> run `docker compose restart caddy`. Adding `; preload` (HSTS preload list) is a separate,
+> deliberate opt-in.
+>
+> **`includeSubDomains` covers every subdomain of `DOMAIN`.** If `DOMAIN` is e.g. `example.com`,
+> browsers will also refuse plain HTTP for `www.example.com`, `intranet.example.com`, and so on.
+> If any subdomain is still HTTP-only, remove `; includeSubDomains` from `docker/Caddyfile`
+> before deploying.
+
 Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist walks you through:
 
 1. Connect an inbox (SMTP / Gmail / Outlook)
