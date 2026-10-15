@@ -184,6 +184,27 @@ test('numbers quoted in a delayed delivery report are not read as a permanent fa
         ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted);
 });
 
+test('a delay for one recipient rules out a two-recipient bounce report', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'multi-recipient-bounce@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: "Final-Recipient: rfc822; ada@example.com\nAction: failed\nStatus: 5.1.1\nDiagnostic-Code: smtp; 550 5.1.1 User unknown\n\nFinal-Recipient: rfc822; bob@example.com\nAction: delayed\nStatus: 4.4.1\nDiagnostic-Code: smtp; 451 4.4.1 Temporary failure",
+    ));
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Bounced)
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Bounced)
+        ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted)
+        ->and(Unsubscribe::query()->where('team_id', $team->id)->exists())->toBeFalse();
+});
+
 test('a bounce report that does not condemn the address is not added to the suppression list', function (string $text) {
     $team = Team::factory()->create();
     $contact = suppressionContact($team, 'ada@example.com');
