@@ -28,6 +28,8 @@ All notable changes to this project are documented here. The format is based on
 - Bulk CSV import of contacts: map columns to name, email, and contact fields (optionally creating
   fields), skip or update existing contacts by email, skip unsubscribed addresses, attach to a list
   (including existing contacts that were skipped, but not deleted ones), and see created/updated/skipped/invalid counts once the queued import finishes.
+- Per-connection daily sending limit and minimum seconds between sends, set from the SMTP
+  connection dialog; blank means no cap.
 - `REGISTRATION_ENABLED` setting to control open sign-up; the first user can always register.
 - `campaigns:verify-user` command to verify a user when system mail is not configured.
 - Architecture overview in `docs/architecture.md`, issue and pull request templates, Code of Conduct.

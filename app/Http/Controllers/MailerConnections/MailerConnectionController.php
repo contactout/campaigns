@@ -83,6 +83,7 @@ class MailerConnectionController extends Controller
         $createMailerConnection->handle($currentTeam, $request->user(), [
             'name' => $data['name'],
             'settings' => $request->settings(),
+            ...$request->limits(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
@@ -105,6 +106,7 @@ class MailerConnectionController extends Controller
         $updateMailerConnection->handle($mailerConnection, [
             'name' => $data['name'],
             'settings' => $request->settings(),
+            ...$request->limits(),
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
@@ -174,7 +176,7 @@ class MailerConnectionController extends Controller
      *
      * SMTP/IMAP credentials (including both passwords) are never serialized.
      *
-     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, last_error: string|null, created_at: string|null}
+     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, min_seconds_between_sends: int|null, last_error: string|null, created_at: string|null}
      */
     protected function connectionSummary(MailerConnection $connection): array
     {
@@ -200,6 +202,7 @@ class MailerConnectionController extends Controller
             'status_label' => $connection->status->label(),
             'sent_count' => $connection->sent_count,
             'sending_limit' => $connection->sending_limit,
+            'min_seconds_between_sends' => $connection->min_seconds_between_sends,
             'last_error' => $connection->exception_type,
             'created_at' => $connection->created_at?->toISOString(),
         ];

@@ -168,6 +168,51 @@ test('updating a mailer connection merges settings and preserves a blank passwor
         ->and($connection->smtp_setting['password'])->toBe('old-secret');
 });
 
+test('members can set and clear the sending caps of a mailer connection', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $payload = [
+        'name' => 'Primary',
+        'host' => 'smtp.example.com',
+        'port' => 587,
+        'encryption' => 'tls',
+        'from_email' => 'hello@example.com',
+    ];
+
+    $this->actingAs($user)
+        ->post(route('mailer-connections.store', ['current_team' => $team->slug]), [
+            ...$payload,
+            'sending_limit' => '50',
+            'min_seconds_between_sends' => '90',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $connection = MailerConnection::query()->where('team_id', $team->id)->firstOrFail();
+
+    expect($connection->sending_limit)->toBe(50)
+        ->and($connection->min_seconds_between_sends)->toBe(90);
+
+    $route = route('mailer-connections.update', ['current_team' => $team->slug, 'mailerConnection' => $connection]);
+
+    $this->actingAs($user)
+        ->patch($route, [...$payload, 'sending_limit' => 0, 'min_seconds_between_sends' => -1])
+        ->assertSessionHasErrors(['sending_limit', 'min_seconds_between_sends']);
+
+    $this->actingAs($user)
+        ->patch($route, [...$payload, 'sending_limit' => 4294967296, 'min_seconds_between_sends' => 4294967296])
+        ->assertSessionHasErrors(['sending_limit', 'min_seconds_between_sends']);
+
+    $this->actingAs($user)
+        ->patch($route, [...$payload, 'sending_limit' => '', 'min_seconds_between_sends' => ''])
+        ->assertSessionHasNoErrors();
+
+    $connection->refresh();
+
+    expect($connection->sending_limit)->toBeNull()
+        ->and($connection->min_seconds_between_sends)->toBeNull();
+});
+
 test('members can delete a mailer connection', function () {
     [$team, $user] = mailerConnectionTeamWithMember();
 

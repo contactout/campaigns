@@ -24,6 +24,7 @@ export type MailerConnection = {
     status_label: string;
     sent_count: number;
     sending_limit: number | null;
+    min_seconds_between_sends: number | null;
     last_error: string | null;
     created_at: string | null;
 };

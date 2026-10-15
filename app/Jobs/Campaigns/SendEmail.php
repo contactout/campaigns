@@ -222,6 +222,15 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $spacedUntil = $this->spacedUntil($connection);
+
+        if ($spacedUntil !== null) {
+            $email->scheduled_at = $this->nextAllowedAt($email, $spacedUntil, $scheduler, $window);
+            $email->save();
+
+            return;
+        }
+
         $subject = $renderer->render($email->step->subject, $email->recipient);
         $html = $renderer->render($email->step->body, $email->recipient, $connection);
         $html = $bodyBuilder->build($email, $html);
@@ -259,7 +268,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $email->recipient->last_delivered_at = now();
         $email->recipient->save();
 
-        $connection->increment('sent_count');
+        $connection->increment('sent_count', 1, ['last_sent_at' => now()]);
 
         $scheduler->scheduleNextStep($email);
     }
@@ -365,6 +374,20 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     {
         return $connection->sending_limit !== null
             && $connection->sent_count >= $connection->sending_limit;
+    }
+
+    /**
+     * Get when the connection may send again, or null when it may send now.
+     */
+    private function spacedUntil(MailerConnection $connection): ?CarbonImmutable
+    {
+        if ($connection->min_seconds_between_sends === null || $connection->last_sent_at === null) {
+            return null;
+        }
+
+        $next = $connection->last_sent_at->addSeconds($connection->min_seconds_between_sends);
+
+        return $next->isFuture() ? $next : null;
     }
 
     /**

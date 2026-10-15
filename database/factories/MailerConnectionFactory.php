@@ -41,7 +41,9 @@ class MailerConnectionFactory extends Factory
             'threw_at' => null,
             'rate_limit_expired_at' => null,
             'sending_limit' => null,
+            'min_seconds_between_sends' => null,
             'sent_count' => 0,
+            'last_sent_at' => null,
             'sending_limit_refreshed_at' => null,
         ];
     }
