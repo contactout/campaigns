@@ -74,8 +74,7 @@ flowchart TD
     mailer -->|auth or connection error| deactivated([Connection deactivated, email deferred])
 ```
 
-In detail, `campaigns:dispatch-due` takes due, scheduled emails of active campaigns in batches of
-200. Connections with a minimum interval stay out of the batch and get their oldest due email
+In detail, `campaigns:dispatch-due` takes due, scheduled emails of active campaigns in batches of 200. Connections with a minimum interval stay out of the batch and get their oldest due email
 instead, once their last send is outside the interval. Each `SendEmail` job then:
 
 - skips unless the email is still scheduled and due (one queued job per email)
