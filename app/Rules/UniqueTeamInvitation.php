@@ -2,7 +2,6 @@
 
 namespace App\Rules;
 
-use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use Closure;
@@ -37,12 +36,7 @@ class UniqueTeamInvitation implements ValidationRule
 
         $hasPendingInvitation = TeamInvitation::where('team_id', $this->team->id)
             ->whereRaw('LOWER(email) = ?', [$email])
-            ->whereNull('accepted_at')
-            ->whereIn('role', TeamRole::assignableCases())
-            ->where(function ($query) {
-                $query->whereNull('expires_at')
-                    ->orWhere('expires_at', '>', now());
-            })
+            ->valid()
             ->exists();
 
         if ($hasPendingInvitation) {
