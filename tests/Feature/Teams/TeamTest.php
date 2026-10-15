@@ -422,6 +422,13 @@ test('the team edit page shows one pending invitation per email, the latest vali
         'email' => 'invited@example.com',
         'role' => TeamRole::Owner,
         'invited_by' => $user->id,
+        'created_at' => now()->subDays(2),
+    ]);
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Member,
+        'invited_by' => $user->id,
         'created_at' => now()->subDay(),
     ]);
     $latest = TeamInvitation::factory()->create([
