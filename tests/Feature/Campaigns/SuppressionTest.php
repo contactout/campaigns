@@ -20,7 +20,9 @@ use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Team;
 use App\Models\Unsubscribe;
+use App\Services\Mail\SuppressionList;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Mailer\Exception\UnexpectedResponseException;
 use Tests\Support\RecordingCampaignMailer;
 
@@ -182,6 +184,27 @@ test('numbers quoted in a delayed delivery report are not read as a permanent fa
         ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted);
 });
 
+test('a delay for one recipient rules out a two-recipient bounce report', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'multi-recipient-bounce@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: "Final-Recipient: rfc822; ada@example.com\nAction: failed\nStatus: 5.1.1\nDiagnostic-Code: smtp; 550 5.1.1 User unknown\n\nFinal-Recipient: rfc822; bob@example.com\nAction: delayed\nStatus: 4.4.1\nDiagnostic-Code: smtp; 451 4.4.1 Temporary failure",
+    ));
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Bounced)
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Bounced)
+        ->and($contact->fresh()->status)->toBe(ContactStatus::NotContacted)
+        ->and(Unsubscribe::query()->where('team_id', $team->id)->exists())->toBeFalse();
+});
+
 test('a bounce report that does not condemn the address is not added to the suppression list', function (string $text) {
     $team = Team::factory()->create();
     $contact = suppressionContact($team, 'ada@example.com');
@@ -207,7 +230,36 @@ test('a bounce report that does not condemn the address is not added to the supp
     'bare relay denial' => "Delivery to ada@example.com failed.\n\n550 Relay access denied",
     'bare relay denial in a diagnostic' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 554 Relay access denied",
     'delay quoting a signature street address' => "Status: 4.4.7\nDelivery to ada@example.com is delayed.\n\n----- Original message -----\nAlex Smith\n555 Market Street, San Francisco",
+    'delay report with a 550 diagnostic' => "Final-Recipient: rfc822; ada@example.com\nAction: delayed\nDiagnostic-Code: smtp; 550 User unknown",
+    'delay status beside a permanent code' => "Final-Recipient: rfc822; ada@example.com\nStatus: 4.2.0\nDiagnostic-Code: smtp; 550 5.1.1 User unknown",
+    'bare spam rejection' => "Delivery to ada@example.com failed.\n\n554 rejected as spam",
+    'bare blocklist rejection' => "Delivery to ada@example.com failed.\n\n550 Sender IP is on a blocklist",
+    'bare blacklist rejection' => "Delivery to ada@example.com failed.\n\n554 Your server is black listed",
+    'bare SPF failure' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 550 SPF check failed",
+    'blocklist reply naming an IPv4 address' => "Delivery to ada@example.com failed.\n\n550 Client host [5.9.123.45] blocked using zen.spamhaus.org",
+    'bare SpamAssassin rejection' => "Delivery to ada@example.com failed.\n\n550 Message rejected by SpamAssassin",
+    'sentence-final SPF failure' => "Delivery to ada@example.com failed.\n\n550 Rejected: failed SPF.",
+    'bare DMARC rejection' => "Delivery to ada@example.com failed.\n\n550 Message rejected due to DMARC policy",
 ]);
+
+test('a real 5.1.1 code wins over a bare relay refusal in the same report', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    $fixture = suppressionScheduledEmail($team, $contact);
+    $fixture['email']->update(['status' => EmailStatus::Sent, 'dispatched_at' => now()]);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'relay-bounce@example.com',
+        inReplyTo: null,
+        references: [],
+        fromEmail: 'MAILER-DAEMON@example.com',
+        subject: 'Undelivered Mail Returned to Sender',
+        text: "Final-Recipient: rfc822; ada@example.com\nAction: failed\nStatus: 5.1.1\nDiagnostic-Code: smtp; 550 Relay access denied",
+    ));
+
+    expect($contact->fresh()->status)->toBe(ContactStatus::Bounced)
+        ->and(Unsubscribe::query()->where('team_id', $team->id)->value('email'))->toBe('ada@example.com');
+});
 
 test('a recipient-unknown reply that mentions a relay is still a permanent failure', function () {
     $team = Team::factory()->create();
@@ -249,6 +301,9 @@ test('a bare 55x reply without an enhanced code bounces the contact and suppress
     'reply line' => "Delivery to ada@example.com failed.\n\n550 User unknown",
     'continuation reply line' => "Delivery to ada@example.com failed.\n\n550-User unknown",
     'diagnostic code' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 550 User unknown",
+    'reply naming an antispam relay host' => "Delivery to ada@example.com failed.\n\n550 User unknown (mx.antispam.example.net)",
+    'reply naming an spf host' => "Delivery to ada@example.com failed.\n\n550 No such user at spf.example.com",
+    'status line ending with a period' => "Final-Recipient: rfc822; ada@example.com\nStatus: 5.1.1.",
     'other 55x reply' => "Delivery to ada@example.com failed.\n\n554 delivery error: this user doesn't have an account",
 ]);
 
@@ -413,4 +468,62 @@ test('enrollment adds nothing when every contact is suppressed', function () {
 
     expect(app(AddCampaignRecipients::class)->handle($campaign, [$contact->id], []))->toBe(0)
         ->and($campaign->recipients()->count())->toBe(0);
+});
+
+test('a contact is not emailed when any of its addresses is suppressed', function () {
+    $team = Team::factory()->create();
+    $contact = suppressionContact($team, 'ada@example.com');
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $contact->id,
+        'identity_type' => ContactIdentityType::Email,
+        'normalized_value' => 'ada@work.example.org',
+    ]);
+    $fixture = suppressionScheduledEmail($team, $contact);
+
+    Unsubscribe::factory()->forTeam($team)->create(['email' => 'ada@work.example.org', 'reason' => 'manual']);
+
+    $mailer = suppressionSend($fixture['email']);
+
+    expect($mailer->sent)->toBeEmpty()
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Failed);
+});
+
+test('unsubscribe addresses are stored lowercased', function () {
+    $team = Team::factory()->create();
+
+    $entry = Unsubscribe::factory()->forTeam($team)->create(['email' => ' Ada@Example.COM ']);
+
+    expect($entry->fresh()->email)->toBe('ada@example.com');
+});
+
+test('the migration lowercases legacy unsubscribe addresses and drops case duplicates', function () {
+    $team = Team::factory()->create();
+    $other = Team::factory()->create();
+    $now = now();
+
+    DB::table('unsubscribes')->insert([
+        ['team_id' => $team->id, 'email' => 'Ada@Example.com', 'reason' => 'recipient', 'created_at' => $now, 'updated_at' => $now],
+        ['team_id' => $team->id, 'email' => 'Bob@Example.com', 'reason' => 'recipient', 'created_at' => $now, 'updated_at' => $now],
+        ['team_id' => $other->id, 'email' => 'ADA@example.com', 'reason' => 'recipient', 'created_at' => $now, 'updated_at' => $now],
+    ]);
+
+    // MySQL's case-insensitive unique index already rules out case duplicates;
+    // only case-sensitive drivers such as SQLite can hold them.
+    if (! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+        DB::table('unsubscribes')->insert(
+            ['team_id' => $team->id, 'email' => 'bob@example.com', 'reason' => 'bounce', 'created_at' => $now, 'updated_at' => $now],
+        );
+    }
+
+    (require database_path('migrations/2026_10_15_000000_lowercase_unsubscribe_emails.php'))->up();
+
+    expect(DB::table('unsubscribes')->where('team_id', $team->id)->orderBy('email')->pluck('reason', 'email')->all())
+        ->toBe(['ada@example.com' => 'recipient', 'bob@example.com' => 'recipient'])
+        ->and(DB::table('unsubscribes')->where('team_id', $other->id)->pluck('email')->all())
+        ->toBe(['ada@example.com']);
+
+    $contact = suppressionContact($team, 'ada@example.com');
+
+    expect(app(SuppressionList::class)->isSuppressed($contact, 'ada@example.com'))->toBeTrue();
 });

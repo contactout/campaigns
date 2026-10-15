@@ -59,12 +59,14 @@ scheduler (every minute)
 
 `SuppressionList` holds the suppression rules for both sending and enrollment
 (`AddCampaignRecipients`): a contact is skipped when it has `do_not_contact_at` set, a bounced,
-unsubscribed, or do-not-contact status, or an address that matches the team's `unsubscribes` list
-exactly or by an `@domain` entry (case-insensitive). Hard bounces, from a send-time rejection or an
+unsubscribed, or do-not-contact status, or any of its addresses matches the team's `unsubscribes`
+list exactly or by an `@domain` entry (entries are stored lowercased). Hard bounces, from a send-time rejection or an
 inbound report with a `Status: 5.x.x` line, a `55x 5.x.x` reply, or a bare `55x` reply opening a
 line or `smtp;` diagnostic, bounce the contact and are added to that list. Other bounce reports,
-including 5.7.x or relay sender-policy refusals and full mailboxes (5.2.2 or bare 552), bounce only
-the recipient.
+including delay reports (`Status: 4.x.x` or `Action: delayed`), 5.7.x refusals, full mailboxes
+(5.2.2 or bare 552), and bare replies blaming a relay, spam, a blocklist, SPF or DMARC, bounce only
+the recipient. A qualifying enhanced code such as 5.1.1 wins over any bare refusal in the same
+report.
 
 `CampaignStepScheduler` counts a step's `day` from the later of the campaign start and the moment
 the recipient joined, then moves the result onto the campaign's sending window (`SendingWindow`):

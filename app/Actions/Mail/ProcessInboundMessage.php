@@ -178,30 +178,53 @@ class ProcessInboundMessage
      * of our message, so numbers in quoted text such as phone numbers,
      * version strings or a signature's street address do not count.
      *
+     * A delay report never counts: a `Status: 4.x.x` or `Action: delayed`
+     * line rules out the whole report, even a multi-recipient one where
+     * another address failed permanently.
+     *
      * Refusals aimed at the sender and full mailboxes, which usually clear, do
-     * not condemn the address: 5.7.x, 5.2.2 and bare 552 replies never count,
-     * and a bare reply that {@see SendFailureClassifier} reads as a sender
-     * policy refusal, such as a relay denial, rules the report out. A reply
-     * carrying an enhanced code is judged by that code alone.
+     * not condemn the address: 5.7.x, 5.2.2 and bare 552 replies never count.
+     * A reply carrying a qualifying enhanced code, such as 5.1.1, is judged by
+     * that code alone and wins over any other line. Otherwise the bare replies
+     * decide, and one that {@see SendFailureClassifier} reads as a sender
+     * policy refusal, such as a relay denial, or that blames spam, a blocklist,
+     * SPF or DMARC rules the report out.
      */
     private function isPermanentFailure(InboundMessage $message): bool
     {
-        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}\b';
+        $report = $this->reportText($message);
+
+        if (preg_match('/^\s*(?:Status:\s*4\.\d{1,3}\.\d{1,3}\b|Action:\s*delayed\b)/im', $report) === 1) {
+            return false;
+        }
+
+        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}(?!\d|\.\d)';
         $bare = '^\s*(?:(?:Diagnostic-Code:\s*)?smtp;\s*)?(?!552)55\d[ -](?!\d)';
 
         preg_match_all(
             '/^\s*Status:\s*'.$code.'.*$|\b55\d[ -]'.$code.'.*$|'.$bare.'.*$/im',
-            $this->reportText($message),
+            $report,
             $matches,
         );
 
-        $policyRefusals = array_filter(
-            $matches[0],
-            fn (string $reply): bool => preg_match('/\b5\.\d{1,3}\.\d{1,3}\b/', $reply) !== 1
-                && $this->classifier->isSmtpPolicyRejection($reply),
-        );
+        if ($matches[0] === []) {
+            return false;
+        }
 
-        return $matches[0] !== [] && $policyRefusals === [];
+        foreach ($matches[0] as $reply) {
+            if (preg_match('/(?<![\d.])'.$code.'/', $reply) === 1) {
+                return true;
+            }
+        }
+
+        foreach ($matches[0] as $reply) {
+            if ($this->classifier->isSmtpPolicyRejection($reply)
+                || preg_match('/\bspam\w*|\b(?:block|black|deny|ban)\s?-?list(?:ed)?\b|\bspf\b(?!\.[a-z])|\bdmarc\b(?!\.[a-z])|\b(?:dnsbl|rbl)\b|\bblocked using\b/i', $reply) === 1) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
