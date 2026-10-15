@@ -1,7 +1,8 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
 // Project site: https://contactout.github.io/campaigns/
-export default defineConfig({
+export default withMermaid(defineConfig({
     title: 'Campaigns',
     description:
         'Self-hosted email outreach. Multi-step sequences from your own inboxes.',
@@ -60,4 +61,11 @@ export default defineConfig({
             copyright: 'Copyright © 2026 ContactOut',
         },
     },
-})
+    mermaid: {
+        // Plain SVG text is measured reliably, so labels are not clipped
+        // when the theme font loads after the diagram renders.
+        htmlLabels: false,
+        flowchart: { htmlLabels: false },
+    },
+}),
+)
