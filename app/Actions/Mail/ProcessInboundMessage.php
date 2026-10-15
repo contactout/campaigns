@@ -198,7 +198,7 @@ class ProcessInboundMessage
             return false;
         }
 
-        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}(?![.\d])';
+        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}(?!\d|\.\d)';
         $bare = '^\s*(?:(?:Diagnostic-Code:\s*)?smtp;\s*)?(?!552)55\d[ -](?!\d)';
 
         preg_match_all(
@@ -219,7 +219,7 @@ class ProcessInboundMessage
 
         foreach ($matches[0] as $reply) {
             if ($this->classifier->isSmtpPolicyRejection($reply)
-                || preg_match('/\bspam\b|\b(?:block|black|deny|ban)\s?-?list(?:ed)?\b|\bspf\b(?!\.)|\bdmarc\b(?!\.)|\bspamhaus\b|\b(?:dnsbl|rbl)\b|\bblocked using\b/i', $reply) === 1) {
+                || preg_match('/\bspam\w*|\b(?:block|black|deny|ban)\s?-?list(?:ed)?\b|\bspf\b(?!\.[a-z])|\bdmarc\b(?!\.[a-z])|\b(?:dnsbl|rbl)\b|\bblocked using\b/i', $reply) === 1) {
                 return false;
             }
         }
