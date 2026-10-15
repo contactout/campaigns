@@ -50,7 +50,7 @@ test('members can add explicit contacts as recipients', function () {
             'contacts' => [$first->id, $second->id],
         ])
         ->assertRedirect()
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Recipients added.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => '2 recipients added.']);
 
     expect($campaign->recipients()->count())->toBe(2)
         ->and($campaign->recipients()->where('source', 'manual')->count())->toBe(2);
@@ -71,6 +71,25 @@ test('adding the same contact twice is idempotent', function () {
     $this->actingAs($user)->post($endpoint, ['contacts' => [$contact->id]])->assertRedirect();
 
     expect($campaign->recipients()->count())->toBe(1);
+});
+
+test('adding only suppressed contacts reports that no recipients were added', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $contact = Contact::factory()->forTeam($team)->create(['do_not_contact_at' => now()]);
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => [$contact->id],
+        ])
+        ->assertRedirect()
+        ->assertInertiaFlash('toast', ['type' => 'info', 'message' => 'No new recipients added.']);
+
+    expect($campaign->recipients()->count())->toBe(0);
 });
 
 test('members can add all contacts from a list as recipients', function () {

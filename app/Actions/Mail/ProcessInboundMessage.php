@@ -9,6 +9,8 @@ use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
+use App\Services\Mail\SendFailureClassifier;
+use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -21,6 +23,14 @@ use Illuminate\Support\Facades\DB;
  */
 class ProcessInboundMessage
 {
+    /**
+     * Create a new action instance.
+     */
+    public function __construct(
+        private readonly SuppressionList $suppressionList,
+        private readonly SendFailureClassifier $classifier,
+    ) {}
+
     /**
      * Process a single inbound message for the given connection.
      *
@@ -117,7 +127,11 @@ class ProcessInboundMessage
     }
 
     /**
-     * Mark the campaign email, recipient and contact tied to a bounce report.
+     * Mark the campaign email and recipient tied to a bounce report.
+     *
+     * Only a permanent failure also bounces the contact and adds its address
+     * to the team's suppression list; a delay or other soft failure stops this
+     * campaign but must not block the contact everywhere.
      *
      * @return bool Whether a bounced email was found.
      */
@@ -136,11 +150,73 @@ class ProcessInboundMessage
         $recipient->status = RecipientStatus::Bounced;
         $recipient->save();
 
+        if (! $this->isPermanentFailure($message)) {
+            return true;
+        }
+
         $contact = $recipient->contact;
         $contact->status = ContactStatus::Bounced;
         $contact->save();
 
+        $this->suppressionList->add(
+            $email->campaign->team_id,
+            (string) ($contact->email() ?? ''),
+            'bounce',
+            $email->campaign_id,
+            $recipient->id,
+        );
+
         return true;
+    }
+
+    /**
+     * Determine whether the bounce report carries a permanent failure.
+     *
+     * The code must sit where DSNs put it: a `Status: 5.x.x` line, a 55x reply
+     * followed by its 5.x.x code, or a bare 55x reply opening a line or a
+     * `smtp;` diagnostic. Only the report itself is read, not the quoted copy
+     * of our message, so numbers in quoted text such as phone numbers,
+     * version strings or a signature's street address do not count.
+     *
+     * Refusals aimed at the sender and full mailboxes, which usually clear, do
+     * not condemn the address: 5.7.x, 5.2.2 and bare 552 replies never count,
+     * and a bare reply that {@see SendFailureClassifier} reads as a sender
+     * policy refusal, such as a relay denial, rules the report out. A reply
+     * carrying an enhanced code is judged by that code alone.
+     */
+    private function isPermanentFailure(InboundMessage $message): bool
+    {
+        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}\b';
+        $bare = '^\s*(?:(?:Diagnostic-Code:\s*)?smtp;\s*)?(?!552)55\d[ -](?!\d)';
+
+        preg_match_all(
+            '/^\s*Status:\s*'.$code.'.*$|\b55\d[ -]'.$code.'.*$|'.$bare.'.*$/im',
+            $this->reportText($message),
+            $matches,
+        );
+
+        $policyRefusals = array_filter(
+            $matches[0],
+            fn (string $reply): bool => preg_match('/\b5\.\d{1,3}\.\d{1,3}\b/', $reply) !== 1
+                && $this->classifier->isSmtpPolicyRejection($reply),
+        );
+
+        return $matches[0] !== [] && $policyRefusals === [];
+    }
+
+    /**
+     * Get the bounce report's own text, cut before the quoted copy of the
+     * original message.
+     */
+    private function reportText(InboundMessage $message): string
+    {
+        $parts = preg_split(
+            '/^\s*(?:-{2,}.*\b(?:original|copy of the|undelivered|returned)\b.*message|Original message headers:|Content-Type:\s*message\/rfc822)/im',
+            $message->text ?? '',
+            2,
+        );
+
+        return $parts === false ? '' : $parts[0];
     }
 
     /**

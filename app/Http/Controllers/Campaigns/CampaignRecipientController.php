@@ -31,13 +31,16 @@ class CampaignRecipientController extends Controller
         /** @var array<int, int|string> $listIds */
         $listIds = $request->validated('lists') ?? [];
 
-        $addCampaignRecipients->handle(
+        $created = $addCampaignRecipients->handle(
             $campaign,
             array_map(intval(...), $contactIds),
             array_map(intval(...), $listIds),
         );
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Recipients added.')]);
+        Inertia::flash('toast', [
+            'type' => $created > 0 ? 'success' : 'info',
+            'message' => trans_choice('{0} No new recipients added.|{1} :count recipient added.|[2,*] :count recipients added.', $created),
+        ]);
 
         return back();
     }

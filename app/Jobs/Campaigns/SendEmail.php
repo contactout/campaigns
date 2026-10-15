@@ -14,12 +14,12 @@ use App\Enums\RecipientStatus;
 use App\Enums\SendFailureType;
 use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
-use App\Models\Unsubscribe;
 use App\Services\Mail\CampaignBodyBuilder;
 use App\Services\Mail\CampaignStepScheduler;
 use App\Services\Mail\PlaceholderRenderer;
 use App\Services\Mail\SendFailureClassifier;
 use App\Services\Mail\SendingWindow;
+use App\Services\Mail\SuppressionList;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -126,6 +126,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         CampaignMailer $mailer,
         SendingWindow $window,
         SendFailureClassifier $classifier,
+        SuppressionList $suppressionList,
     ): void {
         // Two workers must not send the same email. Uniqueness only guards
         // dispatch, and its lock can expire while a job waits in a backlog, so
@@ -139,7 +140,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $this->send($scheduler, $renderer, $bodyBuilder, $mailer, $window, $classifier);
+            $this->send($scheduler, $renderer, $bodyBuilder, $mailer, $window, $classifier, $suppressionList);
         } finally {
             $lock->release();
         }
@@ -155,6 +156,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         CampaignMailer $mailer,
         SendingWindow $window,
         SendFailureClassifier $classifier,
+        SuppressionList $suppressionList,
     ): void {
         // Re-read the row: the job may have sat in the queue while the email was
         // sent, failed, or pushed back by a rate limit.
@@ -183,7 +185,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
 
         $to = (string) ($email->recipient->contact->email() ?? '');
 
-        if ($to === '' || $this->isSuppressed($email, $to)) {
+        if ($to === '' || $this->isSuppressed($email, $to, $suppressionList)) {
             $this->markFailed($email);
 
             return;
@@ -228,7 +230,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
         } catch (Throwable $exception) {
             match ($classifier->classify($exception)) {
-                SendFailureType::Recipient => $this->markBounced($email, $exception),
+                SendFailureType::Recipient => $this->markBounced($email, $to, $exception, $suppressionList),
                 SendFailureType::Transient => $this->retryLater($email, $exception, $scheduler, $window),
                 SendFailureType::Connection => $this->failConnection($email, $connection, $exception, $scheduler, $window),
             };
@@ -369,10 +371,10 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * Determine whether the recipient should no longer receive campaign email.
      *
      * A recipient is skipped when it carries a terminal status (unsubscribed,
-     * replied or bounced) or the team holds an unsubscribe record for its email
-     * address.
+     * replied or bounced) or the team's suppression list rules out its contact
+     * or address.
      */
-    private function isSuppressed(CampaignEmail $email, string $to): bool
+    private function isSuppressed(CampaignEmail $email, string $to, SuppressionList $suppressionList): bool
     {
         if (in_array($email->recipient->status, [
             RecipientStatus::Unsubscribed,
@@ -382,10 +384,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return true;
         }
 
-        return Unsubscribe::query()
-            ->where('team_id', $email->campaign->team_id)
-            ->where('email', $to)
-            ->exists();
+        return $suppressionList->isSuppressed($email->recipient->contact, $to);
     }
 
     /**
@@ -400,12 +399,13 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     /**
      * Bounce the email, recipient and contact after the provider rejected the address.
      *
-     * The recipient gets no further steps; the connection is left alone because
-     * one bad address says nothing about it.
+     * The recipient gets no further steps and the address joins the team's
+     * suppression list; the connection is left alone because one bad address
+     * says nothing about it.
      */
-    private function markBounced(CampaignEmail $email, Throwable $exception): void
+    private function markBounced(CampaignEmail $email, string $to, Throwable $exception, SuppressionList $suppressionList): void
     {
-        DB::transaction(function () use ($email, $exception): void {
+        DB::transaction(function () use ($email, $to, $exception, $suppressionList): void {
             $email->status = EmailStatus::Bounced;
             $email->data = $this->withError($email->data, SendFailureType::Recipient, $exception);
             $email->save();
@@ -417,6 +417,8 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             $contact = $recipient->contact;
             $contact->status = ContactStatus::Bounced;
             $contact->save();
+
+            $suppressionList->add($email->campaign->team_id, $to, 'bounce', $email->campaign_id, $recipient->id);
         });
     }
 

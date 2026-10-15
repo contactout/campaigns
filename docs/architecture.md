@@ -32,7 +32,7 @@ Everything is owned by a **team**. Routes live under `/{current_team}/...`, and 
 | Campaign emails    | `CampaignEmail`                                                 | One row per recipient per step: scheduled time, message and thread IDs, status (`EmailStatus`), and open/reply timestamps.              |
 | Templates          | `EmailTemplate`, `TemplateFolder`, `Signature`, `Placeholder`   | Reusable content for the step editor; placeholders are merge fields rendered per contact.                                               |
 | Tracking           | `EmailOpen`, `TrackedLink`, `LinkClick`                         | Open events, rewritten links, and click events.                                                                                         |
-| Unsubscribe        | `Unsubscribe`                                                   | Per-team suppression list keyed by email address.                                                                                       |
+| Unsubscribe        | `Unsubscribe`                                                   | Per-team suppression list of addresses and `@domain` entries, read through `SuppressionList`.                                           |
 
 ## Sending pipeline
 
@@ -54,6 +54,15 @@ scheduler (every minute)
         - schedule the recipient's next step (CampaignStepScheduler)
 ```
 
+`SuppressionList` holds the suppression rules for both sending and enrollment
+(`AddCampaignRecipients`): a contact is skipped when it has `do_not_contact_at` set, a bounced,
+unsubscribed, or do-not-contact status, or an address that matches the team's `unsubscribes` list
+exactly or by an `@domain` entry (case-insensitive). Hard bounces, from a send-time rejection or an
+inbound report with a `Status: 5.x.x` line, a `55x 5.x.x` reply, or a bare `55x` reply opening a
+line or `smtp;` diagnostic, bounce the contact and are added to that list. Other bounce reports,
+including 5.7.x or relay sender-policy refusals and full mailboxes (5.2.2 or bare 552), bounce only
+the recipient.
+
 `CampaignStepScheduler` counts a step's `day` from the later of the campaign start and the moment
 the recipient joined, then moves the result onto the campaign's sending window (`SendingWindow`):
 the allowed weekdays and hour range, evaluated in the recipient's timezone when it has one.
@@ -65,8 +74,8 @@ mailer throws, `SendFailureClassifier` decides what the failure means:
 
 - **Recipient** (SMTP 550/551/553/554 answering `RCPT TO`, unless it is a 5.7.x or relay policy
   refusal; Gmail 400 "Invalid To header"; Graph 400 `ErrorInvalidRecipients`): the email,
-  recipient, and contact are marked bounced. The connection is left alone and no further steps are
-  scheduled. The same SMTP codes after `MAIL FROM` or `DATA` reject the sender or the content, so
+  recipient, and contact are marked bounced and the address joins the team's suppression list. The
+  connection is left alone and no further steps are scheduled. The same SMTP codes after `MAIL FROM` or `DATA` reject the sender or the content, so
   they are retried as transient rather than bouncing every contact in turn.
 - **Transient** (SMTP 4xx, timeouts and dropped connections, HTTP 429 and 5xx, Gmail 403 rate-limit
   reasons, and anything unrecognised): the email stays scheduled and is retried with exponential
