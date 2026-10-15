@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ContactIdentityType;
 use Database\Factories\UnsubscribeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -57,6 +58,14 @@ class Unsubscribe extends Model
     public function recipient(): BelongsTo
     {
         return $this->belongsTo(Recipient::class);
+    }
+
+    /**
+     * Store the address normalized, so lookups can match it exactly.
+     */
+    public function setEmailAttribute(string $value): void
+    {
+        $this->attributes['email'] = ContactIdentityType::Email->normalize($value);
     }
 
     /**

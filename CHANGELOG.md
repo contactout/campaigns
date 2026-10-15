@@ -36,6 +36,9 @@ All notable changes to this project are documented here. The format is based on
 - Team-wide suppression across campaigns: hard bounces join the team's unsubscribe list, `@domain`
   entries suppress a whole domain, and contacts that are do-not-contact, bounced, unsubscribed, or
   listed are skipped when added to a campaign and never emailed.
+- Suppression follow-ups: delay reports never suppress, bare spam/blocklist/SPF/DMARC refusals
+  don't count as permanent, a real 5.1.1 code wins over a relay refusal, send time checks every
+  address of the contact, and legacy mixed-case unsubscribe entries are lowercased by a migration.
 
 ### Changed
 

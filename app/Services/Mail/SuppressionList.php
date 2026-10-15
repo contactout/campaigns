@@ -7,14 +7,13 @@ use App\Enums\ContactStatus;
 use App\Models\Contact;
 use App\Models\ContactIdentity;
 use App\Models\Unsubscribe;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Decides which contacts and addresses a team must never email.
  *
  * The team's `unsubscribes` table is the suppression list. It holds exact
- * addresses and whole domains written as `@example.com`, both matched
- * case-insensitively. A contact is also suppressed when it is flagged
+ * addresses and whole domains written as `@example.com`, stored lowercased
+ * and so matched case-insensitively. A contact is also suppressed when it is flagged
  * do-not-contact or carries a bounced or unsubscribed status, so a contact
  * that bounced in one campaign is never emailed from another.
  */
@@ -60,6 +59,9 @@ class SuppressionList
 
     /**
      * Determine whether the contact must not be emailed at the given address.
+     *
+     * As at enrollment, the contact is suppressed when any of its email
+     * addresses is listed, not only the one being sent to.
      */
     public function isSuppressed(Contact $contact, string $email): bool
     {
@@ -67,7 +69,12 @@ class SuppressionList
             return true;
         }
 
-        return $this->listedEmails($contact->team_id, [$email]) !== [];
+        $emails = $contact->identities()
+            ->where('identity_type', ContactIdentityType::Email->value)
+            ->pluck('normalized_value')
+            ->all();
+
+        return $this->listedEmails($contact->team_id, [$email, ...$emails]) !== [];
     }
 
     /**
@@ -148,9 +155,8 @@ class SuppressionList
                 ...$entries,
                 ...Unsubscribe::query()
                     ->forTeam($teamId)
-                    ->whereIn(DB::raw('lower(email)'), $chunk)
-                    ->selectRaw('lower(email) as entry')
-                    ->pluck('entry')
+                    ->whereIn('email', $chunk)
+                    ->pluck('email')
                     ->all(),
             ];
         }
