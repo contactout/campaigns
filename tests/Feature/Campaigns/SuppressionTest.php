@@ -215,6 +215,7 @@ test('a bounce report that does not condemn the address is not added to the supp
     'bare blocklist rejection' => "Delivery to ada@example.com failed.\n\n550 Sender IP is on a blocklist",
     'bare blacklist rejection' => "Delivery to ada@example.com failed.\n\n554 Your server is black listed",
     'bare SPF failure' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 550 SPF check failed",
+    'blocklist reply naming an IPv4 address' => "Delivery to ada@example.com failed.\n\n550 Client host [5.9.123.45] blocked using zen.spamhaus.org",
     'bare DMARC rejection' => "Delivery to ada@example.com failed.\n\n550 Message rejected due to DMARC policy",
 ]);
 
@@ -277,6 +278,8 @@ test('a bare 55x reply without an enhanced code bounces the contact and suppress
     'reply line' => "Delivery to ada@example.com failed.\n\n550 User unknown",
     'continuation reply line' => "Delivery to ada@example.com failed.\n\n550-User unknown",
     'diagnostic code' => "Final-Recipient: rfc822; ada@example.com\nDiagnostic-Code: smtp; 550 User unknown",
+    'reply naming an antispam relay host' => "Delivery to ada@example.com failed.\n\n550 User unknown (mx.antispam.example.net)",
+    'reply naming an spf host' => "Delivery to ada@example.com failed.\n\n550 No such user at spf.example.com",
     'other 55x reply' => "Delivery to ada@example.com failed.\n\n554 delivery error: this user doesn't have an account",
 ]);
 
@@ -478,9 +481,16 @@ test('the migration lowercases legacy unsubscribe addresses and drops case dupli
     DB::table('unsubscribes')->insert([
         ['team_id' => $team->id, 'email' => 'Ada@Example.com', 'reason' => 'recipient', 'created_at' => $now, 'updated_at' => $now],
         ['team_id' => $team->id, 'email' => 'Bob@Example.com', 'reason' => 'recipient', 'created_at' => $now, 'updated_at' => $now],
-        ['team_id' => $team->id, 'email' => 'bob@example.com', 'reason' => 'bounce', 'created_at' => $now, 'updated_at' => $now],
         ['team_id' => $other->id, 'email' => 'ADA@example.com', 'reason' => 'recipient', 'created_at' => $now, 'updated_at' => $now],
     ]);
+
+    // MySQL's case-insensitive unique index already rules out case duplicates;
+    // only case-sensitive drivers such as SQLite can hold them.
+    if (DB::connection()->getDriverName() !== 'mysql') {
+        DB::table('unsubscribes')->insert(
+            ['team_id' => $team->id, 'email' => 'bob@example.com', 'reason' => 'bounce', 'created_at' => $now, 'updated_at' => $now],
+        );
+    }
 
     (require database_path('migrations/2026_10_15_000000_lowercase_unsubscribe_emails.php'))->up();
 

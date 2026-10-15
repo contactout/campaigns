@@ -179,7 +179,8 @@ class ProcessInboundMessage
      * version strings or a signature's street address do not count.
      *
      * A delay report never counts: a `Status: 4.x.x` or `Action: delayed`
-     * line rules out the whole report.
+     * line rules out the whole report, even a multi-recipient one where
+     * another address failed permanently.
      *
      * Refusals aimed at the sender and full mailboxes, which usually clear, do
      * not condemn the address: 5.7.x, 5.2.2 and bare 552 replies never count.
@@ -197,7 +198,7 @@ class ProcessInboundMessage
             return false;
         }
 
-        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}\b';
+        $code = '5\.(?!7\.|2\.2(?!\d))\d{1,3}\.\d{1,3}(?![.\d])';
         $bare = '^\s*(?:(?:Diagnostic-Code:\s*)?smtp;\s*)?(?!552)55\d[ -](?!\d)';
 
         preg_match_all(
@@ -218,7 +219,7 @@ class ProcessInboundMessage
 
         foreach ($matches[0] as $reply) {
             if ($this->classifier->isSmtpPolicyRejection($reply)
-                || preg_match('/spam|\b(?:block|black|deny|ban)\s?-?list|\bspf\b|\bdmarc\b/i', $reply) === 1) {
+                || preg_match('/\bspam\b|\b(?:block|black|deny|ban)\s?-?list(?:ed)?\b|\bspf\b(?!\.)|\bdmarc\b(?!\.)|\bspamhaus\b|\b(?:dnsbl|rbl)\b|\bblocked using\b/i', $reply) === 1) {
                 return false;
             }
         }
