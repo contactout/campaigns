@@ -2,6 +2,7 @@
 
 use App\Enums\TeamRole;
 use App\Models\Team;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -409,4 +410,46 @@ test('guests cannot access teams', function () {
     $response = $this->get(route('teams.index'));
 
     $response->assertRedirect(route('login'));
+});
+
+test('the team edit page shows one pending invitation per email, the latest valid one', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Owner->value]);
+
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Owner,
+        'invited_by' => $user->id,
+        'created_at' => now()->subDays(2),
+    ]);
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'role' => TeamRole::Member,
+        'invited_by' => $user->id,
+        'created_at' => now()->subDay(),
+    ]);
+    $latest = TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'Invited@example.com',
+        'role' => TeamRole::Member,
+        'invited_by' => $user->id,
+    ]);
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'expired@example.com',
+        'role' => TeamRole::Member,
+        'invited_by' => $user->id,
+        'expires_at' => now()->subMinute(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('teams.edit', $team))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('invitations', 1)
+            ->where('invitations.0.code', $latest->code),
+        );
 });

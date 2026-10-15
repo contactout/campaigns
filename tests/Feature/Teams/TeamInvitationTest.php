@@ -397,3 +397,26 @@ test('expired invitations cannot be accepted', function () {
 
     expect($invitedUser->fresh()->belongsToTeam($team))->toBeFalse();
 });
+
+test('an invitation expiring right now still blocks a duplicate', function () {
+    Notification::fake();
+    $this->freezeTime();
+
+    $owner = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($owner, ['role' => TeamRole::Owner->value]);
+
+    TeamInvitation::factory()->create([
+        'team_id' => $team->id,
+        'email' => 'invited@example.com',
+        'invited_by' => $owner->id,
+        'expires_at' => now(),
+    ]);
+
+    $this->actingAs($owner)
+        ->post(route('teams.invitations.store', $team), [
+            'email' => 'invited@example.com',
+            'role' => TeamRole::Member->value,
+        ])
+        ->assertSessionHasErrors('email');
+});

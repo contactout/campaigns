@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\TeamRole;
 use Database\Factories\TeamInvitationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -63,6 +64,23 @@ class TeamInvitation extends Model
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by');
+    }
+
+    /**
+     * Limit the query to invitations that can still be accepted: not accepted,
+     * not expired, and granting a role that is still assignable.
+     *
+     * @param  Builder<TeamInvitation>  $query
+     * @return Builder<TeamInvitation>
+     */
+    public function scopeValid(Builder $query): Builder
+    {
+        return $query
+            ->whereNull('accepted_at')
+            ->whereIn('role', TeamRole::assignableCases())
+            ->where(fn (Builder $query): Builder => $query
+                ->whereNull('expires_at')
+                ->orWhere('expires_at', '>=', now()));
     }
 
     /**

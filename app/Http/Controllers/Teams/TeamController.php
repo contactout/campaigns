@@ -9,6 +9,7 @@ use App\Http\Requests\Teams\DeleteTeamRequest;
 use App\Http\Requests\Teams\SaveTeamRequest;
 use App\Models\Membership;
 use App\Models\Team;
+use App\Models\TeamInvitation;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -71,8 +72,12 @@ class TeamController extends Controller
                 ];
             }),
             'invitations' => $team->invitations()
-                ->whereNull('accepted_at')
+                ->valid()
+                ->latest()
+                ->latest('id')
                 ->get()
+                ->unique(fn (TeamInvitation $invitation): string => strtolower($invitation->email))
+                ->values()
                 ->map(fn ($invitation) => [
                     'code' => $invitation->code,
                     'email' => $invitation->email,
