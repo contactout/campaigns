@@ -34,28 +34,61 @@ Everything is owned by a **team**. Routes live under `/{current_team}/...`, and 
 | Tracking           | `EmailOpen`, `TrackedLink`, `LinkClick`                         | Open events, rewritten links, and click events.                                                                                         |
 | Unsubscribe        | `Unsubscribe`                                                   | Per-team suppression list of addresses and `@domain` entries, read through `SuppressionList`.                                           |
 
+## Campaign lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Draft: create or duplicate
+    Draft --> Active: start (needs a step)
+    Active --> Stopped: stop
+    Stopped --> Active: start again
+    Draft --> Archived: archive
+    Active --> Archived: archive
+    Stopped --> Archived: archive
+```
+
+Starting a campaign records `started_at` and queues `SeedCampaignEmails`; only `Active` campaigns
+send. Stopping keeps scheduled emails in place, so starting again picks up where it left off.
+Duplicating creates a new `Draft`. `CampaignStatus` also defines `Completed`, which no action sets
+yet.
+
 ## Sending pipeline
 
+```mermaid
+flowchart TD
+    start([Start campaign]) --> seed[[SeedCampaignEmails job]]
+    seed -->|CampaignStepScheduler| scheduled[(Scheduled CampaignEmail rows)]
+    cron[[scheduler, every minute:<br/>campaigns:dispatch-due]] -->|due emails of active campaigns| scheduled
+    scheduled -->|one SendEmail job per email| job[[SendEmail on the queue worker]]
+
+    job --> checks{Still due, campaign active,<br/>address present and not suppressed?}
+    checks -->|no| failed([Failed or skipped])
+    checks -->|yes| conn{Connection usable now?}
+    conn -->|inactive| deferConn([Deferred: re-checked hourly])
+    conn -->|rate limited or inside<br/>minimum interval| deferLater([Deferred: rescheduled within the sending window])
+    conn -->|yes| render[Render placeholders, rewrite links,<br/>add unsubscribe link and open pixel]
+    render --> mailer[CampaignMailer: SMTP, Gmail, or Outlook]
+    mailer -->|sent| next([Sent: next step scheduled])
+    mailer -->|recipient rejected| bounced([Bounced: address suppressed])
+    mailer -->|transient error| retry([Retried with backoff, failed after 5 attempts])
+    mailer -->|auth or connection error| deactivated([Connection deactivated, email deferred])
 ```
-Start campaign
-   -> SeedCampaignEmails job: CampaignStepScheduler creates first-step CampaignEmail rows
-scheduler (every minute)
-   -> campaigns:dispatch-due: due, scheduled emails of active campaigns (batches of 200);
-      connections with a minimum interval stay out of the batch and get their oldest due email
-      instead, once their last send is outside the interval
-   -> SendEmail job per email (queue worker)
-        - skip unless the email is still scheduled and due (one queued job per email)
-        - skip if the campaign is not active
-        - fail if the address is missing or suppressed, or no connection is set
-        - defer an hour if the connection is not active (flagged for resume)
-        - reset the connection's daily send counter when the UTC day rolls over
-        - defer 15 minutes if the connection is rate limited (within the sending window)
-        - defer to the end of the connection's minimum interval since its last send (within the sending window)
-        - render placeholders (PlaceholderRenderer)
-        - rewrite links, add the unsubscribe link and the open pixel (CampaignBodyBuilder)
-        - send via the CampaignMailer for the connection type
-        - schedule the recipient's next step (CampaignStepScheduler)
-```
+
+In detail, `campaigns:dispatch-due` takes due, scheduled emails of active campaigns in batches of
+200. Connections with a minimum interval stay out of the batch and get their oldest due email
+instead, once their last send is outside the interval. Each `SendEmail` job then:
+
+- skips unless the email is still scheduled and due (one queued job per email)
+- skips if the campaign is not active
+- fails if the address is missing or suppressed, or no connection is set
+- defers an hour if the connection is not active (flagged for resume)
+- resets the connection's daily send counter when the UTC day rolls over
+- defers 15 minutes if the connection is rate limited (within the sending window)
+- defers to the end of the connection's minimum interval since its last send (within the sending window)
+- renders placeholders (`PlaceholderRenderer`)
+- rewrites links, adds the unsubscribe link and the open pixel (`CampaignBodyBuilder`)
+- sends via the `CampaignMailer` for the connection type
+- schedules the recipient's next step (`CampaignStepScheduler`)
 
 `SuppressionList` holds the suppression rules for both sending and enrollment
 (`AddCampaignRecipients`): a contact is skipped when it has `do_not_contact_at` set, a bounced,
@@ -102,6 +135,21 @@ the reply on the previous message. An unthreaded step, or a threaded step whose 
 no ids, starts a new conversation.
 
 ## Replies and bounces
+
+```mermaid
+flowchart TD
+    cron[[scheduler, every 10 minutes:<br/>campaigns:check-mailboxes]] --> job[[CheckConnectionMailbox job per connection]]
+    job --> reader[Mailbox reader: IMAP, Gmail, or Outlook]
+    reader -->|InboundMessage| bounce{Bounce report?}
+    bounce -->|yes| matchB{Matches a sent email<br/>by Message-ID or failed address?}
+    matchB -->|yes| permanent{Permanent failure?}
+    permanent -->|yes| hard([Email, recipient, contact bounced;<br/>address suppressed])
+    permanent -->|no| soft([Email and recipient bounced])
+    matchB -->|no| ignored([Ignored])
+    bounce -->|no| matchR{In-Reply-To or References<br/>match a sent email?}
+    matchR -->|yes| replied([Email, recipient, contact marked replied])
+    matchR -->|no| ignored
+```
 
 The scheduler runs `campaigns:check-mailboxes` every ten minutes, which queues a
 `CheckConnectionMailbox` job per connection. `MailboxReaderResolver` selects a reader
