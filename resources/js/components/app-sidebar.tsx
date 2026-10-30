@@ -1,7 +1,14 @@
 import { Link, usePage } from '@inertiajs/react';
-import { FileText, LayoutGrid, Mail, PenLine, Send, Users } from 'lucide-react';
+import {
+    FileText,
+    LayoutGrid,
+    Mail,
+    PenLine,
+    Send,
+    Settings,
+    Users,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import { TeamSwitcher } from '@/components/team-switcher';
@@ -14,16 +21,19 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useCurrentUrl } from '@/hooks/use-current-url';
 import { dashboard } from '@/routes';
 import { index as campaignsIndex } from '@/routes/campaigns';
 import { index as contactsIndex } from '@/routes/contacts';
 import { index as mailerConnectionsIndex } from '@/routes/mailer-connections';
+import { edit as editProfile } from '@/routes/profile';
 import { index as signaturesIndex } from '@/routes/signatures';
 import { index as templatesIndex } from '@/routes/templates';
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
     const page = usePage();
+    const { isCurrentOrParentUrl } = useCurrentUrl();
     const dashboardUrl = page.props.currentTeam
         ? dashboard(page.props.currentTeam.slug)
         : '/';
@@ -63,10 +73,8 @@ export function AppSidebar() {
         },
     ];
 
-    const footerNavItems: NavItem[] = [];
-
     return (
-        <Sidebar collapsible="icon" variant="inset">
+        <Sidebar collapsible="icon">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
@@ -88,11 +96,24 @@ export function AppSidebar() {
                 <NavMain items={mainNavItems} />
             </SidebarContent>
 
-            <SidebarFooter>
-                {footerNavItems.length > 0 ? (
-                    <NavFooter items={footerNavItems} className="mt-auto" />
-                ) : null}
-                <NavUser />
+            <SidebarFooter className="border-t border-sidebar-border/70">
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            asChild
+                            isActive={isCurrentOrParentUrl(editProfile())}
+                            tooltip={{ children: 'Settings' }}
+                        >
+                            <Link href={editProfile()} prefetch>
+                                <Settings />
+                                <span>Settings</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+                <div className="border-t border-sidebar-border/70 pt-2">
+                    <NavUser />
+                </div>
             </SidebarFooter>
         </Sidebar>
     );

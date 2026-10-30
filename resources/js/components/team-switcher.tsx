@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { Check, ChevronsUpDown, Plus, Users } from 'lucide-react';
+import { Check, ChevronDown, ChevronsUpDown, Plus, Users } from 'lucide-react';
 import CreateTeamModal from '@/components/create-team-modal';
 import { Button } from '@/components/ui/button';
 import {
@@ -51,6 +51,13 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
         });
     };
 
+    const teamInitial = (currentTeam?.name ?? 'Select team')
+        .charAt(0)
+        .toUpperCase();
+    const teamMeta = currentTeam?.roleLabel
+        ? `Team · ${currentTeam.roleLabel}`
+        : 'Team';
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -60,40 +67,43 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
                     className={
                         inHeader
                             ? 'h-8 gap-1 px-2'
-                            : 'w-full justify-start px-2 has-[>svg]:px-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+                            : 'h-auto w-full justify-start gap-1.5 rounded-lg border border-sidebar-border bg-background px-2 py-2 text-left font-normal group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0 hover:bg-sidebar-accent/60 has-[>svg]:px-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
                     }
                 >
-                    <Users
-                        className={
-                            inHeader
-                                ? 'hidden'
-                                : 'hidden size-4 shrink-0 group-data-[collapsible=icon]:block'
-                        }
-                    />
+                    {inHeader ? (
+                        <Users className="hidden size-4 shrink-0" />
+                    ) : (
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-[13px] font-semibold text-accent-foreground group-data-[collapsible=icon]:size-6 group-data-[collapsible=icon]:text-[11px]">
+                            {teamInitial}
+                        </span>
+                    )}
                     <div
                         className={
                             inHeader
                                 ? 'grid flex-1 text-left text-sm leading-tight'
-                                : 'grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden'
+                                : 'grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden'
                         }
                     >
                         <span
                             className={
                                 inHeader
                                     ? 'max-w-[120px] truncate font-medium'
-                                    : 'truncate font-semibold'
+                                    : 'truncate text-[13px] font-semibold tracking-[-0.01em]'
                             }
                         >
                             {currentTeam?.name ?? 'Select team'}
                         </span>
+                        {!inHeader && (
+                            <span className="truncate text-[12px] text-muted-foreground">
+                                {teamMeta}
+                            </span>
+                        )}
                     </div>
-                    <ChevronsUpDown
-                        className={
-                            inHeader
-                                ? 'size-4 opacity-50'
-                                : 'ml-auto group-data-[collapsible=icon]:hidden'
-                        }
-                    />
+                    {inHeader ? (
+                        <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
+                    ) : (
+                        <ChevronDown className="size-3 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                    )}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
