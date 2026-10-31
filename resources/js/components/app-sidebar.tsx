@@ -101,7 +101,9 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             asChild
-                            isActive={isCurrentOrParentUrl(editProfile())}
+                            // Settings lives on four sibling pages (/profile, /security,
+                            // /appearance, /teams), so match the section, not one page.
+                            isActive={isCurrentOrParentUrl('/settings')}
                             tooltip={{ children: 'Settings' }}
                         >
                             <Link href={editProfile()} prefetch>
