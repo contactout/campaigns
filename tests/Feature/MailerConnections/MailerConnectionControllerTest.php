@@ -520,3 +520,80 @@ test('each connection exposes the derived display status and needs attention fla
             ->where('connections.4.display_status', 'Disconnected')
             ->where('connections.4.needs_attention', true));
 });
+
+test('a connection that has never refreshed its sending window reports zero sent today', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    // No window has rolled yet, so nothing can be inside one. The payload says
+    // 0 and the page renders "—" for the limit rather than inventing a usage.
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A never rolled',
+        'status' => MailerConnectionStatus::Active,
+        'sent_count' => 250,
+        'sending_limit' => null,
+        'sending_limit_refreshed_at' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->where('connections.0.id', $connection->id)
+            ->where('connections.0.sent_today', 0)
+            ->where('connections.0.sending_limit', null));
+});
+
+test('the stored failure message is trimmed and capped before it leaves the server', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    // A Guzzle message appends the provider's response body after "response:".
+    $providerEcho = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A provider echo',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => [
+            'message' => 'Client error: `POST https://oauth2.example/token` resulted in a `401 Unauthorized` response: {"error":"invalid_client","error_description":"Unauthorized"}',
+        ],
+        'threw_at' => now(),
+    ]);
+
+    $long = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'B long message',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => str_repeat('S', 900)],
+        'threw_at' => now(),
+    ]);
+
+    $empty = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'C empty',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => '   '],
+        'threw_at' => now(),
+    ]);
+
+    $notAString = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'D array',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => ['not', 'a', 'string']],
+        'threw_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->has('connections', 4)
+            ->where('connections.0.id', $providerEcho->id)
+            ->where('connections.0.last_error_message', 'Client error: `POST https://oauth2.example/token` resulted in a `401 Unauthorized`')
+            ->where('connections.1.id', $long->id)
+            ->where('connections.1.last_error_message', str_repeat('S', 300).'...')
+            ->where('connections.2.id', $empty->id)
+            ->where('connections.2.last_error_message', null)
+            ->where('connections.3.id', $notAString->id)
+            ->where('connections.3.last_error_message', null));
+});

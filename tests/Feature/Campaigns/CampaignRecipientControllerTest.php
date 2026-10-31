@@ -424,3 +424,104 @@ test('re-adding an existing recipient does not schedule a second first step', fu
     expect($campaign->recipients()->count())->toBe(1)
         ->and(CampaignEmail::query()->count())->toBe(1);
 });
+
+test('another teams campaign answers exactly like a missing one', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $otherTeam = Team::factory()->create();
+    $foreignActive = Campaign::factory()->forTeam($otherTeam)->create(['status' => CampaignStatus::Active]);
+    $foreignDraft = Campaign::factory()->forTeam($otherTeam)->create(['status' => CampaignStatus::Draft]);
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $endpoint = fn (Campaign|int $campaign) => route('campaigns.recipients.store', [
+        'current_team' => $team->slug,
+        'campaign' => $campaign,
+    ]);
+
+    // A running campaign used to answer 302 with a validation error and a not
+    // started one 404, so the difference told a member of another team whether
+    // the campaign was running. Both now answer exactly like a missing id.
+    $this->actingAs($user)
+        ->post($endpoint($foreignActive), ['contacts' => [$contact->id], 'idle_only' => true])
+        ->assertNotFound()
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($user)
+        ->post($endpoint($foreignDraft), ['contacts' => [$contact->id], 'idle_only' => true])
+        ->assertNotFound();
+
+    $this->actingAs($user)
+        ->post($endpoint(987654), ['contacts' => [$contact->id], 'idle_only' => true])
+        ->assertNotFound();
+
+    expect($foreignActive->recipients()->count())->toBe(0)
+        ->and($foreignDraft->recipients()->count())->toBe(0);
+});
+
+test('the contacts grid dialog refuses a campaign that has completed or been archived', function (CampaignStatus $status) {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create(['status' => $status]);
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => [$contact->id],
+            'idle_only' => true,
+        ])
+        ->assertSessionHasErrors('campaign');
+
+    expect($campaign->recipients()->count())->toBe(0);
+})->with([
+    [CampaignStatus::Completed],
+    [CampaignStatus::Archived],
+]);
+
+test('a bulk remove rejects recipients from another campaign or team', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $kept = Recipient::factory()->for($campaign)->create();
+
+    $otherCampaign = Campaign::factory()->forTeam($team)->create();
+    $foreignRecipient = Recipient::factory()->for($otherCampaign)->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.bulk-destroy', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'recipients' => [$kept->id, $foreignRecipient->id],
+        ])
+        ->assertSessionHasErrors('recipients.1');
+
+    // Nothing was removed: the request fails whole, it does not half-apply.
+    $this->assertDatabaseHas('recipients', ['id' => $kept->id]);
+    $this->assertDatabaseHas('recipients', ['id' => $foreignRecipient->id]);
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.bulk-destroy', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), ['recipients' => []])
+        ->assertSessionHasErrors('recipients');
+
+    $otherTeam = Team::factory()->create();
+    $foreignCampaign = Campaign::factory()->forTeam($otherTeam)->create();
+
+    // Another team's campaign fails the `exists` rule, which is scoped to the
+    // bound campaign id, before the controller re-fetches the campaign for the
+    // team. The row is untouched either way; the existence oracle that predates
+    // this branch is recorded in pr.md rather than changed here.
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.bulk-destroy', [
+            'current_team' => $team->slug,
+            'campaign' => $foreignCampaign,
+        ]), ['recipients' => [$kept->id]])
+        ->assertSessionHasErrors('recipients.0');
+
+    $this->assertDatabaseHas('recipients', ['id' => $kept->id]);
+});
