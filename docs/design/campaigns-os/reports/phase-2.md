@@ -96,8 +96,8 @@ campaigns" has no delta (see gaps).
 | Four stat cards, 12px muted label, 20/700 value, green delta | `StatCard` local component; deltas only where computed |
 | `Finish setting up`, `2 of 3 done`, progress bar, done/undone icons, strikethrough done rows | setup card; `--primary` bar, `Check` in a 20px filled circle, empty 20px ring |
 | Secondary CTA on the pending row | `Go to Connections` / `Go to Contacts` / `Go to Campaigns` per undone row |
-| `Jump back in`, 32px tinted tile, title, qualifier, chevron, 64px rows | jump card; `bg-accent` tiles, real counts in the qualifier |
-| 1280 layout: 4 stat cards at 8px gap, 560/440 panel split, 24px page padding | `xl:grid-cols-4 gap-2`, `lg:grid-cols-[minmax(0,14fr)_minmax(0,11fr)]`, `px-4 py-6 lg:px-6` |
+| `Jump back in`, 32px tinted tile, title, qualifier, chevron, ~60px rows | jump card; `bg-accent` tiles, real counts in the qualifier |
+| 1280 layout: 4 stat cards at 12px gap, 560/440 panel split, 24px page padding | `xl:grid-cols-4 gap-3`, `lg:grid-cols-[minmax(0,14fr)_minmax(0,11fr)]`, `px-4 py-6 lg:px-6` |
 | No hex outside `app.css`, no second type scale | only semantic tokens and `text-[20px]/[16px]/[13px]/[12px]` one-offs |
 
 ## Deviations
@@ -252,3 +252,135 @@ arithmetic independently.
 10. **`local:devtest` cleanup**: the staged tree `/home/cua/work/campaigns-phase2` is kept for
     the next phase. `/tmp/campaigns-phase2-src.tar.gz` was deleted on the host and in the
     Space, and the temporary seeder, preview route and SQLite database were removed.
+
+## Fix round — independent review of phases 1–2
+
+The review (`review/phases-1-2.md`) returned BLOCK on three P1s and 22 P2s. This round fixed
+P1-1..3, P2-1..7, P2-9..19 and P2-21..22; P2-8 (the duplicated connection-options builder) is
+left for phase 5, where the connections payload is touched anyway.
+
+### Corrections to earlier claims
+
+The phase 1 and phase 2 reports said the table rows and stat gap "match the board". They did
+not, and those claims were wrong:
+
+- **Rows:** board 02 A dividers are at y 211/255/299/343/387/431, a **44px** pitch. Phase 1
+  shipped ~47px and called it 46px. It is now 43–44px.
+- **Stat gap:** board 01 A cards sit at x 240–484 and 497–741, a **12px** gap. Phase 2 shipped
+  8px and claimed 8px was the board. It is now 12px.
+- **Jump rows:** board 01 A rows are ~60px, not the 64px the report claimed; the implementation
+  was 61px and stays 61px.
+- **Page head:** the board's H1 cap top is at y 23; the implementation was ~31. It is now 22–23.
+
+From phase 3 on, a report must quote measured board coordinates and the matching render
+coordinates, not "matches".
+
+### P1
+
+1. **P1-1** — destructive `Button` is back to `text-white`. Dark `--destructive` is
+   `oklch(0.396 0.141 25.7)` ≈ `#80181a`; white on it is **10.18:1**, where
+   `--primary-foreground` (near-black) was **1.95:1**.
+2. **P1-2** — `.dark` gained additive values for the new tokens, and three paired foreground
+   tokens were added because the existing ones could not express the semantic (banner text was
+   near-white in dark, danger/neutral pills read colours that fail on dark fills). No existing
+   `.dark` value changed. Measured: banner `#c9c2ff` on `#221d3a` **9.69:1**; success pill
+   **9.59:1**; warning **9.43:1**; danger **8.47:1**; neutral **10.24:1**; `--primary-border`
+   `#8b7dff` **6.10:1** on the dark page. Values and reasoning are in the spec's Amendments
+   section. The alert's old `dark:` one-offs are gone.
+3. **P1-3** — `--ring` is `#6552ff` (**4.99:1** on white; the board's `#b8afff` was **1.98:1**
+   and the halo **1.16:1**). Buttons, inputs, selects, checkboxes and the jump rows now use a
+   **2px** ring (`--primary-border`, `#8b7dff` in dark, **6.10:1**), because `.dark --ring` is
+   frozen at **2.53:1**. Recorded as an accessibility waiver in the spec.
+
+### P2
+
+- **P2-1** `isFirstRun = campaigns.total === 0 && !hasFilters`; an out-of-range page no longer
+  renders "No campaigns yet" or hides the toolbar.
+- **P2-2** the status filter now navigates with `q: search`, so the typed search is applied
+  instead of silently kept in local state.
+- **P2-3** `isCurrentOrParentUrl` matches whole path segments and treats `/` as an exact path,
+  so the six no-team fallbacks no longer light up every nav item.
+- **P2-4** inputs are `text-base md:text-body`, restoring 16px on mobile to stop iOS zoom.
+- **P2-5** the sidebar is `collapsible="none"` (no collapse on the boards) and the primitive
+  still renders the mobile sheet: the static branch now comes after the mobile branch and is
+  `hidden md:flex`.
+- **P2-6** contact pills map NotContacted→neutral, Contacted→info, Replied→success,
+  Bounced→destructive, Unsubscribed→neutral, DoNotContact→warning; connection pills map
+  Active→success, Pending→warning, Deactivated/Disconnected→neutral.
+- **P2-7** the banner variant is `role="status"`, not `role="alert"`.
+- **P2-9** needs-attention is `status !== Active || exception_type !== null`; "inboxes" counts
+  every connection row. The mapping is in the controller docblock and one test row per enum
+  case exists (Active clean, Active with exception, Pending, Deactivated, Disconnected → 5
+  connections, 4 flagged).
+- **P2-10** the cohort method is kept; the age bias (a fresh send has had less time to open
+  than one from the previous window, so the delta leans negative) is recorded in the controller
+  docblock and in gaps below.
+- **P2-11** the metrics fixture now has 3 sent / 1 opened / 1 replied in-window (33.3%, the
+  1-of-3 rounding case) against 2 / 1 / 1 in the previous window (50%), giving a negative
+  `-16.7pt` delta on both rates; an email at 70 days proves the lower window bound; `can.create`
+  and the four `mailerConnections.0` fields are asserted.
+- **P2-12** deltas use `--badge-success-foreground` (**5.52:1**; `--success` was **3.30:1**) and
+  `--badge-danger-foreground` for negative deltas.
+- **P2-13** table header is `bg-muted/50` (**4.63:1**, was **4.40:1**); neutral pill foreground
+  `#52525b` (**7.03:1**); danger pill foreground `#b91c1c` (**5.91:1**).
+- **P2-14** each checklist row has `sr-only` "Done:"/"To do:" before the title and both icons are
+  `aria-hidden`.
+- **P2-15** nav pitch 36px (`SidebarMenu gap-0`), brand mark `size-6` with 6px radius, no border
+  above Settings, full-bleed divider above the user block.
+- **P2-16** `PageHead` is `items-center` with `-mt-2`, so the title block starts at 16px; rendered
+  H1 cap top is 22px against the board's 23px.
+- **P2-17** table cells `px-4`, header `h-[34px]` (35px row), name cell `py-[3px]` (43–44px
+  rows), column widths 120/80/116/64, footer 52px.
+- **P2-18** the true empty state is the shared `EmptyState` with a dashed border, 64px icon tile
+  and a 12px gap to the head; the filtered-empty state reuses it inside the table card.
+- **P2-19** stat gap 12px, stat value 24px (`--text-stat`), list dividers inset 20px via `mx-5`,
+  jump card `pb-5`.
+- **P2-21** `--text-h1/h3/body/label` (and `--text-stat`) are in `@theme`; every
+  `text-[NNpx]` one-off is gone from TSX, including 14px/11px brand and sidebar text, which now
+  use `text-body`/`text-label`.
+- **P2-22** `StatCard` moved to `components/dashboard/stat-card.tsx`; `EmptyState` restyled to
+  the 10 A pattern and used by `campaigns/index.tsx`.
+
+### Verification (fix round)
+
+Space `local:devtest`, staged from the working tree (24 dirty paths at staging), installs reused
+from the phase run. Final tree: temporary seeder, preview route and SQLite database removed.
+
+```
+$ npm run build            BUILD_EXIT=0   ✓ built
+$ npm run types:check      TYPES_EXIT=0
+$ npm run check            CHECK_EXIT=0   All 146 files formatted, 129 lint-clean
+$ php artisan test         TEST_EXIT=0    560 passed (2276 assertions)
+$ pint --test ...          PINT_EXIT=0    PASS 2 files
+$ phpstan analyse ...      PHPSTAN_EXIT=0 [OK] No errors
+```
+
+Rendered at 1280 in the Space and measured against the board with ImageMagick:
+
+| Element | Board | Render |
+| --- | --- | --- |
+| Stat-card edges | 240/484, 497/741 (gap 12) | 240/484, 497/741 |
+| Table row dividers | 211/255/299/343/387/431 (44px) | 171/214/257/300 (43px) |
+| Table header | 35px | 34px tint + 1px border |
+| Footer | 52px | 52px |
+| Empty icon tile | 716–779 (64px) | 716–779 |
+| Nav active pill | 119–152, next 155–188 (36px pitch) | 130–165 (36px) |
+| H1 cap top | 23 | 22 |
+
+Dark-mode screenshots: dashboard, campaigns list, `/login?invitation=…`, `/settings/profile`,
+welcome. The banner is a dark violet surface with light violet text, pills are dark fills with
+light foregrounds, the primary button is white-on-near-black, and the destructive button is
+white-on-`#80181a` (10.18:1). A keyboard Tab through the dashboard shows the 2px violet focus
+ring on the Campaigns nav item; programmatic `.focus()` does not trigger `:focus-visible`, so
+the check used CDP key events.
+
+The campaigns search fix and the out-of-range-page empty state are type-checked, not
+click-tested.
+
+### Gaps after the fix round
+
+- **Cohort age bias** is documented but not removed; same-age cohorts are the follow-up.
+- **P2-8** (one connection-options builder) stays open for phase 5.
+- **`--ring-halo`** is now unused by focus treatments; it remains a decoration token.
+- **`local:devtest`** keeps `/home/cua/work/campaigns-phase2` for the next phase; the source
+  tarball was deleted on the host and in the Space.

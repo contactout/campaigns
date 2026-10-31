@@ -207,3 +207,67 @@ Reference screenshots are the copy source; this list fixes structure and states.
 - Modals and creation flows (`New campaign`, `New folder`, `Add contact`, `Import CSV`,
   `Filters`, `Add SMTP`, OAuth connect, `Add placeholder`) have no boards. Keep the
   existing workings; do not invent new designs for them.
+
+## Amendments — phases 1–2 fix round
+
+Recorded after the independent review of phases 1–2 (verdict BLOCK). Each item is a deliberate
+deviation from the boards or from the original spec text, with the measurement that justifies
+it. These override the corresponding lines above.
+
+### Dark tokens (additive only)
+
+`.dark` gained counterparts for the tokens phases 1–2 introduced. No existing `.dark` value was
+changed. Contrast is WCAG 2.x against `oklch(0.145 0 0)` = `#0a0a0a` unless noted.
+
+| Token | Dark value | Measured contrast |
+| --- | --- | --- |
+| `--banner` | `#221d3a` | dark violet surface |
+| `--banner-foreground` (new) | `#c9c2ff` | 9.69:1 on the banner |
+| `--ring-halo` | `#2b2544` | decoration only |
+| `--primary-border` | `#8b7dff` | 6.10:1 on the page, 3.11:1 on the dark primary button |
+| `--success` | `#4ade80` | 11.36:1 |
+| `--success-foreground` | `#86efac` | 14.10:1 |
+| `--badge-success` / `--badge-success-foreground` | `#14351f` / `#86efac` | 9.59:1 on the fill |
+| `--badge-warning` / `--badge-warning-foreground` | `#3a2c0a` / `#fcd34d` | 9.43:1 on the fill |
+| `--badge-danger` / `--badge-danger-foreground` (new) | `#3b1518` / `#fca5a5` | 8.47:1 on the fill |
+| `--badge-neutral-foreground` (new) | `#d4d4d8` | 10.24:1 on dark muted |
+
+Three paired foreground tokens were added beyond the tokens the review named, because the
+existing ones cannot express the semantic: `--banner-foreground` (the banner text used
+`--primary`, which is near-white in dark rather than light violet), `--badge-danger-foreground`
+(the pill read `--destructive`, which is dark red in dark and fails on a dark fill), and
+`--badge-neutral-foreground` (the pill read `--muted-foreground`, which is 4.40:1 on `--muted`,
+and the agreed `#52525b` cannot be expressed without a token). Their light values are `#3222b1`
+on `#f8f7ff` (9.87:1), `#b91c1c` on `#fef2f2` (5.91:1) and `#52525b` on `#f4f4f5` (7.03:1).
+
+### Focus indicator — accessibility waiver
+
+The board's `--ring` `#b8afff` is **1.98:1** on white and `--ring-halo` `#f4ebff` is **1.16:1**,
+both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore replaced:
+
+- `--ring` is `#6552ff` in `:root` (**4.99:1** on white).
+- The focus indicator is a **2px** ring on buttons, inputs, selects, checkboxes and row links,
+  replacing the old 3px halo.
+- The ring colour is `--primary-border` (`#6552ff` light, `#8b7dff` dark, **6.10:1** on
+  `#0a0a0a`), because `.dark --ring` is frozen at `oklch(0.439 0 0)` (**2.53:1** on the dark
+  page) and this round may not change existing dark values.
+- `--ring-halo` remains a defined token for decoration only; no focus treatment depends on it.
+
+### Board measurements that override the spec text
+
+| Element | Board measurement | Shipped |
+| --- | --- | --- |
+| Empty-state icon tile | 64px (10 A x 716–779) | 64px (spec said 48px) |
+| Table row pitch | 44px (02 A dividers y 211/255/299/343/387/431) | 43–44px |
+| Table header / footer | 35px / 52px | 35px / 52px |
+| Table cell padding | 16px ("Name" x 258 against border x 241) | `px-4` |
+| Stat-card gap | 12px (01 A card edges 240/484, 497/741) | `gap-3` |
+| Stat value | 24px (cap height 17px vs 14px for the 20px H1) | `--text-stat` 24px |
+| Page head | title block starts at 16px, centred on the 32px button (H1 cap top y 23) | `-mt-2`, `items-center` |
+| Sidebar nav pitch | 36px (01 A pill 119–152, next 155–188) | 36px, `gap-0` |
+| Sidebar brand mark | 24px (01 A x 12–35, y 16–40) | `size-6`, 6px radius |
+| List dividers | inset 18px (Jump-back-in divider x 835–1237 inside card 816–1255) | `mx-5` on the list |
+
+`--text-h1/h3/body/label` replace the `text-[20px]/[16px]/[13px]/[12px]` one-offs;
+`--text-stat` is the 24px stat role. Brand and sidebar sublines that used 14px/11px now use
+`text-body`/`text-label` to stay on the scale (a 1px change each).
