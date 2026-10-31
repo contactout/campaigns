@@ -265,7 +265,7 @@ The phase 1 and phase 2 reports said the table rows and stat gap "match the boar
 not, and those claims were wrong:
 
 - **Rows:** board 02 A dividers are at y 211/255/299/343/387/431, a **44px** pitch. Phase 1
-  shipped ~47px and called it 46px. It is now 43–44px.
+  shipped ~47px and called it 46px. It is now 44px.
 - **Stat gap:** board 01 A cards sit at x 240–484 and 497–741, a **12px** gap. Phase 2 shipped
   8px and claimed 8px was the board. It is now 12px.
 - **Jump rows:** board 01 A rows are ~60px, not the 64px the report claimed; the implementation
@@ -329,8 +329,7 @@ coordinates, not "matches".
   above Settings, full-bleed divider above the user block.
 - **P2-16** `PageHead` is `items-center` with `-mt-2`, so the title block starts at 16px; rendered
   H1 cap top is 22px against the board's 23px.
-- **P2-17** table cells `px-4`, header `h-[34px]` (35px row), name cell `py-[3px]` (43–44px
-  rows), column widths 120/80/116/64, footer 52px.
+- **P2-17** table cells `px-4`, header `h-[34px]` (35px row), name cell `py-[3.5px]` (44px rows), column widths 120/80/116/64, footer 52px.
 - **P2-18** the true empty state is the shared `EmptyState` with a dashed border, 64px icon tile
   and a 12px gap to the head; the filtered-empty state reuses it inside the table card.
 - **P2-19** stat gap 12px, stat value 24px (`--text-stat`), list dividers inset 20px via `mx-5`,
@@ -360,7 +359,7 @@ Rendered at 1280 in the Space and measured against the board with ImageMagick:
 | Element | Board | Render |
 | --- | --- | --- |
 | Stat-card edges | 240/484, 497/741 (gap 12) | 240/484, 497/741 |
-| Table row dividers | 211/255/299/343/387/431 (44px) | 171/214/257/300 (43px) |
+| Table row dividers | 211/255/299/343/387/431 (44px) | 171/215/259/303 (44px) |
 | Table header | 35px | 34px tint + 1px border |
 | Footer | 52px | 52px |
 | Empty icon tile | 716–779 (64px) | 716–779 |

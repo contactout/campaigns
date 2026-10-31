@@ -250,7 +250,7 @@ export default function CampaignsIndex({
                                                     key={campaign.id}
                                                     data-test="campaign-row"
                                                 >
-                                                    <TableCell className="py-[3px]">
+                                                    <TableCell className="py-[3.5px]">
                                                         <Link
                                                             href={show.url([
                                                                 slug,

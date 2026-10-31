@@ -258,7 +258,7 @@ both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore repl
 | Element | Board measurement | Shipped |
 | --- | --- | --- |
 | Empty-state icon tile | 64px (10 A x 716–779) | 64px (spec said 48px) |
-| Table row pitch | 44px (02 A dividers y 211/255/299/343/387/431) | 43–44px |
+| Table row pitch | 44px (02 A dividers y 211/255/299/343/387/431) | 44px |
 | Table header / footer | 35px / 52px | 35px / 52px |
 | Table cell padding | 16px ("Name" x 258 against border x 241) | `px-4` |
 | Stat-card gap | 12px (01 A card edges 240/484, 497/741) | `gap-3` |
