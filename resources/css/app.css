@@ -100,7 +100,9 @@
     --secondary: #f0eeff;
     --secondary-foreground: #3222b1;
     --muted: #f4f4f5;
-    --muted-foreground: #71717a;
+    /* 4.81:1 on `--muted` and 4.63:1 on the selected-row `--accent`; #71717a was
+       4.40 and 4.23, under 4.5 for the 12px sublines those two fills carry. */
+    --muted-foreground: #6b6b74;
     --accent: #f0eeff;
     --accent-foreground: #3222b1;
     --destructive: #dc2626;
@@ -152,11 +154,16 @@
     --destructive-foreground: oklch(0.637 0.237 25.331);
     --border: oklch(0.269 0 0);
     --input: oklch(0.269 0 0);
-    --ring: oklch(0.439 0 0);
+    /* 6.10:1 on the page, 5.61:1 on the primary/5 focused cell fill and 4.67:1 on
+       a selected row: the grid cells moved to `ring-ring`, and shadcn's #525252
+       was 2.54:1 there. */
+    --ring: #8b7dff;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
+    /* The logo tile is white-on-white in dark when both tokens are `0.985`
+       (1.00:1). The brand violet puts 10.50:1 under the white glyph. */
+    --sidebar-primary: #3222b1;
+    --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: oklch(0.269 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(0.269 0 0);

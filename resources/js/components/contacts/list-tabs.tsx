@@ -94,7 +94,7 @@ export default function ListTabs({
                             className={cn(
                                 'text-label leading-4 tabular-nums',
                                 activeListId === list.id
-                                    ? 'text-primary/70'
+                                    ? 'text-primary'
                                     : 'text-muted-foreground',
                             )}
                         >

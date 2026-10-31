@@ -1,5 +1,6 @@
 import { Form, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
+import NativeSelect from '@/components/native-select';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -117,13 +118,12 @@ export default function ConnectionFormModal({
                                     <Label htmlFor="encryption">
                                         Encryption
                                     </Label>
-                                    <select
+                                    <NativeSelect
                                         id="encryption"
                                         name="encryption"
                                         defaultValue={
                                             connection?.encryption ?? 'tls'
                                         }
-                                        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                     >
                                         {encryptionOptions.map((option) => (
                                             <option
@@ -133,7 +133,7 @@ export default function ConnectionFormModal({
                                                 {option.label}
                                             </option>
                                         ))}
-                                    </select>
+                                    </NativeSelect>
                                     <InputError message={errors.encryption} />
                                 </div>
 
@@ -309,14 +309,13 @@ export default function ConnectionFormModal({
                                         <Label htmlFor="imap_encryption">
                                             Encryption
                                         </Label>
-                                        <select
+                                        <NativeSelect
                                             id="imap_encryption"
                                             name="imap_encryption"
                                             defaultValue={
                                                 connection?.imap_encryption ??
                                                 'ssl'
                                             }
-                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             {imapEncryptionOptions.map(
                                                 (option) => (
@@ -328,7 +327,7 @@ export default function ConnectionFormModal({
                                                     </option>
                                                 ),
                                             )}
-                                        </select>
+                                        </NativeSelect>
                                         <InputError
                                             message={errors.imap_encryption}
                                         />

@@ -89,7 +89,11 @@ export default function PageHead({
                     {titleAddon}
                 </div>
                 {actions ? (
-                    <div className="flex shrink-0 items-center gap-2">
+                    // Wraps: the campaign detail head's action row is 321px wide at
+                    // 390, and `overflow-x-clip` on the layout means a 320px
+                    // viewport (or 390 at 122% zoom, WCAG 1.4.10) would cut the
+                    // overflow menu in half with no way to scroll to it.
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                         {actions}
                     </div>
                 ) : null}

@@ -37,7 +37,7 @@ export default function StartBlockedPanel({
         >
             <div className="flex gap-3">
                 <AlertCircle
-                    className="mt-0.5 size-4 shrink-0 text-destructive-foreground"
+                    className="mt-0.5 size-4 shrink-0 text-badge-danger-foreground"
                     aria-hidden
                 />
                 <div className="min-w-0">

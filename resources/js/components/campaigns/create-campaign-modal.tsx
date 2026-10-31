@@ -1,6 +1,7 @@
 import { Form, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import NativeSelect from '@/components/native-select';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -75,10 +76,9 @@ export default function CreateCampaignModal({
                                         <Label htmlFor="mailer_connection_id">
                                             Connection
                                         </Label>
-                                        <select
+                                        <NativeSelect
                                             id="mailer_connection_id"
                                             name="mailer_connection_id"
-                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                             defaultValue=""
                                         >
                                             <option value="">
@@ -94,7 +94,7 @@ export default function CreateCampaignModal({
                                                     </option>
                                                 ),
                                             )}
-                                        </select>
+                                        </NativeSelect>
                                         <InputError
                                             message={
                                                 errors.mailer_connection_id

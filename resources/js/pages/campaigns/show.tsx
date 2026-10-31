@@ -454,7 +454,7 @@ export default function CampaignShow({
                         )}
                     >
                         <AlertCircle
-                            className="size-4 shrink-0 text-destructive-foreground"
+                            className="size-4 shrink-0 text-badge-danger-foreground"
                             aria-hidden
                         />
                         This campaign can&apos;t start until you resolve{' '}

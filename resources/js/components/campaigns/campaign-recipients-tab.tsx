@@ -226,6 +226,38 @@ export default function CampaignRecipientsTab({
                                 </Button>
                             }
                         />
+                    ) : recipients.total > 0 ? (
+                        // Removing the last rows on a page past the first leaves a
+                        // page the paginator cannot show: the empty state below
+                        // would claim the campaign has no recipients and hide the
+                        // only way back.
+                        <EmptyState
+                            className="border-0 py-16"
+                            title="This page is empty"
+                            description={`This campaign has ${recipients.total} ${
+                                recipients.total === 1
+                                    ? 'recipient'
+                                    : 'recipients'
+                            }, but none on page ${recipients.current_page}. Go back to the first page.`}
+                            actions={
+                                <Button
+                                    variant="outline"
+                                    onClick={() =>
+                                        router.get(
+                                            show.url([slug, campaignId]),
+                                            {},
+                                            {
+                                                preserveState: true,
+                                                preserveScroll: true,
+                                                replace: true,
+                                            },
+                                        )
+                                    }
+                                >
+                                    Back to page 1
+                                </Button>
+                            }
+                        />
                     ) : (
                         <EmptyState
                             className="border-0 py-16"
