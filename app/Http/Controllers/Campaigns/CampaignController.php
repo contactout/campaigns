@@ -85,7 +85,7 @@ class CampaignController extends Controller
             'can' => [
                 'create' => $user->can('create', [Campaign::class, $currentTeam]),
             ],
-            'mailerConnections' => $this->mailerConnectionOptions($currentTeam),
+            'mailerConnections' => MailerConnection::optionsForTeam($currentTeam->id),
         ]);
     }
 
@@ -290,7 +290,7 @@ class CampaignController extends Controller
                 'archive' => $request->user()->can('archive', $campaign),
                 'duplicate' => $request->user()->can('duplicate', $campaign),
             ],
-            'mailerConnections' => $this->mailerConnectionOptions($currentTeam),
+            'mailerConnections' => MailerConnection::optionsForTeam($currentTeam->id),
         ]);
     }
 
@@ -639,27 +639,6 @@ class CampaignController extends Controller
             'step_id' => $stepId,
             'step_sequence' => $stepSequence,
         ];
-    }
-
-    /**
-     * Map the team's mailer connections to the compact options payload used by campaign modals.
-     *
-     * @return array<int, array{id: int, name: string, status: string, status_label: string}>
-     */
-    protected function mailerConnectionOptions(Team $team): array
-    {
-        return MailerConnection::query()
-            ->forTeam($team->id)
-            ->orderBy('name')
-            ->get()
-            ->map(fn (MailerConnection $connection): array => [
-                'id' => $connection->id,
-                'name' => $connection->name,
-                'status' => $connection->status->value,
-                'status_label' => $connection->status->label(),
-            ])
-            ->values()
-            ->all();
     }
 
     /**

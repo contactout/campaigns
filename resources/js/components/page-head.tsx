@@ -1,14 +1,22 @@
 import { Link } from '@inertiajs/react';
 import { ChevronLeft } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 
 type Props = {
     title: string;
     description?: string;
     actions?: ReactNode;
-    /** Renders a back chevron before the title, as on the campaign detail boards. */
-    back?: { href: string; label: string };
+    /**
+     * Renders a back chevron before the title, as on the campaign detail boards.
+     * `onClick` lets a page intercept the visit (for example to confirm before
+     * discarding unsaved edits).
+     */
+    back?: {
+        href: string;
+        label: string;
+        onClick?: (event: MouseEvent<Element>) => void;
+    };
     /** Rendered after the title, inside the title block (for example a status pill). */
     titleAddon?: ReactNode;
     /**
@@ -37,6 +45,7 @@ export default function PageHead({
                         <Link
                             href={back.href}
                             aria-label={back.label}
+                            onClick={back.onClick}
                             className="-ml-1.5 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary-border"
                         >
                             <ChevronLeft className="size-4" aria-hidden />

@@ -28,6 +28,11 @@ type Props = {
     toolbar?: 'icons' | 'board';
     actions?: ReactNode;
     minHeightClass?: string;
+    /**
+     * Receives a function that inserts text at the cursor, so a page can offer
+     * its own placeholder chips outside the toolbar.
+     */
+    insertRef?: { current: ((text: string) => void) | null };
 };
 
 export default function RichTextEditor({
@@ -39,6 +44,7 @@ export default function RichTextEditor({
     toolbar = 'icons',
     actions,
     minHeightClass = 'min-h-72',
+    insertRef,
 }: Props) {
     const [html, setHtml] = useState(value);
     const [linkOpen, setLinkOpen] = useState(false);
@@ -73,6 +79,20 @@ export default function RichTextEditor({
     useEffect(() => {
         editor?.setEditable(!readOnly);
     }, [editor, readOnly]);
+
+    useEffect(() => {
+        if (!insertRef) {
+            return;
+        }
+
+        insertRef.current = (text: string) => {
+            editor?.chain().focus().insertContent(text).run();
+        };
+
+        return () => {
+            insertRef.current = null;
+        };
+    }, [editor, insertRef]);
 
     useEffect(() => {
         if (!editor) {

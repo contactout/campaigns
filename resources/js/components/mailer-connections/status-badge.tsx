@@ -1,27 +1,29 @@
 import { Badge } from '@/components/ui/badge';
-import type { MailerConnectionStatus } from '@/types';
+import type { MailerConnectionDisplayStatus } from '@/types';
 
 const variants: Record<
-    MailerConnectionStatus,
-    'success' | 'warning' | 'neutral'
+    MailerConnectionDisplayStatus,
+    'success' | 'warning' | 'neutral' | 'destructive'
 > = {
+    Verified: 'success',
+    Failed: 'destructive',
     Pending: 'warning',
-    Active: 'success',
     Deactivated: 'neutral',
     Disconnected: 'neutral',
 };
 
 type Props = {
-    status: string;
+    status: MailerConnectionDisplayStatus;
     label: string;
 };
 
+/**
+ * The connections table pill.
+ *
+ * `status` is the derived display status, not the stored enum: an Active
+ * connection with a recorded exception is Failed here, which is exactly when
+ * the dashboard counts it as needing attention.
+ */
 export default function MailerConnectionStatusBadge({ status, label }: Props) {
-    return (
-        <Badge
-            variant={variants[status as MailerConnectionStatus] ?? 'neutral'}
-        >
-            {label}
-        </Badge>
-    );
+    return <Badge variant={variants[status] ?? 'neutral'}>{label}</Badge>;
 }

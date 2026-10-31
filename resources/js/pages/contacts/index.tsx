@@ -181,15 +181,32 @@ export default function ContactsIndex({
         setFieldModalOpen(true);
     };
 
-    const restoreAfterDelete = (deleted: number) => {
+    /**
+     * Return to the list the user was looking at after a delete.
+     *
+     * Every successful DELETE redirects to the bare index, so the browser is on
+     * unfiltered page 1 by the time a bulk loop ends. `force` visits even when
+     * the target is the bare first page, because the failure path has to replace
+     * that bare URL with the filtered one it started from.
+     */
+    const restoreAfterDelete = (
+        deleted: number,
+        force = false,
+        onDone?: () => void,
+    ) => {
         const perPage = contacts.per_page || 25;
         const remaining = Math.max(0, contacts.total - deleted);
         const lastPage = Math.max(1, Math.ceil(remaining / perPage));
         const targetPage = Math.min(contacts.current_page, lastPage);
         const needsVisit =
-            hasFilters || targetPage !== 1 || contacts.current_page !== 1;
+            force ||
+            hasFilters ||
+            targetPage !== 1 ||
+            contacts.current_page !== 1;
 
         if (!needsVisit) {
+            onDone?.();
+
             return;
         }
 
@@ -205,6 +222,7 @@ export default function ContactsIndex({
                 preserveState: true,
                 replace: true,
                 async: true,
+                onFinish: () => onDone?.(),
             },
         );
     };
@@ -241,9 +259,21 @@ export default function ContactsIndex({
                         ? `Deleted ${done} of ${total} ${noun}. The rest were not deleted.`
                         : `Marked ${done} of ${total} ${noun} as do not contact. The rest were not changed.`;
 
-                setSelected(ids.slice(done));
                 setBulkError(message);
                 toast.error(message);
+
+                if (kind === 'delete') {
+                    // The successful DELETEs moved the browser to the bare index;
+                    // go back to the filtered page and page number the loop began
+                    // on, then re-select what is left once that page has landed.
+                    restoreAfterDelete(done, true, () =>
+                        setSelected(ids.slice(done)),
+                    );
+
+                    return;
+                }
+
+                setSelected(ids.slice(done));
 
                 // Reflect the rows that did change before the failure.
                 router.reload({

@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -47,9 +47,52 @@ export default function AddToCampaignModal({
     const [campaignId, setCampaignId] = useState('');
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // The `campaigns` prop is filtered to Draft and Stopped when the page loads.
+    // Another member can start a listed campaign before this form is submitted,
+    // so the list is re-read when the dialog opens: a campaign that started in
+    // the meantime drops out of the prop, and submit refuses anything that is no
+    // longer in the refreshed list.
+    const [refreshing, setRefreshing] = useState(false);
+    const latestCampaigns = useRef(campaigns);
+
+    latestCampaigns.current = campaigns;
+
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+
+        setRefreshing(true);
+        router.reload({
+            only: ['campaigns'],
+            onFinish: () => setRefreshing(false),
+        });
+    }, [open]);
+
+    useEffect(() => {
+        if (
+            campaignId !== '' &&
+            !campaigns.some((campaign) => String(campaign.id) === campaignId)
+        ) {
+            setCampaignId('');
+        }
+    }, [campaigns, campaignId]);
 
     const submit = () => {
-        if (campaignId === '' || processing) {
+        if (campaignId === '' || processing || refreshing) {
+            return;
+        }
+
+        const chosen = latestCampaigns.current.find(
+            (campaign) => String(campaign.id) === campaignId,
+        );
+
+        if (!chosen) {
+            setCampaignId('');
+            setError(
+                'That campaign can no longer receive contacts. Choose another campaign.',
+            );
+
             return;
         }
 
@@ -141,7 +184,8 @@ export default function AddToCampaignModal({
                         disabled={
                             campaigns.length === 0 ||
                             campaignId === '' ||
-                            processing
+                            processing ||
+                            refreshing
                         }
                     >
                         {processing ? 'Adding…' : 'Add to campaign'}

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CampaignStatus;
-use App\Enums\MailerConnectionStatus;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\Contact;
@@ -82,7 +81,11 @@ class DashboardController extends Controller
      * "Inboxes" counts every connection row the team has. "Needs attention" is
      * a connection that is not Active or that has an exception recorded, so a
      * Deactivated or Disconnected row is never reported as healthy and a Pending
-     * row is flagged until it can send.
+     * row is flagged until it can send. The rule lives on MailerConnection
+     * (needsAttention()), which the connections table also reads through
+     * displayStatus(), so the count and the pills cannot disagree. The option
+     * list for the create modal comes from MailerConnection::optionPayload(),
+     * the same mapper the campaigns pages use.
      *
      * @return array{
      *     metrics: array{emails_sent: int, open_rate: float|null, reply_rate: float|null, active_campaigns: int, emails_sent_delta: float|null, open_rate_delta: float|null, reply_rate_delta: float|null},
@@ -153,17 +156,11 @@ class DashboardController extends Controller
                 'template_folders' => TemplateFolder::query()->forTeam($team->id)->count(),
                 'connections' => $connections->count(),
                 'connections_needing_attention' => $connections
-                    ->filter(fn (MailerConnection $connection): bool => $connection->status !== MailerConnectionStatus::Active
-                        || $connection->exception_type !== null)
+                    ->filter(fn (MailerConnection $connection): bool => $connection->needsAttention())
                     ->count(),
             ],
             'mailerConnections' => $connections
-                ->map(fn (MailerConnection $connection): array => [
-                    'id' => $connection->id,
-                    'name' => $connection->name,
-                    'status' => $connection->status->value,
-                    'status_label' => $connection->status->label(),
-                ])
+                ->map(fn (MailerConnection $connection): array => $connection->optionPayload())
                 ->values()
                 ->all(),
         ];
