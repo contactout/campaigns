@@ -257,10 +257,10 @@ deep-review round there. The ones a reviewer should weigh:
   lifting the form state above the breakpoint branch (follow-up R1).
 - **Two Back-shaped holes remain, both documented above and in the hook:** a history jump of two
   or more entries crosses the trap in one step (never trapped, even on the first press), and
-  Forward after a cancelled Back reaches the emptied entry before the page it skipped. Neither
-  loses a draft silently in the Back direction: the navigation direction that a user presses
-  normally is trapped, re-armed after every press, and proved clean in the paths in the
-  "Unsaved drafts" section.
+  Forward after a cancelled Back reaches the emptied entry before the page it skipped. The
+  two-or-more jump is the one path where Back can still discard a draft without asking — a trap
+  cannot see it. A single Back, the press a user normally makes, is trapped, re-armed after every
+  press and proved clean in the paths listed in the "Unsaved drafts" section.
 - **No JS tests.** The branch ships no runner, so the guard, the bulk loop and the selection
   pruning rest on click-throughs. `vitest` + React Testing Library is a follow-up, not a
   dependency this branch adds.
@@ -325,5 +325,11 @@ deep-review round there. The ones a reviewer should weigh:
   line `@theme` tokens so the next shadcn upgrade is a no-op.
 - **Drop the stored status from the two connection payloads** (`connectionSummary()`,
   `optionPayload()`), leaving `display_status` as the only status a client can read.
+- **Two guard follow-ups from review round 3, deliberately not applied** because the review had
+  reached its round cap: `pageStateRef` is captured only when a page first goes dirty, so a repair
+  after a placeholder-rail reload can write a stale snapshot (`rememberPageState()` belongs in
+  `rearm()`); and the confirmed-leave action stopped clearing `dirtyRef.current`, so the finish
+  step re-arms on the destination entry — Inertia's repair rescues it today, but the line should
+  come back.
 
-The PR is not opened, pushed or created — this file is the description only.
+This branch is pushed as `design/campaigns-os`; the text above is the body of PR #52.
