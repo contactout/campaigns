@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
+import StatCard from '@/components/dashboard/stat-card';
 import PageHead from '@/components/page-head';
 import PendingInvitationsModal from '@/components/pending-invitations-modal';
 import TeamInvitationAlert from '@/components/team-invitation-alert';
@@ -40,11 +41,6 @@ type Props = {
     };
 };
 
-type Delta = {
-    value: number;
-    unit: '%' | 'pt';
-};
-
 const numberFormatter = new Intl.NumberFormat();
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
     weekday: 'long',
@@ -59,50 +55,6 @@ const formatCount = (value: number) => numberFormatter.format(value);
 
 const formatRate = (value: number | null | undefined) =>
     value === null || value === undefined ? '—' : `${value.toFixed(1)}%`;
-
-const formatDelta = (delta: Delta) => {
-    const magnitude = Math.abs(delta.value).toFixed(1).replace(/\.0$/, '');
-    const sign = delta.value < 0 ? '-' : '+';
-
-    return `${sign}${magnitude}${delta.unit}`;
-};
-
-function StatCard({
-    label,
-    value,
-    delta,
-}: {
-    label: string;
-    value: string;
-    delta?: Delta | null;
-}) {
-    return (
-        <div className="rounded-lg border bg-card px-4 py-4">
-            <p className="text-[12px] leading-4 font-medium text-muted-foreground">
-                {label}
-            </p>
-            <div className="mt-1.5 flex items-baseline gap-2">
-                <p className="text-[20px] leading-7 font-bold tracking-[-0.01em]">
-                    {value}
-                </p>
-                {delta ? (
-                    <span
-                        className={cn(
-                            'text-[12px] leading-4 font-medium',
-                            delta.value > 0
-                                ? 'text-success'
-                                : delta.value < 0
-                                  ? 'text-destructive'
-                                  : 'text-muted-foreground',
-                        )}
-                    >
-                        {formatDelta(delta)}
-                    </span>
-                ) : null}
-            </div>
-        </div>
-    );
-}
 
 export default function Dashboard({
     pendingInvitations = [],
@@ -252,7 +204,7 @@ export default function Dashboard({
                 ) : null}
 
                 {metrics ? (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <StatCard
                             label="Emails sent · 30d"
                             value={formatCount(metrics.emails_sent)}
@@ -305,13 +257,13 @@ export default function Dashboard({
                     )}
                 >
                     {setup ? (
-                        <section className="rounded-lg border bg-card pb-2">
+                        <section className="rounded-lg border bg-card pb-5">
                             <div className="px-5 pt-5">
                                 <div className="flex items-baseline justify-between gap-4">
-                                    <h2 className="text-[16px] leading-6 font-semibold">
+                                    <h2 className="text-h3 font-semibold">
                                         Finish setting up
                                     </h2>
-                                    <p className="text-[13px] leading-5 text-muted-foreground">
+                                    <p className="text-body text-muted-foreground">
                                         {doneCount} of {checklist.length} done
                                     </p>
                                 </div>
@@ -331,14 +283,17 @@ export default function Dashboard({
                                     />
                                 </div>
                             </div>
-                            <ul className="mt-3">
+                            <ul className="mx-5 mt-3">
                                 {checklist.map((step) => (
                                     <li
                                         key={step.key}
-                                        className="flex items-center gap-3 border-b px-5 py-2.5"
+                                        className="flex items-center gap-3 border-b py-2.5"
                                     >
                                         {step.done ? (
-                                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary">
+                                            <span
+                                                aria-hidden="true"
+                                                className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary"
+                                            >
                                                 <Check
                                                     className="size-3 text-primary-foreground"
                                                     strokeWidth={3}
@@ -353,14 +308,19 @@ export default function Dashboard({
                                         <div className="min-w-0 flex-1">
                                             <p
                                                 className={cn(
-                                                    'text-[13px] leading-5 font-medium',
+                                                    'text-body font-medium',
                                                     step.done &&
                                                         'text-muted-foreground line-through',
                                                 )}
                                             >
+                                                <span className="sr-only">
+                                                    {step.done
+                                                        ? 'Done:'
+                                                        : 'To do:'}
+                                                </span>{' '}
                                                 {step.title}
                                             </p>
-                                            <p className="text-[13px] leading-5 text-muted-foreground">
+                                            <p className="text-body text-muted-foreground">
                                                 {step.description}
                                             </p>
                                         </div>
@@ -381,27 +341,27 @@ export default function Dashboard({
                         </section>
                     ) : null}
 
-                    <section className="rounded-lg border bg-card pb-2">
-                        <h2 className="px-5 pt-5 text-[16px] leading-6 font-semibold">
+                    <section className="rounded-lg border bg-card pb-5">
+                        <h2 className="px-5 pt-5 text-h3 font-semibold">
                             Jump back in
                         </h2>
-                        <ul className="mt-3">
+                        <ul className="mx-5 mt-3">
                             {destinations.map(
                                 ({ title, icon: Icon, href, qualifier }) => (
                                     <li key={title}>
                                         <Link
                                             href={href}
-                                            className="flex items-center gap-3 border-b px-5 py-3 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring-halo"
+                                            className="flex items-center gap-3 border-b py-3 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-primary-border focus-visible:ring-inset"
                                         >
                                             <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent">
                                                 <Icon className="size-4 text-primary" />
                                             </span>
                                             <span className="min-w-0 flex-1">
-                                                <span className="block text-[13px] leading-5 font-semibold">
+                                                <span className="block text-body font-semibold">
                                                     {title}
                                                 </span>
                                                 {qualifier ? (
-                                                    <span className="block text-[12px] leading-4 text-muted-foreground">
+                                                    <span className="block text-label text-muted-foreground">
                                                         {qualifier}
                                                     </span>
                                                 ) : null}

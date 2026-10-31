@@ -19,17 +19,15 @@ export default function PageHead({
     mobileNav = false,
 }: Props) {
     return (
-        <div className="flex flex-col gap-3">
+        <div className="-mt-2 flex flex-col gap-3">
             {mobileNav ? (
                 <SidebarTrigger className="-ml-1.5 md:hidden" />
             ) : null}
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
-                    <h1 className="text-[20px] leading-7 font-bold tracking-[-0.01em]">
-                        {title}
-                    </h1>
+                    <h1 className="text-h1 font-bold">{title}</h1>
                     {description ? (
-                        <p className="text-[13px] leading-5 text-muted-foreground">
+                        <p className="text-body text-muted-foreground">
                             {description}
                         </p>
                     ) : null}

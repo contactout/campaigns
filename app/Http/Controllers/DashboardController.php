@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\CampaignStatus;
+use App\Enums\MailerConnectionStatus;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\Contact;
@@ -71,6 +72,17 @@ class DashboardController extends Controller
      * "Emails sent · 30d" label and the deltas compare it with the 30 days
      * before it, so no number on the page is invented. Active campaigns have no
      * stored history, so that card carries no delta.
+     *
+     * Open and reply are cohort rates, not same-age rates: an email sent hours
+     * ago has had far less time to be opened than one sent in the previous
+     * window, so the current rate is structurally understated and the delta
+     * leans negative even when nothing changed. Same-age cohorts would remove
+     * the bias; this method keeps the simple cohort and records the limitation.
+     *
+     * "Inboxes" counts every connection row the team has. "Needs attention" is
+     * a connection that is not Active or that has an exception recorded, so a
+     * Deactivated or Disconnected row is never reported as healthy and a Pending
+     * row is flagged until it can send.
      *
      * @return array{
      *     metrics: array{emails_sent: int, open_rate: float|null, reply_rate: float|null, active_campaigns: int, emails_sent_delta: float|null, open_rate_delta: float|null, reply_rate_delta: float|null},
@@ -141,7 +153,8 @@ class DashboardController extends Controller
                 'template_folders' => TemplateFolder::query()->forTeam($team->id)->count(),
                 'connections' => $connections->count(),
                 'connections_needing_attention' => $connections
-                    ->filter(fn (MailerConnection $connection): bool => $connection->exception_type !== null)
+                    ->filter(fn (MailerConnection $connection): bool => $connection->status !== MailerConnectionStatus::Active
+                        || $connection->exception_type !== null)
                     ->count(),
             ],
             'mailerConnections' => $connections

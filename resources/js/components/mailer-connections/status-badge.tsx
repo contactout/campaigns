@@ -3,12 +3,12 @@ import type { MailerConnectionStatus } from '@/types';
 
 const variants: Record<
     MailerConnectionStatus,
-    'default' | 'secondary' | 'destructive' | 'outline'
+    'success' | 'warning' | 'neutral'
 > = {
-    Pending: 'outline',
-    Active: 'default',
-    Deactivated: 'destructive',
-    Disconnected: 'secondary',
+    Pending: 'warning',
+    Active: 'success',
+    Deactivated: 'neutral',
+    Disconnected: 'neutral',
 };
 
 type Props = {
@@ -19,7 +19,7 @@ type Props = {
 export default function MailerConnectionStatusBadge({ status, label }: Props) {
     return (
         <Badge
-            variant={variants[status as MailerConnectionStatus] ?? 'outline'}
+            variant={variants[status as MailerConnectionStatus] ?? 'neutral'}
         >
             {label}
         </Badge>

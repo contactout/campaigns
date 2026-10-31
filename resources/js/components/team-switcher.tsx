@@ -67,13 +67,13 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
                     className={
                         inHeader
                             ? 'h-8 gap-1 px-2'
-                            : 'h-auto w-full justify-start gap-1.5 rounded-lg border border-sidebar-border bg-background px-2 py-2 text-left font-normal group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0 hover:bg-sidebar-accent/60 has-[>svg]:px-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
+                            : 'h-auto w-full justify-start gap-1.5 rounded-lg border border-sidebar-border bg-background px-2 py-2 text-left font-normal hover:bg-sidebar-accent/60 has-[>svg]:px-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
                     }
                 >
                     {inHeader ? (
                         <Users className="hidden size-4 shrink-0" />
                     ) : (
-                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-[13px] font-semibold text-accent-foreground group-data-[collapsible=icon]:size-6 group-data-[collapsible=icon]:text-[11px]">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-body font-semibold text-accent-foreground">
                             {teamInitial}
                         </span>
                     )}
@@ -81,20 +81,20 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
                         className={
                             inHeader
                                 ? 'grid flex-1 text-left text-sm leading-tight'
-                                : 'grid min-w-0 flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden'
+                                : 'grid min-w-0 flex-1 text-left leading-tight'
                         }
                     >
                         <span
                             className={
                                 inHeader
                                     ? 'max-w-[120px] truncate font-medium'
-                                    : 'truncate text-[13px] font-semibold tracking-[-0.01em]'
+                                    : 'truncate text-body font-semibold tracking-[-0.01em]'
                             }
                         >
                             {currentTeam?.name ?? 'Select team'}
                         </span>
                         {!inHeader && (
-                            <span className="truncate text-[12px] text-muted-foreground">
+                            <span className="truncate text-label text-muted-foreground">
                                 {teamMeta}
                             </span>
                         )}
@@ -102,7 +102,7 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
                     {inHeader ? (
                         <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
                     ) : (
-                        <ChevronDown className="size-3 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                        <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
                     )}
                 </Button>
             </DropdownMenuTrigger>

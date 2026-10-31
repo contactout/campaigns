@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\MailerConnectionStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
@@ -260,18 +261,26 @@ test('dashboard reports 30 day email metrics and their previous window deltas', 
         ]);
     };
 
-    // Current window: 4 sent, 2 opened (50%), 1 replied (25%).
+    // Current window: 3 sent, 1 opened and 1 replied (33.3% each; 1 of 3 rounds).
     $send(now()->subDays(2), true, true);
-    $send(now()->subDays(4), true, false);
-    $send(now()->subDays(8), false, false);
+    $send(now()->subDays(4), false, false);
     $send(now()->subDays(20), false, false);
 
-    // Previous window: 2 sent, 1 opened (50%), 0 replied (0%).
-    $send(now()->subDays(35), true, false);
+    // Previous window: 2 sent, 1 opened and 1 replied (50% each).
+    $send(now()->subDays(35), true, true);
     $send(now()->subDays(45), false, false);
+
+    // Older than both windows: must not reach any aggregate.
+    $send(now()->subDays(70), true, true);
 
     Campaign::factory()->forTeam($team)->active()->create([
         'user_id' => $user->id,
+    ]);
+    $connection = MailerConnection::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'name' => 'Maya Gmail',
+        'status' => MailerConnectionStatus::Active,
     ]);
 
     $this->actingAs($user)
@@ -279,14 +288,21 @@ test('dashboard reports 30 day email metrics and their previous window deltas', 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('dashboard')
-            ->where('metrics.emails_sent', 4)
-            // JSON drops the trailing .0, so 50.0 arrives as 50.
-            ->where('metrics.open_rate', 50)
-            ->where('metrics.reply_rate', 25)
+            ->where('metrics.emails_sent', 3)
+            ->where('metrics.open_rate', 33.3)
+            ->where('metrics.reply_rate', 33.3)
             ->where('metrics.active_campaigns', 1)
-            ->where('metrics.emails_sent_delta', 100)
-            ->where('metrics.open_rate_delta', 0)
-            ->where('metrics.reply_rate_delta', 25),
+            // 3 vs 2 sent is +50%; both rates fell 16.7 points.
+            // JSON drops the trailing .0, so 50.0 arrives as 50.
+            ->where('metrics.emails_sent_delta', 50)
+            ->where('metrics.open_rate_delta', -16.7)
+            ->where('metrics.reply_rate_delta', -16.7)
+            ->where('can.create', true)
+            ->has('mailerConnections', 1)
+            ->where('mailerConnections.0.id', $connection->id)
+            ->where('mailerConnections.0.name', 'Maya Gmail')
+            ->where('mailerConnections.0.status', 'Active')
+            ->where('mailerConnections.0.status_label', 'Active'),
         );
 });
 
@@ -318,10 +334,12 @@ test('dashboard reports the counts behind the jump back in rows', function () {
     MailerConnection::factory()->create([
         'team_id' => $team->id,
         'user_id' => $user->id,
+        'status' => MailerConnectionStatus::Active,
     ]);
     MailerConnection::factory()->create([
         'team_id' => $team->id,
         'user_id' => $user->id,
+        'status' => MailerConnectionStatus::Active,
         'exception_type' => 'SMTPException',
     ]);
 
@@ -399,5 +417,34 @@ test('dashboard metrics ignore other teams data and leave empty rates null', fun
             ->where('jumpBackIn.connections', 0)
             ->where('jumpBackIn.connections_needing_attention', 0)
             ->has('mailerConnections', 0),
+        );
+});
+
+test('dashboard flags every non-active connection and every active connection with an exception', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $connect = function (MailerConnectionStatus $status, ?string $exception = null) use ($team, $user): void {
+        MailerConnection::factory()->create([
+            'team_id' => $team->id,
+            'user_id' => $user->id,
+            'status' => $status,
+            'exception_type' => $exception,
+        ]);
+    };
+
+    $connect(MailerConnectionStatus::Active);
+    $connect(MailerConnectionStatus::Active, 'SMTPException');
+    $connect(MailerConnectionStatus::Pending);
+    $connect(MailerConnectionStatus::Deactivated);
+    $connect(MailerConnectionStatus::Disconnected);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('jumpBackIn.connections', 5)
+            ->where('jumpBackIn.connections_needing_attention', 4),
         );
 });

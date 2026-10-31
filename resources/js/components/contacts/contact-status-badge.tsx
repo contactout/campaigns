@@ -3,14 +3,14 @@ import type { ContactStatus } from '@/types';
 
 const variants: Record<
     ContactStatus,
-    'default' | 'secondary' | 'destructive' | 'outline'
+    'success' | 'warning' | 'info' | 'neutral' | 'destructive'
 > = {
-    NotContacted: 'outline',
-    Contacted: 'secondary',
-    Replied: 'default',
+    NotContacted: 'neutral',
+    Contacted: 'info',
+    Replied: 'success',
     Bounced: 'destructive',
-    Unsubscribed: 'destructive',
-    DoNotContact: 'destructive',
+    Unsubscribed: 'neutral',
+    DoNotContact: 'warning',
 };
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 
 export default function ContactStatusBadge({ status, label }: Props) {
     return (
-        <Badge variant={variants[status as ContactStatus] ?? 'outline'}>
+        <Badge variant={variants[status as ContactStatus] ?? 'neutral'}>
             {label}
         </Badge>
     );
