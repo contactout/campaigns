@@ -492,7 +492,15 @@ export default function ContactsIndex({
         <>
             <Head title="Contacts" />
 
-            <div className="flex min-h-[calc(100svh-3.5rem)] w-full min-w-0 flex-col px-4 pt-6 lg:h-svh lg:min-h-[32rem] lg:px-6">
+            <div
+                className={cn(
+                    'flex min-h-[calc(100svh-3.5rem)] w-full min-w-0 flex-col px-4 pt-6 lg:h-svh lg:min-h-[32rem] lg:px-6',
+                    // The 390 selection bar is fixed above the tab bar; reserve its
+                    // height at the end of the page so pagination stays reachable.
+                    selectedCount > 0 &&
+                        'max-lg:pb-[calc(4.25rem+env(safe-area-inset-bottom))]',
+                )}
+            >
                 <PageHead
                     title="Contacts"
                     description={`${contacts.total.toLocaleString()} ${
@@ -759,7 +767,10 @@ export default function ContactsIndex({
                         <div
                             aria-busy={busy !== null}
                             className={cn(
-                                'flex min-h-0 flex-1 flex-col [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto',
+                                // Descendant, not child: the grid wraps its table in a
+                                // breakpoint wrapper, and a direct-child selector would
+                                // skip it and leave the table unclipped.
+                                'flex min-h-0 flex-1 flex-col [&_[data-slot=table-container]]:min-h-0 [&_[data-slot=table-container]]:flex-1 [&_[data-slot=table-container]]:overflow-auto',
                                 busy !== null &&
                                     'pointer-events-none opacity-60',
                             )}

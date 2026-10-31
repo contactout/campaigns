@@ -312,7 +312,10 @@ export default function ContactGrid({
                 })}
             </ul>
 
-            <div className="hidden lg:block">
+            {/* The page sizes the scroll area through [data-slot=table-container],
+                so this wrapper has to stay a flex item of the workspace: a plain
+                block grows to the table's full height and the card clips it. */}
+            <div className="hidden lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                 <Table
                     aria-label="Contacts"
                     data-test="contacts-grid"

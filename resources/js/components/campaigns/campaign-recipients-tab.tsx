@@ -114,7 +114,16 @@ export default function CampaignRecipientsTab({
     };
 
     return (
-        <div className="flex flex-col gap-3">
+        <div
+            className={cn(
+                'flex flex-col gap-3',
+                // The 390 selection bar is fixed above the tab bar; reserve its
+                // height below the pagination row, not above it.
+                selectedOnPage.length > 0 &&
+                    canUpdate &&
+                    'max-lg:pb-[calc(4.25rem+env(safe-area-inset-bottom))]',
+            )}
+        >
             <ConfirmDialog
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
@@ -239,10 +248,7 @@ export default function CampaignRecipientsTab({
             ) : (
                 <>
                     <ul
-                        className={cn(
-                            'divide-y overflow-hidden rounded-lg border bg-card lg:hidden',
-                            selectedOnPage.length > 0 && 'mb-16',
-                        )}
+                        className="divide-y overflow-hidden rounded-lg border bg-card lg:hidden"
                         data-test="campaign-recipient-list-mobile"
                     >
                         {recipients.data.map((recipient) => {
