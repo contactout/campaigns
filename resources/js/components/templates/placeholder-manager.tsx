@@ -12,6 +12,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { destroy, store } from '@/routes/placeholders';
 import type { TemplatePlaceholder } from '@/types';
 
@@ -54,7 +55,10 @@ export default function PlaceholderManager({
                 {placeholders.map((placeholder) => (
                     <li
                         key={placeholder.id}
-                        className="group relative flex min-h-[38px] items-center justify-between gap-3 border-b px-4"
+                        className={cn(
+                            'group relative flex min-h-11 items-center justify-between gap-3 border-b px-4 lg:min-h-[38px]',
+                            canManage && 'max-lg:pr-12',
+                        )}
                     >
                         <button
                             type="button"
