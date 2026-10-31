@@ -106,6 +106,9 @@ export default function CampaignShow({
 
     const canStart =
         can.start && ['Draft', 'Stopped'].includes(campaign.status);
+    // The server only reports reasons for Draft/Stopped; a member without
+    // can.start still has no Start action to explain.
+    const startBlocked = canStart && start.blocked;
     const canStop = can.stop && campaign.status === 'Active';
     const canArchive = can.archive && campaign.status !== 'Archived';
 
@@ -197,9 +200,9 @@ export default function CampaignShow({
                     {({ processing }) => (
                         <Button
                             type="submit"
-                            disabled={processing || start.blocked}
+                            disabled={processing || startBlocked}
                             aria-describedby={
-                                start.blocked ? 'start-blocked' : undefined
+                                startBlocked ? 'start-blocked' : undefined
                             }
                             data-test="campaign-start-button"
                         >
@@ -335,6 +338,7 @@ export default function CampaignShow({
                                 steps={steps}
                                 stats={stats}
                                 start={start}
+                                startBlocked={startBlocked}
                                 canUpdate={can.update}
                                 onEditStep={openStep}
                                 onAddStep={() => setEditor({ stepId: null })}

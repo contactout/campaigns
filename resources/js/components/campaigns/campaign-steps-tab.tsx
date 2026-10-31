@@ -36,6 +36,7 @@ type Props = {
     steps: CampaignStep[];
     stats: CampaignStats;
     start: CampaignStartState;
+    startBlocked: boolean;
     canUpdate: boolean;
     onEditStep: (step: CampaignStep) => void;
     onAddStep: () => void;
@@ -87,6 +88,7 @@ export default function CampaignStepsTab({
     steps,
     stats,
     start,
+    startBlocked,
     canUpdate,
     onEditStep,
     onAddStep,
@@ -96,7 +98,7 @@ export default function CampaignStepsTab({
     const [dragIndex, setDragIndex] = useState<number | null>(null);
 
     const groups = groupByDay(steps);
-    const blockedStepIds = start.blocked
+    const blockedStepIds = startBlocked
         ? start.reasons
               .filter((reason) => reason.type === 'step')
               .map((reason) => reason.step_id)
@@ -146,7 +148,7 @@ export default function CampaignStepsTab({
 
     return (
         <div className="flex flex-col gap-5">
-            {start.blocked ? (
+            {startBlocked ? (
                 <StartBlockedPanel
                     reasons={start.reasons}
                     teamSlug={slug}

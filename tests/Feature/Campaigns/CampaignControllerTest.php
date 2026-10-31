@@ -708,7 +708,7 @@ test('start stays enabled when nothing blocks the campaign', function () {
             ->has('start.reasons', 0));
 });
 
-test('a campaign without steps connection or recipients lists every blocker', function () {
+test('a campaign without steps or a connection lists both blockers', function () {
     [$team, $user] = campaignTeamWithMember();
 
     $campaign = Campaign::factory()->forTeam($team)->create([
@@ -722,10 +722,62 @@ test('a campaign without steps connection or recipients lists every blocker', fu
         ->assertInertia(fn (Assert $page) => $page
             ->component('campaigns/show')
             ->where('start.blocked', true)
-            ->has('start.reasons', 3)
+            ->has('start.reasons', 2)
             ->where('start.reasons.0.message', 'This campaign has no steps yet.')
-            ->where('start.reasons.1.message', 'This campaign has no sending connection.')
-            ->where('start.reasons.2.message', 'This campaign has no recipients yet.'));
+            ->where('start.reasons.1.message', 'This campaign has no sending connection.'));
+});
+
+test('an empty recipient list is not a blocker', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => null,
+    ]);
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => $connection->id,
+        'status' => CampaignStatus::Draft,
+    ]);
+
+    CampaignStep::factory()->forCampaign($campaign)->create(['subject' => 'Ready']);
+
+    // The scheduler supports recipients joining a running campaign, so Start
+    // stays enabled with nobody enrolled yet.
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('stats.recipients_count', 0)
+            ->where('start.blocked', false)
+            ->has('start.reasons', 0));
+});
+
+test('a campaign that cannot be started reports no blockers', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'Mailgun relay',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => 'SmtpAuthenticationFailed',
+    ]);
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => $connection->id,
+        'status' => CampaignStatus::Active,
+    ]);
+
+    CampaignStep::factory()->forCampaign($campaign)->create(['subject' => '']);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('campaign.status', CampaignStatus::Active->value)
+            ->where('start.blocked', false)
+            ->has('start.reasons', 0));
 });
 
 test('the recipients tab can be searched by name or email', function () {

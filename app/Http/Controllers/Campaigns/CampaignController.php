@@ -538,13 +538,22 @@ class CampaignController extends Controller
      * Derive why the campaign cannot be started, and what will be skipped.
      *
      * Every reason comes from stored state; nothing is rendered unconditionally.
-     * `blocking` reasons disable Start. The do-not-contact line is a warning:
-     * those recipients are suppressed at send time, not a reason to refuse.
+     * Only Draft and Stopped campaigns can be started, so only they report
+     * reasons. `blocking` reasons disable Start. The do-not-contact line is a
+     * warning: those recipients are suppressed at send time, not a reason to
+     * refuse. An empty recipient list is deliberately not a blocker, because
+     * the scheduler supports recipients joining a running campaign.
      *
      * @return array{blocked: bool, reasons: array<int, array{type: string, message: string, blocking: bool, step_id: int|null, step_sequence: int|null}>}
      */
     protected function startState(Campaign $campaign, int $recipientsCount, int $doNotContact): array
     {
+        // Only a campaign that can actually be started gets a blocked state; an
+        // Active or Completed campaign has no Start action to explain.
+        if (! in_array($campaign->status, [CampaignStatus::Draft, CampaignStatus::Stopped], true)) {
+            return ['blocked' => false, 'reasons' => []];
+        }
+
         $reasons = [];
 
         if ($campaign->steps->isEmpty()) {
@@ -578,10 +587,6 @@ class CampaignController extends Controller
                 'name' => $connection->name,
                 'status' => mb_strtolower($connection->status->label()),
             ]));
-        }
-
-        if ($recipientsCount === 0) {
-            $reasons[] = $this->startReason('recipients', __('This campaign has no recipients yet.'));
         }
 
         if ($doNotContact > 0) {

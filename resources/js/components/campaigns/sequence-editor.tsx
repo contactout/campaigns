@@ -50,9 +50,21 @@ export default function SequenceEditor({
     // The board's `Esc` hint is a real affordance, not a label.
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape' && !event.defaultPrevented) {
-                onClose();
+            if (event.key !== 'Escape' || event.defaultPrevented) {
+                return;
             }
+
+            // Radix does not preventDefault the native Escape, so an open menu,
+            // select or dialog would close the editor behind it as well.
+            if (
+                document.querySelector(
+                    '[role="menu"],[role="listbox"],[role="dialog"]',
+                )
+            ) {
+                return;
+            }
+
+            onClose();
         };
 
         window.addEventListener('keydown', onKeyDown);
@@ -67,6 +79,7 @@ export default function SequenceEditor({
 
         router.delete(destroyStep.url([slug, campaignId, activeStep.id]), {
             preserveScroll: true,
+            onSuccess: onClose,
         });
     };
 

@@ -273,6 +273,7 @@ export default function RichTextEditor({
                             }
 
                             if (event.key === 'Escape') {
+                                event.stopPropagation();
                                 setLinkOpen(false);
                             }
                         }}

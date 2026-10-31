@@ -1,6 +1,6 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { ListChecks, MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import RecipientStatusBadge from '@/components/campaigns/recipient-status-badge';
 import EmptyState from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,13 @@ export default function CampaignRecipientsTab({
     const slug = currentTeam?.slug ?? '';
     const [term, setTerm] = useState(search ?? '');
     const [selected, setSelected] = useState<number[]>([]);
+
+    // `preserveState` keeps this component mounted across pagination and search
+    // visits, so ids from the previous page would otherwise stay selected and
+    // the bulk Remove would act on rows that are no longer on screen.
+    useEffect(() => {
+        setSelected([]);
+    }, [recipients.current_page, search]);
 
     const pageIds = recipients.data.map((recipient) => recipient.id);
     const allSelected =
