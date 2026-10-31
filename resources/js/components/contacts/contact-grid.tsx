@@ -390,7 +390,7 @@ export default function ContactGrid({
                             {dataFields.map((field) => (
                                 <TableHead
                                     key={field.id}
-                                    className={`${stickyHead} group/head relative h-[35px] border-r border-b px-3`}
+                                    className={`${stickyHead} group/head h-[35px] border-r border-b px-3`}
                                 >
                                     <span
                                         className="block min-w-0 truncate"

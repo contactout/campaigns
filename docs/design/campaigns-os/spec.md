@@ -45,7 +45,6 @@ keep the `.dark` block exactly as it is; nothing here designs a dark variant.
 | `--banner` (new) | `#f8f7ff` | promo / info strip |
 | `--sidebar` | `#ffffff` | sidebar bg |
 | `--sidebar-accent` | `#f0eeff` | active sidebar pill |
-| `--chart-1..3` | `#3222b1` `#6552ff` `#b8afff` | stats, sparkbars |
 | `--radius` | `0.375rem` (6px, was 10px) | `rounded-lg/md/sm` = 6/4/3 |
 
 Borders are 1px `#e4e4e7` everywhere. Shadows: none, except dialogs `0 8px 24px #18181b14`.
@@ -223,7 +222,6 @@ changed. Contrast is WCAG 2.x against `oklch(0.145 0 0)` = `#0a0a0a` unless note
 | --- | --- | --- |
 | `--banner` | `#221d3a` | dark violet surface |
 | `--banner-foreground` (new) | `#c9c2ff` | 9.69:1 on the banner |
-| `--ring-halo` | `#2b2544` | decoration only |
 | `--primary-border` | `#8b7dff` | 6.10:1 on the page, 3.11:1 on the dark primary button |
 | `--success` | `#4ade80` | 11.36:1 |
 | `--success-foreground` | `#86efac` | 14.10:1 |
@@ -251,7 +249,8 @@ both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore repl
 - The ring colour is `--primary-border` (`#6552ff` light, `#8b7dff` dark, **6.10:1** on
   `#0a0a0a`), because `.dark --ring` is frozen at `oklch(0.439 0 0)` (**2.53:1** on the dark
   page) and this round may not change existing dark values.
-- `--ring-halo` remains a defined token for decoration only; no focus treatment depends on it.
+- `--ring-halo` was removed in phase 7 (see the token-removal amendment below): nothing
+  referenced it, on the boards or in the code.
 
 ### Board measurements that override the spec text
 
@@ -302,6 +301,14 @@ both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore repl
 - **Connections pills vs needs-attention (phase 5 note).** Deactivated and Disconnected render
   neutral pills but count as "needs attention", and an Active connection with an exception is
   still green. The Verified/Failed derivation in phase 5 must reconcile the pill and the count.
+
+### Token removal (phase 7)
+
+`--chart-1..5` and `--ring-halo` were removed from `:root`, `.dark` and the `@theme` mapping in
+phase 7. Neither had a reference in `resources/js`, `resources/views` or `app` (no `chart-${…}`
+either), and no board has a chart; the focus treatment had already stopped using the halo when
+`--ring` gained its 2px indicator. This overrides the `--chart-1..3` row in the token table and
+the dark `--ring-halo` row above.
 
 ### Contacts grid (phase 4) — 32px cells, 33px pitch, `px-3`
 

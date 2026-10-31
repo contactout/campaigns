@@ -123,7 +123,14 @@ export default function TemplateShow({
         }));
         form.patch(update.url([slug, template.id]), {
             preserveScroll: true,
-            onSuccess: () => setSaved(true),
+            onSuccess: () => {
+                setSaved(true);
+                // The instance survives a save, so the baseline and the form
+                // defaults have to move to what was just stored, or the next
+                // edit reads as unsaved and a discard restores stale content.
+                setSavedBody(form.data.body);
+                form.setDefaults();
+            },
         });
     };
 
@@ -323,6 +330,7 @@ export default function TemplateShow({
                                 onChange={(html) => form.setData('body', html)}
                                 onCanonical={(html) => {
                                     setSavedBody(html);
+                                    form.setDefaults('body', html);
                                     form.setData('body', html);
                                 }}
                                 labelledBy="template-body-label"
