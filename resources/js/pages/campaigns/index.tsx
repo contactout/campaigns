@@ -178,7 +178,7 @@ export default function CampaignsIndex({
                             </SelectContent>
                         </Select>
 
-                        <p className="ms-auto text-body text-muted-foreground">
+                        <p className="ms-auto text-body leading-5 text-muted-foreground">
                             {campaigns.total}{' '}
                             {campaigns.total === 1 ? 'campaign' : 'campaigns'}
                         </p>
@@ -204,19 +204,34 @@ export default function CampaignsIndex({
                 ) : (
                     <div className="overflow-hidden rounded-lg border bg-card">
                         {isEmpty ? (
-                            <EmptyState
-                                className="border-0 py-16"
-                                title="No campaigns match your filters"
-                                description="Try a different search term or status."
-                                actions={
-                                    <Button
-                                        variant="outline"
-                                        onClick={clearFilters}
-                                    >
-                                        Clear filters
-                                    </Button>
-                                }
-                            />
+                            hasFilters ? (
+                                <EmptyState
+                                    className="border-0 py-16"
+                                    title="No campaigns match your filters"
+                                    description="Try a different search term or status."
+                                    actions={
+                                        <Button
+                                            variant="outline"
+                                            onClick={clearFilters}
+                                        >
+                                            Clear filters
+                                        </Button>
+                                    }
+                                />
+                            ) : (
+                                <EmptyState
+                                    className="border-0 py-16"
+                                    title="This page has no campaigns"
+                                    description="The list has fewer pages than this one. Go back to the first page."
+                                    actions={
+                                        <Button variant="outline" asChild>
+                                            <Link href={index.url(slug)}>
+                                                Back to page 1
+                                            </Link>
+                                        </Button>
+                                    }
+                                />
+                            )
                         ) : (
                             <>
                                 <Table>
@@ -261,7 +276,7 @@ export default function CampaignsIndex({
                                                             {campaign.name}
                                                         </Link>
                                                         {created ? (
-                                                            <span className="block text-label text-muted-foreground">
+                                                            <span className="block text-label leading-4 text-muted-foreground">
                                                                 Created{' '}
                                                                 {created}
                                                             </span>
@@ -325,7 +340,7 @@ export default function CampaignsIndex({
                                 </Table>
 
                                 <div className="flex h-[52px] items-center justify-between gap-2 border-t px-4">
-                                    <p className="text-body text-muted-foreground">
+                                    <p className="text-body leading-5 text-muted-foreground">
                                         Showing {campaigns.from ?? 0}–
                                         {campaigns.to ?? 0} of {campaigns.total}
                                     </p>
