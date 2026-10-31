@@ -19,6 +19,7 @@ export type ListOption = {
 export type ContactCampaignOption = {
     id: number;
     name: string;
+    status_label: string;
 };
 
 export type PaginationLink = {

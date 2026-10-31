@@ -16,6 +16,8 @@ type Props = {
     canCreate: boolean;
     /** The current search, kept when switching lists. */
     search: string | null;
+    /** A bulk action is running; block list navigation until it finishes. */
+    disabled?: boolean;
     /** Pagination, rendered at the right of the strip. */
     trailing?: ReactNode;
 };
@@ -25,6 +27,7 @@ export default function ListTabs({
     activeListId,
     canCreate,
     search,
+    disabled = false,
     trailing,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -45,7 +48,7 @@ export default function ListTabs({
 
     const tabClass = (isActive: boolean) =>
         cn(
-            'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-md px-3 text-body leading-5 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary-border focus-visible:outline-none',
+            'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-md px-3 text-body leading-5 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary-border focus-visible:outline-none disabled:opacity-50',
             isActive
                 ? 'bg-accent text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground',
@@ -61,6 +64,7 @@ export default function ListTabs({
                     type="button"
                     className={tabClass(activeListId === null)}
                     onClick={() => goToList(null)}
+                    disabled={disabled}
                     data-test="list-tab-all"
                     aria-current={activeListId === null ? 'page' : undefined}
                 >
@@ -73,6 +77,7 @@ export default function ListTabs({
                         type="button"
                         className={tabClass(activeListId === list.id)}
                         onClick={() => goToList(list.id)}
+                        disabled={disabled}
                         data-test="list-tab"
                         aria-current={
                             activeListId === list.id ? 'page' : undefined
@@ -98,6 +103,7 @@ export default function ListTabs({
                             variant="ghost"
                             size="sm"
                             className="mx-1 shrink-0 text-muted-foreground"
+                            disabled={disabled}
                         >
                             <Plus /> Add list
                         </Button>
@@ -113,6 +119,7 @@ export default function ListTabs({
                             size="icon"
                             className="size-7"
                             onClick={() => setEditOpen(true)}
+                            disabled={disabled}
                             data-test="list-rename-button"
                             aria-label={`Rename ${activeList.name}`}
                         >
@@ -123,6 +130,7 @@ export default function ListTabs({
                             size="icon"
                             className="size-7"
                             onClick={() => setDeleteOpen(true)}
+                            disabled={disabled}
                             data-test="list-delete-button"
                             aria-label={`Delete ${activeList.name}`}
                         >

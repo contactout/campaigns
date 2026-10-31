@@ -88,7 +88,7 @@ function ContactOpenLink({
             aria-label={`Open ${contact.name}`}
             title="Open contact"
             data-test="contact-open"
-            className="pointer-events-none absolute top-1/2 right-0.5 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-background text-muted-foreground opacity-0 outline-none focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary-border"
+            className="pointer-events-none absolute top-1/2 right-0.5 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-md bg-background text-muted-foreground opacity-0 outline-none focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary-border [@media(any-pointer:coarse)]:pointer-events-auto [@media(any-pointer:coarse)]:opacity-100"
         >
             <ArrowUpRight className="size-4" />
         </Link>
@@ -344,6 +344,7 @@ export default function ContactGrid({
                                     columnLabel="Name"
                                     value={contact.name}
                                     placeholder="Add name"
+                                    className="font-medium"
                                 />
                             </TableCell>
                             <TableCell

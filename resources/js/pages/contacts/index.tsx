@@ -10,6 +10,7 @@ import {
     Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import AddToCampaignModal from '@/components/contacts/add-to-campaign-modal';
 import ContactFieldFormModal from '@/components/contacts/contact-field-form-modal';
 import ContactGrid from '@/components/contacts/contact-grid';
@@ -21,6 +22,8 @@ import ListTabs from '@/components/contacts/list-tabs';
 import ConfirmDialog from '@/components/confirm-dialog';
 import EmptyState from '@/components/empty-state';
 import PageHead from '@/components/page-head';
+import { setFlashToastSuppressed } from '@/hooks/use-flash-toast';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -81,6 +84,7 @@ export default function ContactsIndex({
     const [busy, setBusy] = useState<'do-not-contact' | 'delete' | null>(null);
     const [bulkError, setBulkError] = useState<string | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteIds, setDeleteIds] = useState<number[]>([]);
     const [campaignOpen, setCampaignOpen] = useState(false);
     const [fieldModalOpen, setFieldModalOpen] = useState(false);
     const [editingField, setEditingField] = useState<ContactField | null>(null);
@@ -125,6 +129,10 @@ export default function ContactsIndex({
     const nextLink = contacts.links.find((link) => link.label.includes('Next'));
 
     const navigate = (params: { q?: string; list?: number | null } = {}) => {
+        if (busy !== null) {
+            return;
+        }
+
         router.get(
             contactsIndex.url(slug),
             {
@@ -139,6 +147,10 @@ export default function ContactsIndex({
     };
 
     const clearFilters = () => {
+        if (busy !== null) {
+            return;
+        }
+
         setSearch('');
         router.get(
             contactsIndex.url(slug),
@@ -169,6 +181,170 @@ export default function ContactsIndex({
         setFieldModalOpen(true);
     };
 
+    const restoreAfterDelete = (deleted: number) => {
+        const perPage = contacts.per_page || 25;
+        const remaining = Math.max(0, contacts.total - deleted);
+        const lastPage = Math.max(1, Math.ceil(remaining / perPage));
+        const targetPage = Math.min(contacts.current_page, lastPage);
+        const needsVisit =
+            hasFilters || targetPage !== 1 || contacts.current_page !== 1;
+
+        if (!needsVisit) {
+            return;
+        }
+
+        router.get(
+            contactsIndex.url(slug),
+            {
+                q: filters.q ?? '',
+                list: filters.list ?? '',
+                page: targetPage === 1 ? '' : String(targetPage),
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                replace: true,
+                async: true,
+            },
+        );
+    };
+
+    const runBulk = (kind: 'do-not-contact' | 'delete', ids: number[]) => {
+        if (ids.length === 0) {
+            setSelected([]);
+
+            return;
+        }
+
+        const total = ids.length;
+        let done = 0;
+        let stopped = false;
+
+        setBusy(kind);
+        setBulkError(null);
+        setFlashToastSuppressed(true);
+
+        const finish = (failed: boolean) => {
+            if (stopped) {
+                return;
+            }
+
+            stopped = true;
+            setBusy(null);
+            setFlashToastSuppressed(false);
+
+            const noun = total === 1 ? 'contact' : 'contacts';
+
+            if (failed) {
+                const message =
+                    kind === 'delete'
+                        ? `Deleted ${done} of ${total} ${noun}. The rest were not deleted.`
+                        : `Marked ${done} of ${total} ${noun} as do not contact. The rest were not changed.`;
+
+                setSelected(ids.slice(done));
+                setBulkError(message);
+                toast.error(message);
+
+                // Reflect the rows that did change before the failure.
+                router.reload({
+                    only: ['contacts', 'lists'],
+                    async: true,
+                });
+
+                return;
+            }
+
+            setSelected([]);
+            toast.success(
+                kind === 'delete'
+                    ? done === 1
+                        ? 'Deleted 1 contact.'
+                        : `Deleted ${done} contacts.`
+                    : done === 1
+                      ? 'Marked 1 contact as do not contact.'
+                      : `Marked ${done} contacts as do not contact.`,
+            );
+
+            if (kind === 'delete') {
+                restoreAfterDelete(done);
+            }
+        };
+
+        const next = (index: number) => {
+            if (stopped) {
+                return;
+            }
+
+            if (index >= ids.length) {
+                finish(false);
+
+                return;
+            }
+
+            let settled = false;
+
+            const succeed = () => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                done += 1;
+                next(index + 1);
+            };
+
+            const fail = () => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                finish(true);
+            };
+
+            const options = {
+                preserveScroll: true,
+                preserveState: true,
+                async: true,
+                only: index === ids.length - 1 ? undefined : [],
+                onSuccess: succeed,
+                onError: fail,
+                onHttpException: () => {
+                    fail();
+
+                    return false;
+                },
+                onNetworkError: () => {
+                    fail();
+
+                    return false;
+                },
+                onCancel: fail,
+                onFinish: () => {
+                    if (!settled) {
+                        fail();
+                    }
+                },
+            };
+
+            try {
+                if (kind === 'delete') {
+                    router.delete(destroy.url([slug, ids[index]]), options);
+                } else {
+                    router.patch(
+                        cell.url([slug, ids[index]]),
+                        { field: 'status', value: 'DoNotContact' },
+                        options,
+                    );
+                }
+            } catch {
+                fail();
+            }
+        };
+
+        next(0);
+    };
+
     const markDoNotContact = () => {
         const ids = selectedOnPage.filter(
             (id) =>
@@ -176,49 +352,11 @@ export default function ContactsIndex({
                 'DoNotContact',
         );
 
-        if (ids.length === 0) {
-            setSelected([]);
-
-            return;
-        }
-
-        setBusy('do-not-contact');
-        setBulkError(null);
-
-        let cursor = 0;
-
-        const next = () => {
-            if (cursor >= ids.length) {
-                setBusy(null);
-                setSelected([]);
-
-                return;
-            }
-
-            const id = ids[cursor++];
-
-            router.patch(
-                cell.url([slug, id]),
-                { field: 'status', value: 'DoNotContact' },
-                {
-                    preserveScroll: true,
-                    preserveState: true,
-                    onSuccess: next,
-                    onError: () => {
-                        setBusy(null);
-                        setBulkError(
-                            'Could not mark every selected contact as do not contact.',
-                        );
-                    },
-                },
-            );
-        };
-
-        next();
+        runBulk('do-not-contact', ids);
     };
 
     const deleteSelected = () => {
-        const ids = [...selectedOnPage];
+        const ids = [...deleteIds];
 
         setDeleteOpen(false);
 
@@ -226,51 +364,7 @@ export default function ContactsIndex({
             return;
         }
 
-        setSelected([]);
-        setBusy('delete');
-        setBulkError(null);
-
-        let cursor = 0;
-
-        const restoreFilters = () => {
-            if (filters.q || filters.list) {
-                router.get(
-                    contactsIndex.url(slug),
-                    {
-                        q: filters.q ?? '',
-                        list: filters.list ?? '',
-                    },
-                    {
-                        preserveScroll: true,
-                        preserveState: true,
-                        replace: true,
-                    },
-                );
-            }
-        };
-
-        const next = () => {
-            if (cursor >= ids.length) {
-                setBusy(null);
-                restoreFilters();
-
-                return;
-            }
-
-            const id = ids[cursor++];
-
-            router.delete(destroy.url([slug, id]), {
-                preserveScroll: true,
-                preserveState: true,
-                onSuccess: next,
-                onError: () => {
-                    setBusy(null);
-                    setBulkError('Could not delete every selected contact.');
-                },
-            });
-        };
-
-        next();
+        runBulk('delete', ids);
     };
 
     const importButton = can.create ? (
@@ -304,7 +398,7 @@ export default function ContactsIndex({
                     ? '0 contacts'
                     : `Showing ${(contacts.from ?? 0).toLocaleString()}–${(contacts.to ?? 0).toLocaleString()} of ${contacts.total.toLocaleString()}`}
             </span>
-            {previousLink?.url ? (
+            {previousLink?.url && busy === null ? (
                 <Button variant="outline" size="sm" asChild>
                     <Link href={previousLink.url} preserveScroll>
                         Previous
@@ -315,7 +409,7 @@ export default function ContactsIndex({
                     Previous
                 </Button>
             )}
-            {nextLink?.url ? (
+            {nextLink?.url && busy === null ? (
                 <Button variant="outline" size="sm" asChild>
                     <Link href={nextLink.url} preserveScroll>
                         Next
@@ -362,7 +456,7 @@ export default function ContactsIndex({
                 >
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
+                            <Button variant="outline" disabled={busy !== null}>
                                 <Filter /> Filters
                                 {filters.list ? (
                                     <span
@@ -450,7 +544,10 @@ export default function ContactsIndex({
                             <Button
                                 variant="outline"
                                 className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
-                                onClick={() => setDeleteOpen(true)}
+                                onClick={() => {
+                                    setDeleteIds(selectedOnPage);
+                                    setDeleteOpen(true);
+                                }}
                                 disabled={busy !== null}
                                 data-test="contacts-bulk-delete"
                             >
@@ -476,6 +573,7 @@ export default function ContactsIndex({
                                     setSearch(event.target.value)
                                 }
                                 placeholder="Search name or email…"
+                                disabled={busy !== null}
                                 className="h-8 w-[246px] max-w-full pl-8"
                             />
                         </div>
@@ -487,6 +585,7 @@ export default function ContactsIndex({
                                 variant="outline"
                                 size="icon"
                                 aria-label="Manage columns"
+                                disabled={busy !== null}
                                 data-test="contacts-columns-button"
                             >
                                 <Settings />
@@ -564,7 +663,14 @@ export default function ContactsIndex({
                             )}
                         </div>
                     ) : (
-                        <div className="flex min-h-0 flex-1 flex-col [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto">
+                        <div
+                            aria-busy={busy !== null}
+                            className={cn(
+                                'flex min-h-0 flex-1 flex-col [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto',
+                                busy !== null &&
+                                    'pointer-events-none opacity-60',
+                            )}
+                        >
                             <ContactGrid
                                 slug={slug}
                                 contacts={contacts}
@@ -585,6 +691,7 @@ export default function ContactsIndex({
                         activeListId={filters.list}
                         canCreate={can.create}
                         search={filters.q}
+                        disabled={busy !== null}
                         trailing={pagination}
                     />
                 </div>
@@ -594,15 +701,15 @@ export default function ContactsIndex({
                 open={deleteOpen}
                 onOpenChange={setDeleteOpen}
                 title={
-                    selectedCount === 1
+                    deleteIds.length === 1
                         ? 'Delete 1 contact?'
-                        : `Delete ${selectedCount} contacts?`
+                        : `Delete ${deleteIds.length} contacts?`
                 }
                 description={DELETE_COPY}
                 confirmLabel={
-                    selectedCount === 1
+                    deleteIds.length === 1
                         ? 'Delete contact'
-                        : `Delete ${selectedCount} contacts`
+                        : `Delete ${deleteIds.length} contacts`
                 }
                 onConfirm={deleteSelected}
                 processing={busy === 'delete'}

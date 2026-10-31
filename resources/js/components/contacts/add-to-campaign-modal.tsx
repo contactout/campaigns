@@ -48,10 +48,8 @@ export default function AddToCampaignModal({
     const [processing, setProcessing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const chosenId = campaignId || String(campaigns[0]?.id ?? '');
-
     const submit = () => {
-        if (chosenId === '' || processing) {
+        if (campaignId === '' || processing) {
             return;
         }
 
@@ -59,7 +57,7 @@ export default function AddToCampaignModal({
         setError(null);
 
         router.post(
-            store.url([slug, Number(chosenId)]),
+            store.url([slug, Number(campaignId)]),
             { contacts: contactIds },
             {
                 preserveScroll: true,
@@ -84,7 +82,8 @@ export default function AddToCampaignModal({
                         {contactIds.length === 1
                             ? '1 contact will be added to the campaign you choose.'
                             : `${contactIds.length} contacts will be added to the campaign you choose.`}{' '}
-                        Contacts already in the campaign are skipped.
+                        Contacts already in the campaign are skipped. Only draft
+                        and stopped campaigns can receive contacts.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -95,7 +94,10 @@ export default function AddToCampaignModal({
                     </p>
                 ) : (
                     <div className="flex flex-col gap-1.5">
-                        <Select value={chosenId} onValueChange={setCampaignId}>
+                        <Select
+                            value={campaignId}
+                            onValueChange={setCampaignId}
+                        >
                             <SelectTrigger aria-label="Campaign">
                                 <SelectValue placeholder="Choose a campaign" />
                             </SelectTrigger>
@@ -105,7 +107,14 @@ export default function AddToCampaignModal({
                                         key={campaign.id}
                                         value={String(campaign.id)}
                                     >
-                                        {campaign.name}
+                                        <span className="flex w-full min-w-0 items-center justify-between gap-4">
+                                            <span className="truncate">
+                                                {campaign.name}
+                                            </span>
+                                            <span className="text-label text-muted-foreground">
+                                                {campaign.status_label}
+                                            </span>
+                                        </span>
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -129,7 +138,11 @@ export default function AddToCampaignModal({
                     <Button
                         type="button"
                         onClick={submit}
-                        disabled={campaigns.length === 0 || processing}
+                        disabled={
+                            campaigns.length === 0 ||
+                            campaignId === '' ||
+                            processing
+                        }
                     >
                         {processing ? 'Adding…' : 'Add to campaign'}
                     </Button>
