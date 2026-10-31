@@ -12,6 +12,7 @@ import { useState } from 'react';
 import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
 import PageHead from '@/components/page-head';
 import PendingInvitationsModal from '@/components/pending-invitations-modal';
+import TeamInvitationAlert from '@/components/team-invitation-alert';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -232,27 +233,22 @@ export default function Dashboard({
                 />
 
                 {invitationCount > 0 ? (
-                    <div
-                        data-test="pending-invitations-banner"
-                        className="flex items-center gap-4 rounded-lg border border-accent bg-banner px-4 py-2.5"
-                    >
-                        <p className="min-w-0 flex-1 text-[13px] leading-5 font-medium text-primary">
-                            You have {invitationCount} pending{' '}
-                            {plural(
-                                invitationCount,
-                                'team invitation',
-                                'team invitations',
-                            )}{' '}
-                            from {invitationNames}
-                        </p>
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setShowInvitations(true)}
-                        >
-                            Review
-                        </Button>
-                    </div>
+                    <TeamInvitationAlert
+                        message={`You have ${invitationCount} pending ${plural(
+                            invitationCount,
+                            'team invitation',
+                            'team invitations',
+                        )} from ${invitationNames}`}
+                        actionSlot={
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setShowInvitations(true)}
+                            >
+                                Review
+                            </Button>
+                        }
+                    />
                 ) : null}
 
                 {metrics ? (
