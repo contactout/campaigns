@@ -1,4 +1,4 @@
-import type { PendingVisit } from '@inertiajs/core';
+import type { PendingVisit, VisitOptions } from '@inertiajs/core';
 import { router } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -25,31 +25,24 @@ export type UnsavedChangesGuard = {
     request: (action: () => void) => void;
 };
 
-/** Marks the history entry this hook pushed, so cleanup only pops its own. */
-const HISTORY_MARKER = '__unsavedChangesGuard';
+/**
+ * A replay must carry the visit's own callbacks: a `useForm` submit builds its
+ * `onSuccess`/`onError`/`onFinish` inside the form, and dropping them means a
+ * failed save renders no error and a successful one never refreshes the dirty
+ * baseline. Only the four runtime flags and the resolved URL are internal.
+ */
+const replayOptions = (visit: PendingVisit): VisitOptions => {
+    const {
+        id: _id,
+        url: _url,
+        cancelled: _cancelled,
+        completed: _completed,
+        interrupted: _interrupted,
+        ...options
+    } = visit;
 
-/** The fields of a pending visit worth replaying; the rest are internals. */
-const replayOptions = (
-    visit: PendingVisit,
-): Parameters<typeof router.visit>[1] => ({
-    method: visit.method,
-    data: visit.data,
-    headers: visit.headers,
-    replace: visit.replace,
-    preserveScroll: visit.preserveScroll,
-    preserveState: visit.preserveState,
-    preserveUrl: visit.preserveUrl,
-    only: visit.only,
-    except: visit.except,
-    reset: visit.reset,
-    errorBag: visit.errorBag,
-    forceFormData: visit.forceFormData,
-    queryStringArrayFormat: visit.queryStringArrayFormat,
-    async: visit.async,
-    showProgress: visit.showProgress,
-    fresh: visit.fresh,
-    viewTransition: visit.viewTransition,
-});
+    return options;
+};
 
 /**
  * Keeps a page's unsaved draft from being thrown away by a navigation.
@@ -58,18 +51,26 @@ const replayOptions = (
  *
  * - **In-app visits** (`<Link>`, `router.visit`, `useForm`/`<Form>` submits,
  *   head actions that redirect) fire a cancelable `inertia:before` event, so
- *   the visit is cancelled here and replayed once the user confirms.
+ *   the visit is cancelled here and replayed, with its callbacks, once the user
+ *   confirms.
  * - **Browser Back** never fires `before`. Inertia's own `popstate` handler
- *   (`handlePopstateEvent` in `@inertiajs/core` 3.7.1) restores the previous
- *   entry with `preserveState: false`, which remounts the page and takes the
- *   draft with it, and it cannot be intercepted: a capture-phase listener at
- *   `window` runs after Inertia's, and cancelling the event does not stop it.
- *   What *can* be used is the one branch it does not swap on: an entry whose
- *   history state is `null` only has its URL restored. So while the draft is
- *   dirty the current entry is emptied and a copy of it is pushed above: Back
- *   lands on the emptied entry, the page stays mounted, and the dialog opens.
+ *   restores the previous entry with `preserveState: false`, which remounts the
+ *   page and takes the draft with it, and it is not cancelable: a capture-phase
+ *   listener with `stopImmediatePropagation()` was tried and, in the Chromium
+ *   build used for the proofs, the page still swapped. What can be used is the
+ *   one branch it does not swap on: an entry whose history state is `null` only
+ *   has its URL restored. So while the draft is dirty the current entry is
+ *   emptied and a copy is pushed above it. Back lands on the emptied entry, the
+ *   page stays mounted, and the dialog asks. The trap is re-armed as soon as it
+ *   fires, so a second Back cannot leave, and it is taken off before any visit
+ *   the page allows through.
  * - **A closed tab or a hard reload** cannot be intercepted by a dialog, so
  *   the browser's own `beforeunload` confirmation is the guard there.
+ *
+ * The hook writes the page's state back into the emptied entry itself rather
+ * than relying on Inertia's repair: `History.replaceState` returns early when
+ * the state it would write equals its current one, so after the first repair in
+ * a page's life a later one can be skipped and leave a `null` entry behind.
  */
 export function useUnsavedChangesGuard({
     isDirty,
@@ -81,10 +82,11 @@ export function useUnsavedChangesGuard({
     const allowRef = useRef(allow);
     const bypassRef = useRef(false);
     const armedRef = useRef(false);
+    const armedHrefRef = useRef<string | null>(null);
     const rewindingRef = useRef(false);
     const rewindRef = useRef<(() => Promise<void>) | null>(null);
-    // The page's own history state, put back above the emptied entry.
-    const homeRef = useRef<unknown>(null);
+    // The page's own history state, written back into the emptied entry.
+    const pageStateRef = useRef<Record<string, unknown> | null>(null);
     // Back resets the scroll position it was intercepted at; put it back.
     const scrollRef = useRef({ x: 0, y: 0 });
 
@@ -107,6 +109,37 @@ export function useUnsavedChangesGuard({
         return () => window.removeEventListener('scroll', rememberScroll);
     }, [isDirty]);
 
+    /** Write the page's state back, whatever Inertia's own repair decided. */
+    const repair = useCallback(() => {
+        const state = pageStateRef.current;
+
+        if (state !== null) {
+            window.history.replaceState(state, '', window.location.href);
+        }
+    }, []);
+
+    /**
+     * Empty the current entry and push a copy above it, so the next Back lands
+     * on an entry Inertia restores without remounting the page.
+     */
+    const rearm = useCallback(() => {
+        if (armedRef.current) {
+            return;
+        }
+
+        const state = pageStateRef.current;
+
+        if (state === null) {
+            return;
+        }
+
+        const href = window.location.href;
+        window.history.replaceState(null, '', href);
+        window.history.pushState({ ...state }, '', href);
+        armedRef.current = true;
+        armedHrefRef.current = href;
+    }, []);
+
     useEffect(() => {
         dirtyRef.current = isDirty;
 
@@ -114,35 +147,25 @@ export function useUnsavedChangesGuard({
             return;
         }
 
-        /**
-         * Empty this entry and push a copy above it, so the next Back lands on
-         * an entry Inertia restores without remounting the page.
-         */
-        const arm = () => {
-            if (armedRef.current) {
-                return;
-            }
+        const rememberPageState = () => {
+            const state = window.history.state as Record<
+                string,
+                unknown
+            > | null;
 
-            const state = window.history.state;
-
+            // No Inertia entry to copy (the first load of a session): there is
+            // nothing to trap, so Back stays unguarded.
             if (
                 state === null ||
                 typeof state !== 'object' ||
                 !('page' in state)
             ) {
-                // No Inertia entry to copy (the first load of a session): there
-                // is nothing to trap, so Back stays unguarded.
-                return;
+                return false;
             }
 
-            homeRef.current = state;
-            window.history.replaceState(null, '', window.location.href);
-            window.history.pushState(
-                { ...state, [HISTORY_MARKER]: true },
-                '',
-                window.location.href,
-            );
-            armedRef.current = true;
+            pageStateRef.current = state;
+
+            return true;
         };
 
         const restoreScroll = () => {
@@ -151,9 +174,9 @@ export function useUnsavedChangesGuard({
         };
 
         /**
-         * Pop our own entry back off, landing on the emptied one below it.
-         * Inertia repairs that entry's URL and state without swapping the page,
-         * so the draft survives. Resolves once the pop has happened.
+         * Pop our own copy off, landing on the emptied entry below it. Inertia
+         * restores that entry's URL without swapping the page, and the state is
+         * written back here so the entry is valid for whoever comes next.
          */
         const rewind = (): Promise<void> =>
             new Promise((resolve) => {
@@ -172,12 +195,13 @@ export function useUnsavedChangesGuard({
                     settled = true;
                     window.removeEventListener('popstate', finish);
                     rewindingRef.current = false;
+                    armedRef.current = false;
+                    armedHrefRef.current = null;
+                    repair();
                     restoreScroll();
                     resolve();
                 };
 
-                armedRef.current = false;
-                homeRef.current = null;
                 rewindingRef.current = true;
                 window.addEventListener('popstate', finish);
                 window.history.back();
@@ -200,13 +224,20 @@ export function useUnsavedChangesGuard({
                 return;
             }
 
-            // The trap fired: Back landed on the emptied entry, the page is
+            // The trap fired: Back landed on the emptied entry, so the page is
             // still mounted and the draft is intact.
             armedRef.current = false;
+            armedHrefRef.current = null;
+            repair();
             restoreScroll();
 
             if (actionRef.current !== null) {
-                // A visit is already waiting on the confirm; do not replace it.
+                // A Back with the confirm already open is the platform's way of
+                // dismissing it, and a second Back must not leave either.
+                actionRef.current = null;
+                setPending(false);
+                rearm();
+
                 return;
             }
 
@@ -215,11 +246,15 @@ export function useUnsavedChangesGuard({
                 window.history.back();
             };
             setPending(true);
+            // Trapped again immediately: a second Back asks rather than leaves.
+            rearm();
         };
 
         const offBefore = router.on('before', (event) => {
+            const visit = event.detail.visit;
+
             // Hover prefetches are not navigations and must not prompt.
-            if (event.detail.visit.prefetch) {
+            if (visit.prefetch) {
                 return;
             }
 
@@ -227,20 +262,17 @@ export function useUnsavedChangesGuard({
                 return;
             }
 
-            if (allowRef.current?.(event.detail.visit)) {
+            if (allowRef.current?.(visit)) {
                 // A same-page reload (the editor's own save, the placeholder
-                // rail, a step endpoint) keeps the draft, but our trap entry has
-                // to come off first: the emptied entry below it would otherwise
-                // be left behind, and the next Back press would be a no-op.
+                // rail, a step endpoint) keeps the draft. Take the trap off
+                // first, so the save does not leave the emptied entry behind,
+                // then replay the visit with its own callbacks intact.
                 if (armedRef.current) {
                     event.preventDefault();
 
                     void rewind().then(() => {
                         bypassRef.current = true;
-                        router.visit(
-                            event.detail.visit.url,
-                            replayOptions(event.detail.visit),
-                        );
+                        router.visit(visit.url, replayOptions(visit));
                         bypassRef.current = false;
                     });
                 }
@@ -251,14 +283,18 @@ export function useUnsavedChangesGuard({
             event.preventDefault();
             actionRef.current = () => {
                 bypassRef.current = true;
-                dirtyRef.current = false;
-                router.visit(
-                    event.detail.visit.url,
-                    replayOptions(event.detail.visit),
-                );
+                router.visit(visit.url, replayOptions(visit));
                 bypassRef.current = false;
             };
             setPending(true);
+        });
+
+        const offFinish = router.on('finish', () => {
+            // A save that failed (a 422 keeps the draft) or a reload that left
+            // the page dirty must re-arm the trap it was rewound for.
+            if (dirtyRef.current) {
+                rearm();
+            }
         });
 
         const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -266,18 +302,13 @@ export function useUnsavedChangesGuard({
             event.returnValue = '';
         };
 
-        const offFinish = router.on('finish', () => {
-            // A save that failed (a 422 keeps the draft) or a reload that left
-            // the page dirty must re-arm the trap it was rewound for.
-            if (dirtyRef.current) {
-                arm();
-            }
-        });
-
+        rewindRef.current = rewind;
         window.addEventListener('beforeunload', onBeforeUnload);
         window.addEventListener('popstate', onPopState);
-        rewindRef.current = rewind;
-        arm();
+
+        if (rememberPageState()) {
+            rearm();
+        }
 
         return () => {
             dirtyRef.current = false;
@@ -286,21 +317,22 @@ export function useUnsavedChangesGuard({
             offFinish();
             window.removeEventListener('beforeunload', onBeforeUnload);
             window.removeEventListener('popstate', onPopState);
-            // Only pop our own entry: a confirmed visit has already pushed the
-            // next page above it, and popping then would return the user here.
-            const current = window.history.state as Record<
-                string,
-                unknown
-            > | null;
 
-            if (current !== null && current?.[HISTORY_MARKER] === true) {
+            // Only rewind while we are still on the entry we armed: a confirmed
+            // visit has already pushed the next page above it, and popping then
+            // would return the user here.
+            if (
+                armedRef.current &&
+                pageStateRef.current !== null &&
+                window.location.href === armedHrefRef.current
+            ) {
                 void rewind();
             } else {
                 armedRef.current = false;
-                homeRef.current = null;
+                armedHrefRef.current = null;
             }
         };
-    }, [isDirty]);
+    }, [isDirty, rearm, repair]);
 
     const request = useCallback((action: () => void) => {
         if (!dirtyRef.current) {
@@ -311,22 +343,6 @@ export function useUnsavedChangesGuard({
 
         actionRef.current = action;
         setPending(true);
-    }, []);
-
-    const rearm = useCallback(() => {
-        const state = homeRef.current;
-
-        if (state === null) {
-            return;
-        }
-
-        window.history.replaceState(null, '', window.location.href);
-        window.history.pushState(
-            { ...(state as Record<string, unknown>), [HISTORY_MARKER]: true },
-            '',
-            window.location.href,
-        );
-        armedRef.current = true;
     }, []);
 
     const confirm = useCallback(() => {
@@ -348,7 +364,7 @@ export function useUnsavedChangesGuard({
     const cancel = useCallback(() => {
         actionRef.current = null;
         setPending(false);
-        // A cancelled Back press left the emptied entry as the current one.
+
         if (dirtyRef.current) {
             rearm();
         }
