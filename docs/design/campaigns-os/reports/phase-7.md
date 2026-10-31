@@ -397,3 +397,52 @@ index payloads), P2-7/P2-8/P2-10 (the Recipients tab reloads `show()`; two corre
 search, unescaped `LIKE`; the do-not-contact re-join), and P2-9 (indexes, 8.81 → 1.53 ms) are
 recorded in `pr.md` with the reviewer's numbers, together with the three refactors (R1, R2, R3)
 and the two payload builders that still ship the stored connection status.
+
+### Round 2 — four P1s in the guard, fixed and re-proved
+
+The second deep review blocked on the guard's replay and history machinery. All four are fixed;
+the history trap stayed because each defect had a mechanical cause, and each is now measured
+rather than argued.
+
+| # | Defect | Cause | Fix |
+| --- | --- | --- | --- |
+| a | Every save of a dirty draft lost its callbacks | an allowed visit was cancelled and replayed through a 17-field whitelist, which dropped the `useForm`/`<Form>` `onSuccess`/`onError`/`onFinish` that `getPendingVisit` had put on the visit | the replay spreads the runtime visit minus `id`, `url`, `cancelled`, `completed`, `interrupted` |
+| b | A second Back (or a Back with the dialog open) swapped the page and dropped the draft | the trap disarmed when it fired and only Cancel re-armed it | the trap re-arms as soon as it fires, and a `popstate` while the confirm is open counts as Cancel |
+| c | Back → Cancel → leave → Back from the next page hit a dead entry that rewrote the URL | the hook relied on Inertia's repair, and `History.replaceState` returns early when the state equals its current one, so the second repair in a page's life is skipped | the hook writes `history.replaceState(state, …)` itself when the trap fires and when `rewind` finishes |
+| d | Scroll, then type back to clean, left a dead Back press | the marker the cleanup looked for lived in the history state, and Inertia's debounced scroll save rewrites that state | no marker: cleanup decides by `armedRef` plus "the URL is still the armed URL" |
+
+Measured on the round-2 head, 1280×900 and 390×844, one real event at a time:
+
+| Proof | Reading |
+| --- | --- |
+| A save that fails validation | template: `The subject field must not be greater than 255 characters.` renders under the field, the 300-character draft stays, no prompt, no "Saved just now" (`round2-01-template-422-1280.png`); step editor: the error renders and the editor stays open with the draft (`round2-02-step-422-1280.png`) |
+| Leaving after a failed save | still asks, which is correct, and Cancel keeps the 300-character draft |
+| A save that succeeds | "Saved just now" appears, no prompt, and a sidebar tap leaves without a dialog (`/northwind/templates`); the step save closes the editor and leaving does not prompt |
+| Two Backs in a row | press 1 opens the dialog, press 2 dismisses it (Cancel semantics) with the URL unchanged and the draft intact, press 3 opens it again; the draft survives all three |
+| 390, dialog open then Back | the dialog closes, the URL stays, the draft stays; the next Back opens it again (`round2-03-tabbar-dialog-390.png`, `round2-04-second-back-dismissed-390.png`) |
+| Back → Confirm | leaves to `/northwind/templates`, and the next Back leaves the list — no dead press |
+| Back → Cancel → sidebar link → Confirm | lands on `/northwind/campaigns`; one Back returns to `/northwind/templates/1` **with the editor rendered**, so the entry below is valid (the round-1 defect) |
+| Scroll → type back to the saved value → one Back | leaves to `/northwind/templates` in one press |
+| Hover prefetch | no dialog |
+
+Checks on this head, clean `git archive`, one command at a time: build 0, types 0, check 0 (155
+files / 138 lint), tests **603 passed** (2,945 assertions), pint 0 (367 files), phpstan 0.
+
+Also from round 2, all small:
+
+- `authorize()` now throws the binding's own `ModelNotFoundException`, so a foreign id and a
+  missing one produce the same JSON body as well as the same status; the tenancy test asserts the
+  message prefix for both.
+- The failure message keeps the provider's reason: the envelope is dropped but
+  `error`/`error_description` is appended (`invalid_client: Unauthorized`), because the codes are
+  what separate a revoked grant from a bad secret, and the 300-character cap would have cut them
+  first.
+- The recipients search is team-scoped, grouped so the email `OR` cannot escape the predicate. The
+  test now asserts both halves: unfiltered, a planted foreign recipient renders as a deleted
+  contact (2 rows, no name or address); filtered by the shared name, only the team's own row
+  matches (1 row).
+- `--sidebar-ring` was `#b8afff` (1.98:1 on white) and is now `#6552ff` light / `#8b7dff` dark.
+
+Two Back-shaped holes remain and are documented in `pr.md`: a history jump of two or more entries
+crosses the trap in one step, and Forward after a cancelled Back reaches the emptied entry before
+the page it skipped.

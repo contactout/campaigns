@@ -65,36 +65,50 @@ branch follows variant `a`, the variant every phase report measures against.
 
 ## Unsaved drafts
 
-Two editors hold work no server has seen: the template body and a campaign step. Three paths
-can take that work away, and one shared hook
+Two editors hold work no server has seen: the template body and a campaign step. One shared hook
 (`resources/js/hooks/use-unsaved-changes-guard.ts`, used by `pages/templates/show.tsx` and
-`components/campaigns/sequence-editor.tsx`) guards all three:
+`components/campaigns/sequence-editor.tsx`) guards every way that work can leave the page:
 
-- **Any Inertia visit** — a tab-bar item, a sidebar or More-sheet link, a head action that
+- **Every Inertia visit** — a tab-bar item, a sidebar or More-sheet link, a head action that
   redirects (`Duplicate`, `Archive`, `Stop`), the back chevron, the editor's own Cancel and Esc —
-  is cancelled at `inertia:before` and replayed once the user confirms. That includes visits the
-  editor did not start, which is what earlier rounds left unguarded.
-- **Browser Back** cannot be cancelled: Inertia's `popstate` handler restores the previous entry
-  with `preserveState: false` (a remount), and a capture-phase listener runs after it. Instead
-  the hook empties the current history entry and pushes a copy above it while the draft is dirty.
-  Back lands on the emptied entry, the one shape Inertia restores by URL alone, so the page stays
-  mounted and the draft survives the confirm.
+  is cancelled at `inertia:before` and replayed once the user confirms, **with the visit's own
+  callbacks**, so a save that fails still renders its errors and one that succeeds still refreshes
+  the dirty baseline and closes the step editor.
+- **Browser Back** cannot be cancelled by that event: Inertia's `popstate` handler restores the
+  previous entry with `preserveState: false`, which remounts the page and takes the draft with it.
+  A capture-phase listener with `stopImmediatePropagation()` was tried and, in the Chromium build
+  used for the proofs, the page still swapped. What is used instead is the one branch Inertia does
+  not swap on: an entry whose history state is `null` only has its URL restored. So while the
+  draft is dirty the current entry is emptied and a copy is pushed above it; Back lands on the
+  emptied entry, the page stays mounted, and the dialog asks. The trap is re-armed as soon as it
+  fires, so a second Back — or a Back with the dialog open, which is how Android dismisses one —
+  asks again instead of leaving, and the hook writes the page's state back into the emptied entry
+  itself rather than trusting Inertia's repair (its `History.replaceState` skips a repair equal to
+  its current state, which would leave a `null` entry behind after a Back/Cancel/leave sequence).
 - **A closed tab or a hard reload** keeps the browser's own `beforeunload` prompt, which no dialog
   can replace.
 
-Three things are deliberately let through, because they reload the same page and keep the draft:
-`<Form>` submits to the step endpoints (`/campaigns/{id}/steps…`, including reorder and delete),
-the placeholder rail's add/remove forms, and the editors' own saves. Proved by click-through at
-1280 and 390 (`reports/deep-review/`): a dirty edit followed by a tab-bar tap or Back raises the
-dialog, Cancel keeps the draft and stays put, Confirm leaves and the draft is gone, and hovering
-a nav link raises nothing.
+Four things are deliberately let through, because they reload the same page and keep the draft:
+the editors' own saves, the placeholder rail's add/remove forms, and the step endpoints
+(`/campaigns/{id}/steps…`, including reorder and delete). Each of those takes the trap off first,
+so a save cannot leave the emptied entry behind. Proved by click-through at 1280 and 390
+(`reports/deep-review/`, `round2-*.png`): a dirty edit then a tab-bar tap or Back raises the
+dialog; Cancel keeps the draft and stays; Confirm leaves and the draft goes; two Backs in a row
+both ask; a Back with the dialog open cancels it; Back → Cancel → leave → Back from the next page
+lands on a real page; a draft typed back to clean after a scroll leaves in one press; a save that
+fails validation shows its error and keeps the draft; a save that succeeds leaves without a
+prompt; and hovering a nav link raises nothing.
+
+Not guarded: a history jump of two or more entries (the long-press history menu) crosses the trap
+in one step, and Forward after a cancelled Back reaches the hard-reset entry before it reaches the
+page it skipped.
 
 ## Deviations and accessibility waivers
 
 Each has a number behind it in the phase reports. The short list:
 
 1. **44px controls at 390, not the boards' 28–32px.** Buttons, inputs, select triggers, the
-   six native `<select>`s (`components/native-select.tsx`, 44px and 16px text below `lg`, so iOS
+   nine native `<select>`s across six files (`components/native-select.tsx`, 44px and 16px text below `lg`, so iOS
    does not zoom on focus), campaign tabs and list chips get `max-lg:min-h-11`; the brief's
    touch-target rule outranks the board. Cost: taller heads and cards (connection card 174 vs
    ≈130; head rows 44 vs 28).
@@ -241,13 +255,12 @@ deep-review round there. The ones a reviewer should weigh:
   (820↔1180, 834↔1194), so this is a real path, not an edge case. The navigation guard does not
   help: a resize is not a visit, and the remounted form has no draft to restore. Fixing it means
   lifting the form state above the breakpoint branch (follow-up R1).
-- **A cancelled Back leaves a Forward entry.** The mechanism that survives Back is an emptied
-  history entry with a copy above it; after a cancel the copy is pushed again, so the forward
-  direction holds the emptied entry and a Forward reaches it before the page it skipped.
-  Measured, the Back direction is clean in every path proved: after a step save two presses
-  reach the campaigns list (one for Inertia's own entry for the save, one for the list), a draft
-  edited and typed back to its original value leaves in one press, a confirmed discard leaves,
-  and deleting a template while dirty runs without a prompt and lands on the list.
+- **Two Back-shaped holes remain, both documented above and in the hook:** a history jump of two
+  or more entries crosses the trap in one step (never trapped, even on the first press), and
+  Forward after a cancelled Back reaches the emptied entry before the page it skipped. Neither
+  loses a draft silently in the Back direction: the navigation direction that a user presses
+  normally is trapped, re-armed after every press, and proved clean in the paths in the
+  "Unsaved drafts" section.
 - **No JS tests.** The branch ships no runner, so the guard, the bulk loop and the selection
   pruning rest on click-throughs. `vitest` + React Testing Library is a follow-up, not a
   dependency this branch adds.
