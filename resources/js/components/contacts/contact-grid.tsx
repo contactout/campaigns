@@ -225,20 +225,25 @@ export default function ContactGrid({
                 data-test="contacts-list-mobile"
             >
                 <li className="flex h-9 items-center gap-2 border-b px-1">
-                    <span className="flex size-11 shrink-0 items-center justify-center">
-                        <Checkbox
-                            checked={
-                                allSelected
-                                    ? true
-                                    : someSelected
-                                      ? 'indeterminate'
-                                      : false
-                            }
-                            onCheckedChange={(value) =>
-                                onToggleAll(value === true)
-                            }
-                            aria-label="Select all contacts on this page"
-                        />
+                    <span
+                        className="flex size-11 shrink-0 items-center justify-center"
+                        onClick={() => onToggleAll(!allSelected)}
+                    >
+                        <span onClick={(event) => event.stopPropagation()}>
+                            <Checkbox
+                                checked={
+                                    allSelected
+                                        ? true
+                                        : someSelected
+                                          ? 'indeterminate'
+                                          : false
+                                }
+                                onCheckedChange={(value) =>
+                                    onToggleAll(value === true)
+                                }
+                                aria-label="Select all contacts on this page"
+                            />
+                        </span>
                     </span>
                     <span className="text-label leading-4 text-muted-foreground">
                         {contacts.data.length} on this page

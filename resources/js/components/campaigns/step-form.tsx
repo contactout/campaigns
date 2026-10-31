@@ -305,15 +305,27 @@ export default function StepForm({
                                     </div>
                                 </div>
 
-                                <label className="flex items-center gap-2 text-body leading-5">
-                                    <Checkbox
-                                        name="is_threaded"
-                                        value="1"
-                                        checked={isThreaded}
-                                        onCheckedChange={(checked) =>
-                                            setIsThreaded(checked === true)
+                                <label
+                                    className="flex min-h-11 cursor-pointer items-center gap-2 text-body leading-5"
+                                    onClick={() =>
+                                        setIsThreaded((current) => !current)
+                                    }
+                                >
+                                    <span
+                                        className="flex size-11 shrink-0 items-center justify-center"
+                                        onClick={(event) =>
+                                            event.stopPropagation()
                                         }
-                                    />
+                                    >
+                                        <Checkbox
+                                            name="is_threaded"
+                                            value="1"
+                                            checked={isThreaded}
+                                            onCheckedChange={(checked) =>
+                                                setIsThreaded(checked === true)
+                                            }
+                                        />
+                                    </span>
                                     Send as a reply in the same thread
                                 </label>
                             </div>
