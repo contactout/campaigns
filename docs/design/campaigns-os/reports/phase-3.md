@@ -471,8 +471,9 @@ Remaining deviations from this round:
 
 - The summary counts **blocking** reasons while the panel below lists the warning line too, so the
   two numbers differ when there are do-not-contact recipients (2 vs 3 bullets on 11 A).
-- `Esc` cannot see Chrome's autofill dropdown (it is browser UI, not DOM). The dirty guard means the
-  first Esc now asks instead of closing, which covers the loss; a second Esc (or `Discard changes`)
-  still closes.
+- `Esc` cannot see Chrome's autofill dropdown (it is browser UI, not DOM). The dirty guard means
+  Esc asks instead of closing while the draft differs, so the loss the review described cannot
+  happen; the way out is `Discard changes`. Dismissing the dialog (Esc or Cancel) keeps the draft
+  and the editor open.
 - The discard and remove confirmations are two instances of the same `ConfirmDialog`, one owned by
   the editor and one by the recipients tab, because the editor owns its own transitions.
