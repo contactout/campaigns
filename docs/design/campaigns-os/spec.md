@@ -302,3 +302,14 @@ both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore repl
 - **Connections pills vs needs-attention (phase 5 note).** Deactivated and Disconnected render
   neutral pills but count as "needs attention", and an Active connection with an exception is
   still green. The Verified/Failed derivation in phase 5 must reconcile the pill and the count.
+
+### Contacts grid (phase 4) — 32px cells, 33px pitch, `px-3`
+
+Board 06 A's rules are at y 164, 197, 230, 263, 296, 328, 361, 394, 427, 460, 492, 525,
+558 (x 215–1279), a 32.8px mean pitch: **32px cells plus the 1px rule**. Cell text starts
+11–12px inside the column rules (Name 291 against the divider 279, Email 481 against 469,
+Phone 701 against 689, Company 1001 against 989, Title 1151 against 1139), so the cells use
+`px-3`. The phase-4 brief's "44px rows / `px-4` cells" are the 02 A campaigns-table
+measurements (dividers 211/255/299/…, Name 258 against 241) and do not apply here. Phase 6
+must keep 33px rows and `px-3` for the contacts grid rather than restoring the table
+density.
