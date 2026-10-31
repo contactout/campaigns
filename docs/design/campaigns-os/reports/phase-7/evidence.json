@@ -1,13 +1,38 @@
 {
   "provenance": {
-    "commit": "086fc59 (renders), dc6dfbf (checks)",
+    "renders": "086fc59",
+    "checks": "dc6dfbf",
+    "reviewFixes": "858a9e0",
     "browser": "Chromium 156 headless, CDP",
     "viewports": [
       "1280x900",
       "390x844"
     ],
     "deviceScaleFactor": 1,
-    "note": "Counts and coordinates are DOM reads with getBoundingClientRect(); the PNGs show the same screens."
+    "note": "Coordinates are DOM reads with getBoundingClientRect; the PNGs show the same screens. The sections below were re-read on the review-fix bytes except where marked 086fc59.",
+    "sections": {
+      "858a9e0": [
+        "editorDialog390.dialog",
+        "editorDialog390.initialFocus",
+        "editorDialog390.tabTrail",
+        "editorDialog390.scrollAttempt",
+        "editorDialog390.afterEscapeClean",
+        "stickyBars390.contacts",
+        "safeArea390",
+        "signature1280",
+        "contactsHeaders1280",
+        "templateDirtyFlows1280",
+        "beforeUnload858a9e0"
+      ],
+      "086fc59": [
+        "editorDialog390.afterEscapeDirty",
+        "editorDialog390.afterDiscardCancel",
+        "editorInline1280",
+        "threadedCheckbox",
+        "stickyBars390.recipients",
+        "rowPitches"
+      ]
+    }
   },
   "editorDialog390": {
     "dialog": {
@@ -558,5 +583,17 @@
       57,
       57
     ]
+  },
+  "beforeUnload858a9e0": {
+    "method": "Page.javascriptDialogOpening count around Page.navigate",
+    "afterSave": {
+      "dialogs": 0,
+      "path": "/northwind/templates"
+    },
+    "controlDirtyEdit": {
+      "dialogs": 1,
+      "path": "/northwind/templates"
+    },
+    "note": "A full navigation after a successful save raises no beforeunload; an unsaved body edit raises one, so the counter is live."
   }
 }

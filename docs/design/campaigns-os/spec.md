@@ -307,8 +307,8 @@ both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore repl
 `--chart-1..5` and `--ring-halo` were removed from `:root`, `.dark` and the `@theme` mapping in
 phase 7. Neither had a reference in `resources/js`, `resources/views` or `app` (no `chart-${…}`
 either), and no board has a chart; the focus treatment had already stopped using the halo when
-`--ring` gained its 2px indicator. This overrides the `--chart-1..3` row in the token table and
-the dark `--ring-halo` row above.
+`--ring` gained its 2px indicator. Those rows were removed from the token table and the
+dark-token table.
 
 ### Contacts grid (phase 4) — 32px cells, 33px pitch, `px-3`
 

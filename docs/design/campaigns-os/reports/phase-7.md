@@ -16,8 +16,10 @@ behind it, and the two items that cannot be proved are named as trade-offs, not 
 - **Final checks:** `git archive dc6dfbf` (and, after the review round, the review-fix commit)
   into `/home/cua/work/campaigns-verify`, with a real `vendor/` copy and a symlinked
   `node_modules/` for the first run. No preview route, so the check set sees the committed
-  bytes exactly. The renders are from `086fc59`; `dc6dfbf` differs only by the sweep and
-  `858a9e0` adds the two review fixes, whose two proofs were re-rendered.
+  bytes exactly. The board renders are from `086fc59`; `dc6dfbf` differs only by the sweep.
+  After the review round (`858a9e0`) the two P1 proofs were re-rendered, and the dialog, bar,
+  safe-area and signature readings were re-taken on those bytes; `evidence.json` names the
+  commit behind each section.
 - **Browser:** Chromium 156 headless over CDP, viewport 1280×900 or 390×844,
   `deviceScaleFactor: 1`, real `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent`.
   Harness in `/tmp/p7/` in the Space; screenshots in `reports/phase-7/`.
@@ -69,6 +71,13 @@ against stale text. `onCanonical` now also calls `form.setDefaults('body', html)
 
 Screenshots: `p7-11-template-saved-1280.png` (post-save state), `p7-11-template-discard-guard-1280.png`
 (the guard on a real edit).
+
+The four flows exercise the in-app guard (the back link and the Discard button), not
+`beforeunload`. The harness auto-accepts native dialogs, so a `Page.navigate` that raises one
+would not stall the run. Measured directly on the same bytes by counting
+`Page.javascriptDialogOpening`: after a save, a full navigation raised **0** dialogs; with an
+unsaved edit in the body it raised **1**. The counter is live, so the zero after save is the
+`beforeunload` listener being disarmed, not silence.
 
 **P1-2 — the custom-field headers were not sticky.** `${stickyHead} … relative` had both
 `sticky` and `relative`, and `relative` wins, so Company and Title scrolled away and rows
@@ -274,3 +283,7 @@ New or still open in this phase:
   stopped after the renders; both ports were re-checked free.
 - The two source tarballs were deleted from the host and the Space; the
   `__preview-login` route is Space-only and the host tree and every commit are clean of it.
+- The fixture database was mutated by the template proofs: saving template 1 stored the test
+  edit in its body. It was restored afterwards — the placeholder is `{{first_name}}` again and
+  the `<br />` is back — but TipTap re-serialised the paragraph, so the stored body is 355
+  characters against the pre-test 353. Future renders show the correct text.
