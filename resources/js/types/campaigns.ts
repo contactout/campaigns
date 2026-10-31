@@ -64,7 +64,6 @@ export type CampaignConnection = {
     from_email: string | null;
     status: string;
     status_label: string;
-    has_exception: boolean;
 };
 
 export type CampaignStartReason = {

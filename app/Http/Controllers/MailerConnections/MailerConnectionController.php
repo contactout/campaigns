@@ -12,14 +12,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\MailerConnections\StoreMailerConnectionRequest;
 use App\Http\Requests\MailerConnections\UpdateMailerConnectionRequest;
 use App\Http\Requests\MailerConnections\UpdateMailerConnectionSignatureRequest;
-use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Services\OAuth\GoogleOAuthClient;
 use App\Services\OAuth\MicrosoftOAuthClient;
-use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -44,12 +41,9 @@ class MailerConnectionController extends Controller
             ->orderBy('name')
             ->get();
 
-        $sentToday = $this->sentTodayByConnection($connections);
-
         $connectionPayload = $connections
             ->map(fn (MailerConnection $connection): array => [
                 ...$this->connectionSummary($connection),
-                'sent_today' => (int) ($sentToday[$connection->id] ?? 0),
                 'display_status' => $connection->displayStatus()->value,
                 'display_status_label' => $connection->displayStatus()->label(),
                 'needs_attention' => $connection->needsAttention(),
@@ -185,35 +179,22 @@ class MailerConnectionController extends Controller
     }
 
     /**
-     * Count today's dispatches per connection.
+     * The sends the day's cap is counting, so the meter cannot disagree with it.
      *
-     * One read-only aggregate, no schema change: the `Sent today` column needs
-     * the emails this connection actually dispatched since 00:00 UTC, which the
-     * stored `sent_count` counter only approximates (it resets lazily on the next
-     * send and is not a send log). The day boundary is UTC because that is where
-     * SendEmail resets the same counter; connections store no timezone.
+     * `sent_count` is the counter `SendEmail::isRateLimited()` enforces, reset
+     * lazily on the next send after `sending_limit_refreshed_at` passes. While
+     * that window is still open the counter is today's and is shown as-is; once
+     * it has passed the counter is yesterday's and the meter reads 0.
      *
-     * `campaign_emails` has no index on (mailer_connection_id, dispatched_at), so
-     * the statement scans the day's dispatch range and groups in a temp table.
-     * The phase report carries the query and its EXPLAIN.
-     *
-     * @param  Collection<int, MailerConnection>  $connections  Eloquent collection.
-     * @return array<int, int> Connection id => dispatched email count.
+     * Counting `campaign_emails` rows instead made the meter read low whenever a
+     * campaign or recipient was deleted (the rows cascade, the counter does not),
+     * so an at-cap connection could look like it had room left.
      */
-    protected function sentTodayByConnection(Collection $connections): array
+    protected function sentToday(MailerConnection $connection): int
     {
-        if ($connections->isEmpty()) {
-            return [];
-        }
-
-        return CampaignEmail::query()
-            ->whereIn('mailer_connection_id', $connections->modelKeys())
-            ->where('dispatched_at', '>=', CarbonImmutable::today('UTC'))
-            ->groupBy('mailer_connection_id')
-            ->selectRaw('mailer_connection_id, count(*) as sent_today')
-            ->pluck('sent_today', 'mailer_connection_id')
-            ->map(fn (mixed $count): int => (int) $count)
-            ->all();
+        return $connection->sending_limit_refreshed_at?->isFuture()
+            ? (int) $connection->sent_count
+            : 0;
     }
 
     /**
@@ -221,7 +202,7 @@ class MailerConnectionController extends Controller
      *
      * SMTP/IMAP credentials (including both passwords) are never serialized.
      *
-     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, min_seconds_between_sends: int|null, last_error: string|null, last_error_message: string|null, created_at: string|null}
+     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sent_today: int, sending_limit: int|null, min_seconds_between_sends: int|null, last_error: string|null, last_error_message: string|null, created_at: string|null}
      */
     protected function connectionSummary(MailerConnection $connection): array
     {
@@ -246,6 +227,7 @@ class MailerConnectionController extends Controller
             'status' => $connection->status->value,
             'status_label' => $connection->status->label(),
             'sent_count' => $connection->sent_count,
+            'sent_today' => $this->sentToday($connection),
             'sending_limit' => $connection->sending_limit,
             'min_seconds_between_sends' => $connection->min_seconds_between_sends,
             'last_error' => $connection->exception_type,

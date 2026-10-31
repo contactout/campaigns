@@ -56,6 +56,33 @@ test('members can add explicit contacts as recipients', function () {
         ->and($campaign->recipients()->where('source', 'manual')->count())->toBe(2);
 });
 
+test('the contacts grid dialog cannot add to a campaign that has started', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create(['status' => CampaignStatus::Active]);
+    $contact = Contact::factory()->forTeam($team)->create();
+
+    $endpoint = route('campaigns.recipients.store', [
+        'current_team' => $team->slug,
+        'campaign' => $campaign,
+    ]);
+
+    // The dialog refreshed its Draft/Stopped list, then another member started it.
+    $this->actingAs($user)
+        ->post($endpoint, ['contacts' => [$contact->id], 'idle_only' => true])
+        ->assertSessionHasErrors('campaign');
+
+    expect($campaign->recipients()->count())->toBe(0);
+
+    // The campaign detail's own dialog omits the flag: running campaigns accept
+    // recipients by design.
+    $this->actingAs($user)
+        ->post($endpoint, ['contacts' => [$contact->id]])
+        ->assertRedirect();
+
+    expect($campaign->recipients()->count())->toBe(1);
+});
+
 test('adding the same contact twice is idempotent', function () {
     [$team, $user] = campaignRecipientTeamWithMember();
 

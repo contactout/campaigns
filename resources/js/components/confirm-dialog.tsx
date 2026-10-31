@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { FocusEvent, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -19,6 +19,12 @@ type Props = {
     onConfirm: () => void;
     processing?: boolean;
     destructive?: boolean;
+    /**
+     * Runs when Radix restores focus after the dialog closes. A page that
+     * focuses a field itself has to prevent the default, or Radix puts focus
+     * back on the button that opened the dialog after it has already moved.
+     */
+    onCloseAutoFocus?: (event: FocusEvent<HTMLDivElement>) => void;
 };
 
 /**
@@ -36,10 +42,11 @@ export default function ConfirmDialog({
     onConfirm,
     processing = false,
     destructive = true,
+    onCloseAutoFocus,
 }: Props) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>

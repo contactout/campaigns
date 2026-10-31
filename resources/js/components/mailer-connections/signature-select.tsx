@@ -69,7 +69,7 @@ export default function SignatureSelect({
             <SelectTrigger
                 size="sm"
                 aria-label={`Signature for ${connection.name}`}
-                className="w-auto max-w-[150px] gap-1 rounded-md border-0 bg-transparent px-1 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate"
+                className="w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-1 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate"
                 data-test="connection-signature"
             >
                 <SelectValue>{label}</SelectValue>

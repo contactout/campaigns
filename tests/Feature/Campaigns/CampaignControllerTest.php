@@ -927,7 +927,6 @@ test('the show page exposes the campaigns sending connection without its credent
             ->where('connection.name', 'Primary')
             ->where('connection.from_email', 'sam@northwind.io')
             ->where('connection.status', MailerConnectionStatus::Active->value)
-            ->where('connection.has_exception', false)
             ->missing('connection.smtp_setting')
             ->missing('connection.password'));
 });

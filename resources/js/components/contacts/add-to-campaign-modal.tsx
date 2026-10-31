@@ -101,7 +101,10 @@ export default function AddToCampaignModal({
 
         router.post(
             store.url([slug, Number(campaignId)]),
-            { contacts: contactIds },
+            // `idle_only` asks the server to refuse a campaign that started after
+            // this dialog refreshed its list, which is the one window the client
+            // cannot close on its own.
+            { contacts: contactIds, idle_only: true },
             {
                 preserveScroll: true,
                 preserveState: true,
@@ -109,8 +112,11 @@ export default function AddToCampaignModal({
                     onOpenChange(false);
                     onSuccess();
                 },
-                onError: () =>
-                    setError('Could not add these contacts. Try again.'),
+                onError: (errors) =>
+                    setError(
+                        errors.campaign ??
+                            'Could not add these contacts. Try again.',
+                    ),
                 onFinish: () => setProcessing(false),
             },
         );

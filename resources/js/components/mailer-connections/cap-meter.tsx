@@ -35,10 +35,11 @@ export default function CapMeter({ sentToday, sendingLimit }: Props) {
                     / {formatCount(sendingLimit)}
                 </span>
             </p>
+            {/* The count above already states the value, so the bar is decoration:
+                announcing it as an image read the same number twice. */}
             <div
-                role="img"
-                aria-label={`${formatCount(sentToday)} of ${formatCount(sendingLimit)} emails sent today`}
-                className="h-1 w-28 overflow-hidden rounded-full bg-muted"
+                aria-hidden
+                className="hidden h-1 w-28 overflow-hidden rounded-full bg-muted lg:block"
             >
                 <div
                     className={cn(

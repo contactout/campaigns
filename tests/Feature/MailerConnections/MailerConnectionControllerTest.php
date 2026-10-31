@@ -3,7 +3,6 @@
 use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
 use App\Enums\TeamRole;
-use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
 use App\Models\Signature;
 use App\Models\Team;
@@ -410,38 +409,43 @@ test('verifying an unreachable mailer connection deactivates it and stores the e
         ->and($connection->threw_at)->not->toBeNull();
 });
 
-test('sent today counts only the teams own dispatches since midnight utc', function () {
+test('sent today reads the counter the daily cap enforces inside its refresh window', function () {
     [$team, $user] = mailerConnectionTeamWithMember();
 
-    $sending = MailerConnection::factory()->forTeam($team)->create([
-        'name' => 'A sending',
+    // Windows still open: the counter is today's, so the meter and the cap agree.
+    $inside = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A inside window',
         'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 142,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->addHours(8),
     ]);
 
     $quiet = MailerConnection::factory()->forTeam($team)->create([
         'name' => 'B quiet',
         'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 0,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->addHours(8),
     ]);
 
-    $foreign = MailerConnection::factory()->create(['name' => 'C foreign']);
-
-    $today = CarbonImmutable::now('UTC')->startOfDay()->addMinutes(30);
-
-    CampaignEmail::factory()->count(3)->create([
-        'mailer_connection_id' => $sending->id,
-        'dispatched_at' => $today,
+    // The window passed: `sent_count` is still yesterday's, so it must not show.
+    $stale = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'C stale window',
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 99,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->subDay(),
     ]);
 
-    // Yesterday, before 00:00 UTC: neither the counter nor the meter may see it.
-    CampaignEmail::factory()->create([
-        'mailer_connection_id' => $sending->id,
-        'dispatched_at' => CarbonImmutable::now('UTC')->subDay(),
-    ]);
-
-    // Another team's traffic on the same day.
-    CampaignEmail::factory()->count(2)->create([
-        'mailer_connection_id' => $foreign->id,
-        'dispatched_at' => $today,
+    // A deleted campaign takes its `campaign_emails` rows with it, but not the
+    // counter the cap counts; the at-cap connection still shows no room left.
+    $atCap = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'D at cap',
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 400,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->addHours(8),
     ]);
 
     $this->actingAs($user)
@@ -449,11 +453,15 @@ test('sent today counts only the teams own dispatches since midnight utc', funct
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('mailer-connections/index')
-            ->has('connections', 2)
-            ->where('connections.0.id', $sending->id)
-            ->where('connections.0.sent_today', 3)
+            ->has('connections', 4)
+            ->where('connections.0.id', $inside->id)
+            ->where('connections.0.sent_today', 142)
             ->where('connections.1.id', $quiet->id)
-            ->where('connections.1.sent_today', 0));
+            ->where('connections.1.sent_today', 0)
+            ->where('connections.2.id', $stale->id)
+            ->where('connections.2.sent_today', 0)
+            ->where('connections.3.id', $atCap->id)
+            ->where('connections.3.sent_today', 400));
 });
 
 test('each connection exposes the derived display status and needs attention flag', function () {

@@ -13,7 +13,7 @@ use App\Data\CampaignSettings;
 use App\Enums\CampaignStatus;
 use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
-use App\Enums\MailerConnectionStatus;
+use App\Enums\MailerConnectionDisplayStatus;
 use App\Enums\RecipientStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Campaigns\StoreCampaignRequest;
@@ -406,7 +406,7 @@ class CampaignController extends Controller
      *
      * The smtp settings hold both passwords; only the sender address leaves here.
      *
-     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string, has_exception: bool}|null
+     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string}|null
      */
     protected function connectionSummary(?MailerConnection $connection): ?array
     {
@@ -422,7 +422,6 @@ class CampaignController extends Controller
             'from_email' => $settings['from_email'] ?? $settings['email'] ?? null,
             'status' => $connection->status->value,
             'status_label' => $connection->status->label(),
-            'has_exception' => $connection->exception_type !== null,
         ];
     }
 
@@ -603,13 +602,20 @@ class CampaignController extends Controller
 
         if (! $connection instanceof MailerConnection) {
             $reasons[] = $this->startReason('connection', __('This campaign has no sending connection.'));
-        } elseif ($connection->exception_type !== null) {
-            $reasons[] = $this->startReason('connection', __('The sending connection ":name" failed verification', ['name' => $connection->name]));
-        } elseif ($connection->status !== MailerConnectionStatus::Active) {
-            $reasons[] = $this->startReason('connection', __('The sending connection ":name" is :status', [
-                'name' => $connection->name,
-                'status' => mb_strtolower($connection->status->label()),
-            ]));
+        } else {
+            // Same derivation as the connections pill and the dashboard count, so
+            // a row that reads Verified can never block a start, and one that reads
+            // Failed always does.
+            $displayStatus = $connection->displayStatus();
+
+            if ($displayStatus === MailerConnectionDisplayStatus::Failed) {
+                $reasons[] = $this->startReason('connection', __('The sending connection ":name" failed verification', ['name' => $connection->name]));
+            } elseif ($displayStatus !== MailerConnectionDisplayStatus::Verified) {
+                $reasons[] = $this->startReason('connection', __('The sending connection ":name" is :status', [
+                    'name' => $connection->name,
+                    'status' => mb_strtolower($displayStatus->label()),
+                ]));
+            }
         }
 
         if ($doNotContact > 0) {
