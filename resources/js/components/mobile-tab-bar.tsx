@@ -28,8 +28,9 @@ export default function MobileTabBar() {
     const [moreOpen, setMoreOpen] = useState(false);
 
     const moreActive =
-        more.some((item) => isCurrentOrParentUrl(item.href)) ||
-        isCurrentOrParentUrl(settings.href);
+        more.some((item) =>
+            isCurrentOrParentUrl(item.activeMatch ?? item.href),
+        ) || isCurrentOrParentUrl(settings.activeMatch ?? settings.href);
 
     const moreDestinations: NavDestination[] = [...more, settings];
 
@@ -119,7 +120,9 @@ export default function MobileTabBar() {
                     <nav aria-label="More destinations" className="px-2">
                         <ul>
                             {moreDestinations.map((item) => {
-                                const active = isCurrentOrParentUrl(item.href);
+                                const active = isCurrentOrParentUrl(
+                                    item.activeMatch ?? item.href,
+                                );
 
                                 return (
                                     <li key={item.title}>

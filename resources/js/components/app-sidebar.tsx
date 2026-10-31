@@ -57,8 +57,11 @@ export function AppSidebar() {
                         <SidebarMenuButton
                             asChild
                             // Settings lives on four sibling pages (/profile, /security,
-                            // /appearance, /teams), so match the section, not one page.
-                            isActive={isCurrentOrParentUrl('/settings')}
+                            // /appearance, /teams), so the shared definition carries
+                            // `activeMatch: '/settings'` and both rails read it.
+                            isActive={isCurrentOrParentUrl(
+                                settings.activeMatch ?? settings.href,
+                            )}
                             tooltip={{ children: 'Settings' }}
                         >
                             <Link href={settings.href} prefetch>

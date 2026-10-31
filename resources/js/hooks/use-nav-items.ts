@@ -74,6 +74,9 @@ export function useNavItems(): NavItems {
         title: 'Settings',
         href: editProfile(),
         icon: Settings,
+        // One active test for the whole section: /settings/profile,
+        // /settings/security, /settings/appearance and /settings/teams/*.
+        activeMatch: '/settings',
     };
 
     return {
