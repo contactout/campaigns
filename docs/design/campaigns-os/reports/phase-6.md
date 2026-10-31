@@ -109,12 +109,12 @@ Board / render at 390. Rows with a board value the scan could not settle are mar
 
 | Screen | Element | Board 390 | Render 390 |
 | --- | --- | --- | --- |
-| shared | bottom bar height | 64 (56 + 8px home indicator; border y780/844) | **57** (56 + 1px top border, plus a safe-area inset when present) |
+| shared | bottom bar height | 64 (56 + 8px home indicator; border y780/844) | **57** (56 + 1px top border). *Correction, fix round:* the `env(safe-area-inset-bottom)` terms added everywhere in this phase were **inert** — the viewport meta had no `viewport-fit=cover`. Fixed there; no inset was re-measured. |
 | shared | bottom bar item pitch | 78 (5 × 78) | **78** |
 | shared | bottom bar label | ≈12px | **11px/16** (`text-caption`) |
 | 02 | H1 box top / x | cap y58 − 44 status bar = 14 into the page; x 17 | **y 24, x 44** (title starts after the 28px sheet trigger + 2px gap) |
 | 02 | search / status select | 222×32 at y93; status 101 wide | **249×44; 101×44** (44px target) |
-| 02 | list row height | 68 (dividers 137/205/273/341/408/476/544) | **68** |
+| 02 | list row height | 68 (dividers 137/205/273/341/408/476/544) | **69** (`min-h-[68px]` + the 1px divider; 1px over the board) |
 | 02 | name / meta type | 169px name run; meta 12px | **14px / 12px** |
 | 03 | stat card height / gap | 84 tall; gap 16 | **84; 16** (`gap-4 lg:gap-3`) |
 | 03 | step row | 60 (card borders 430/490, 533/593, 695/738) | **60** |
@@ -145,13 +145,22 @@ Touch targets, measured in the DOM on every 390 screen (campaigns, dashboard, ca
 detail, recipients with and without a selection, step editor, contacts with and without
 a selection, templates, template editor, connections, blocked, the filtered-empty list
 and the first-run empty state): every button, input, select trigger,
-tab, list chip and row is **44px or taller** — head controls 44, search 44, select 44,
-campaign tabs 44, list rows 57–68, template rows 55, chips 44, tab-bar items 56, More
-rows 44, checkbox wrappers 44. The one exception the probe flags is the `Checkbox`
-primitive's own 16px box (26 row checkboxes plus select-all on contacts, and the
-threaded checkbox in the step editor); its containing row or label is the 44px target
-and toggles in one tap, the checkbox stops the event so it never toggles twice, and the
-box stays a 16px visual affordance by design.
+tab, list chip and row measured **44px or taller** — head controls 44, search 44, select 44,
+campaign tabs 44, list rows 57–69, template rows 55, chips 44, tab-bar items 56, More
+rows 44, checkbox wrappers 44.
+
+Two exceptions. The first the probe flags: the `Checkbox` primitive's own 16px box (26
+row checkboxes plus select-all on contacts, and the threaded checkbox in the step
+editor). On the contacts and recipients rows the whole row is the 44px target and the
+checkbox stops the click so the row does not toggle again. *Correction, fix round:* the
+threaded checkbox's label is the 44px target, but the phase-6 code also put an `onClick`
+on that label and a `stopPropagation` on its wrapper, so a tap on the text toggled twice
+and netted no change; both are gone (P1-2).
+
+The second the original text missed: the `Sheet`/`Dialog` close control is a bare
+`size-4` ✕ in an unpadded `Primitive.Close` (`ui/sheet.tsx`, `ui/dialog.tsx`), so the
+More sheet's ✕ is a **16×16** target, not 44. Both primitives are shadcn stock and were
+left alone; it is recorded under gaps instead.
 
 ## 1280 regression
 
@@ -165,11 +174,12 @@ Re-rendered every screen at 1280×900 (`*-1280-regression.png`) and read the DOM
 | Detail H1 (after back chevron) | x 268 | **x 270, y 18** (the shared +3 page-head offset) |
 | Detail stat card / gap | 245×84 / 12 | **245×84 / 12** |
 | Detail `⋯` buttons on screen | 1 | **1** (the mobile menu is `lg:hidden`) |
-| Contacts row / cells | 33, `px-3` | **33**, table visible, mobile list hidden |
+| Contacts row / cells | 33, `px-3` | **33** row height, but **the grid stopped scrolling**: the phase-6 `hidden lg:block` wrapper broke the page's `[&>[data-slot=table-container]]` direct-child selector, so the table grew past the `lg:h-svh` card. Rows 22–25 were clipped and row 21 painted over the list tabs and pagination. This table said "table visible, mobile list hidden", which hid it. Fixed in the fix round (P0-1). |
+| Templates name x | names start at x 285 beside the file icon (board 07 A) | **centred at x 609–779**: the row link's `justify-center` was never reset at `lg`. Fixed in the fix round (P1-1). |
 | Connections row / meter | 44, bar visible | **44**, bar visible |
-| Connections signature | 109px column | trigger **99px**, right edge **936 < 940** (cell edge); chevron hidden at `lg`, and the render shows `Sam — default` in full |
+| Connections signature | 109px column | trigger **99px**, right edge **936 < 940** (cell edge); chevron hidden at `lg`, and the render shows `Sam — default` in full. The clamp was fixed but the **value started at x 839 against the header's 847** (cell `pl-1.5` + trigger `px-0.5` = 8px); fixed in the fix round (P2-6). |
 | Connections `+ Add` (mobile) | — | **hidden** at 1280 |
-| Step editor | list 300, pane 692, footer | **list visible, pane 692, footer visible** |
+| Step editor | list 300, pane 692, footer | **list visible, pane 692, footer visible**; the threaded checkbox sat at x 603 against a field edge of 581 because its `size-11` wrapper was not breakpoint-gated. Fixed in the fix round (P1-2). |
 
 Two desktop-only regressions the first render caught and this branch fixes: the mobile
 `⋯` menu and the mobile `+ Add` menu both rendered at `lg` alongside their desktop
@@ -182,7 +192,12 @@ title, 44px rows) listing **Signatures**, **Connections** and **Settings** with 
 labels and icons the sidebar uses, all read from `useNavItems()` so the two cannot
 drift. The trigger is active whenever one of those destinations is current. Verified
 by clicking through: `/northwind/signatures` → `/northwind/mailer-connections` →
-`/settings/profile`, each closing the sheet.
+`/settings/profile`, each closing the sheet. *Correction, fix round:* only
+`/settings/profile` was driven, and it was the only settings page that could mark the
+row current — the test was `isCurrentOrParentUrl(settings.href)` against
+`/settings/profile`, so `/settings/security`, `/settings/appearance` and `/settings/teams/*`
+did not. The shared definition now carries `activeMatch: '/settings'` and both the
+sidebar and the tab bar read it (P2-2).
 
 The page head keeps the existing sidebar sheet trigger, as the brief asks, because that
 sheet is the only mobile route to the team switcher, the user menu and sign-out.
@@ -213,7 +228,9 @@ of the trigger and rely on the tab bar.
    30px chips and 16px placeholder pills are 44 tall below `lg`. Row and template links
    stretch to fill their row so the whole row is one target.
 3. **The `Checkbox` box stays 16px.** Its row (contacts, recipients) or its label (the
-   threaded checkbox) is the 44px target and toggles; the checkbox stops propagation.
+   threaded checkbox) is the 44px target. *Fix round:* the threaded label no longer has
+   its own `onClick` — native label activation toggles the box once — and the 44px
+   wrapper is `max-lg` only, so the desktop row is flush and 20px shorter (P1-2).
 4. **A real `Sent today` in the connections cards without the meter bar**, and the
    signature stays an inline select (`Team default`, `Sam — default`) rather than the
    board's static `Signature: None`.
@@ -250,8 +267,8 @@ of the trigger and rely on the tab bar.
     keeps 12).
 17. **Dashboard stat labels shorten at 390** (`Sent · 30d`, `Active`) as the board shows,
     while desktop keeps `Emails sent · 30d` and `Active campaigns`.
-18. **Bottom bar 57px** (56 + border) and a safe-area inset; the board's 64px includes
-    the 8px home indicator.
+18. **Bottom bar 57px** (56 + border); the board's 64px includes the 8px home indicator.
+    The safe-area terms were inert until the fix round added `viewport-fit=cover`.
 19. **Contacts is a flowing page on mobile** (no `h-svh` workspace) so the list and the
     pagination row scroll together; the desktop workspace is unchanged.
 20. **The campaigns empty panel keeps the full `New campaign` label** while the head
@@ -338,3 +355,76 @@ Interactions driven over CDP on that build:
    phase 5 kept its tree. The preview route, the fixture seeder and the render scripts
    were removed from the tree before the final checks and were never in the host
    worktree or the commits.
+
+## Fix round (review P0-1 … P2-8)
+
+The `Verification` block above records the phase-6 tree at `063c910`. This section
+records the review fix round on top of it: what changed per finding, which checks ran,
+and — because the machine is the reason, not a choice — which checks did not.
+
+| Finding | File | Change |
+| --- | --- | --- |
+| P0-1 contacts grid scroll | `components/contacts/contact-grid.tsx`, `pages/contacts/index.tsx` | The table's wrapper is `hidden lg:flex lg:min-h-0 lg:flex-1 lg:flex-col`, and the page's scroll selector is a descendant (`[&_[data-slot=table-container]]`) instead of a direct child. The table-container is a flex child of the workspace again, so it gets `min-h-0 flex-1 overflow-auto` and the sticky header has a scroll container. Rows past the viewport are reachable; the pagination row is not covered. |
+| P1-1 template name centring | `pages/templates/index.tsx` | `lg:justify-start` on the row link. Names start beside the file icon at 1280; the 390 column stack keeps `justify-center`. |
+| P1-2 threaded checkbox | `components/campaigns/step-form.tsx` | Dropped the label's `onClick` and the wrapper span's `stopPropagation`. The 44px target is `max-lg` only (`max-lg:min-h-11` on the label, `max-lg:size-11` on the span), so a tap on the text toggles once through native label activation and the desktop row is flush with the field edge and 20px shorter. |
+| P2-1 sticky bar covers pagination | `pages/contacts/index.tsx`, `components/campaigns/campaign-recipients-tab.tsx` | With a selection, the page container (contacts) and the tab's root (recipients) reserve `max-lg:pb-[calc(4.25rem+env(safe-area-inset-bottom))]`. The `mb-16` on the recipients list is gone — it sat above the pagination row, which is the row that has to clear the bar. 4.25rem is 68px against the measured 65px bar. |
+| P2-2 settings never active | `types/navigation.ts`, `hooks/use-nav-items.ts`, `nav-main.tsx`, `app-sidebar.tsx`, `mobile-tab-bar.tsx` | `NavItem.activeMatch`; Settings carries `activeMatch: '/settings'`. The sidebar, the tab bar's More slot and the sheet's Settings row all test `activeMatch ?? href`, so `/settings/security`, `/settings/appearance` and `/settings/teams/*` mark it current and the two rails share one definition. |
+| P2-3 inert safe area | `views/app.blade.php` | `viewport-fit=cover` added, so the existing `env(safe-area-inset-*)` terms can resolve non-zero. |
+| P2-4 re-apply same template | `components/campaigns/step-form.tsx` | `value={templateId}` — controlled, with the empty string that Radix renders as the placeholder. The reset in `applyTemplate` now actually clears the value, so picking the same template again fires `onValueChange`. |
+| P2-5 390 editor is not a modal | `components/campaigns/sequence-editor.tsx` | Below `lg` the pane is the content of a Radix `Dialog` (`h-svh`, full-bleed, `p-0`, primitive ✕ hidden, `sr-only` title, `aria-describedby={undefined}`) instead of a `fixed inset-0` div. It gains `role="dialog"`, `aria-modal`, focus containment, the body scroll lock and Escape; the covered page is inert, which also fixes a screen reader reading it. The 1280 pane is still the inline second pane. Cost: crossing the 1024 line with the editor open remounts the form, so unsaved edits are lost — resizing is the only path to it. |
+| P2-6 signature inset | `pages/mailer-connections/index.tsx`, `components/mailer-connections/signature-select.tsx` | Cell `py-0 pr-0 pl-4`, trigger `px-0.5 lg:px-0`. The value starts on the same 16px inset as the `Signature` header (847) and keeps 93px of the 109px column, which fits `Sam — default` (≈88px). The 390 card keeps `px-0.5`. |
+| P2-7 cancel moves focus to Name | `pages/templates/show.tsx` | `discardedRef` is set in `onConfirm`; `onCloseAutoFocus` prevents Radix's restore and focuses `Name` only when it is set, so Cancel returns focus to the control that opened the dialog. |
+| P2-8 report accuracy | this report, `components/form-label.tsx` | The 1280 table now records the contacts-scroll and template-centring regressions instead of "no change"; the touch-target paragraph no longer claims every control is 44px (the sheet ✕ is 16×16) and no longer claims the threaded checkbox "toggles in one tap … never twice"; the campaign row pitch is 69, not 68; the More panel's active state is described as tested on one page only; the safe-area terms are recorded as inert until `viewport-fit=cover`; and `FormLabel`'s comment said 13px where `text-label` is 12px at both breakpoints. |
+
+### Checks run
+
+In the Space `local:devtest`, on the phase-6 Space tree with the 16 changed files copied
+over it (no build, no server, nothing installed or built on the host):
+
+```
+$ ./node_modules/.bin/tsc --noEmit   TSC_EXIT=0    (NODE_OPTIONS=--max-old-space-size=1500)
+$ npm run check                      CHECK_EXIT=0  All 160 files are correctly formatted
+                                                   Found no warnings or lint errors in 143 files
+```
+
+`npm run check` first failed on formatting in `mobile-tab-bar.tsx`; `npm run check:fix`
+reformatted it and the fixed file was copied back to the host, so the host bytes and the
+checked bytes are the same.
+
+### Checks not run
+
+- **`npm run build`.** The Space's `public/build` is still the phase-6 bundle, so nothing
+  rendered the fixed files. There is no render for any fix in this round, and the
+  committed `*-1280-regression.png` files still show the pre-fix contacts scroll,
+  template centring, signature inset and checkbox indent. They are evidence of the
+  regressions, not of the fixes.
+- **`php artisan test`, `pint --test`, `phpstan analyse`.** No PHP class changed this
+  round; the only backend file is the `viewport` meta.
+- **Every screenshot the review asked for:** contacts at 1280 scrolled to row 25,
+  templates at 1280, the threaded checkbox at 390 and 1280, the 390 sticky bars,
+  connections signature at 1280, and one dark render.
+- **Why:** the host's `systemd-oomd` killed the agent twice while the Space ran the full
+  check set (build + Chromium + the 577-test suite). Phase 7 runs one consolidated pass
+  on an otherwise idle machine.
+
+### What that pass has to prove
+
+1. Contacts at 1280: the workspace scrolls, row 25 (`mei.patel18@example.com`) is
+   reachable, the header sticks, and the list-tab strip and `Showing 1–25 of 1,284` are
+   not painted over. A DOM read of the scroll container's `scrollHeight` vs
+   `clientHeight` is the cheap proof; scrolling to the last row is the visual one.
+2. Templates at 1280: names start at x 285, beside the file icon.
+3. Threaded checkbox: one tap on the text toggles once at 390 **and** at 1280; the box is
+   at x 581 (field edge) at 1280 and the row is 24px tall there, 44px at 390.
+4. The 390 editor: `role="dialog"`, `aria-modal="true"`, Tab never reaches the tab bar,
+   the body does not scroll behind it, Escape and Cancel are still guarded by the discard
+   dialog, and the pane still fills 390×844.
+5. Sticky bars at 390 with one row selected: the `Showing … / Previous / Next` row is
+   visible above the bar on contacts and on recipients.
+6. Connections signature at 1280: value and header share x 847.
+7. `/settings/security`: the More tab is active and the sheet's Settings row is current.
+8. Safe area: with an emulated inset (CDP `Emulation.setSafeAreaInsetsOverride` if the
+   Space's Chromium has it), the tab bar's padding resolves non-zero — this is the only
+   way to check P2-3, since `viewport-fit=cover` alone changes nothing on a desktop
+   viewport.
+9. One dark render of a touched screen.
