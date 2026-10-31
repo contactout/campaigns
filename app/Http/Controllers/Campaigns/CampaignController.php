@@ -11,11 +11,15 @@ use App\Actions\Campaigns\StopCampaign;
 use App\Actions\Campaigns\UpdateCampaign;
 use App\Data\CampaignSettings;
 use App\Enums\CampaignStatus;
+use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
+use App\Enums\MailerConnectionStatus;
+use App\Enums\RecipientStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Campaigns\StoreCampaignRequest;
 use App\Http\Requests\Campaigns\UpdateCampaignRequest;
 use App\Models\Campaign;
+use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Contact;
 use App\Models\ContactField;
@@ -27,6 +31,7 @@ use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Models\Unsubscribe;
+use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -110,22 +115,32 @@ class CampaignController extends Controller
 
         Gate::authorize('view', $campaign);
 
-        $campaign->load('steps');
+        $campaign->load(['steps', 'mailerConnection']);
+
+        $validated = $request->validate([
+            'recipients_q' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $recipientsSearch = isset($validated['recipients_q'])
+            ? (trim((string) $validated['recipients_q']) ?: null)
+            : null;
 
         $recipients = $campaign->recipients()
             ->with('contact.emailIdentity')
+            ->when($recipientsSearch, fn (Builder $query, string $search): Builder => $query->whereHas(
+                'contact',
+                fn (Builder $contact): Builder => $contact
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhereHas('emailIdentity', fn (Builder $identity): Builder => $identity->where('normalized_value', 'like', "%{$search}%")),
+            ))
             ->latest()
             ->paginate(25, ['*'], 'recipients_page')
-            ->withQueryString()
-            ->through(fn (Recipient $recipient): array => [
-                'id' => $recipient->id,
-                'contact_id' => $recipient->contact_id,
-                'name' => $recipient->contact->name,
-                'email' => $recipient->contact->emailIdentity?->normalized_value,
-                'status' => $recipient->status->value,
-                'status_label' => $recipient->status->label(),
-                'created_at' => $recipient->created_at?->toISOString(),
-            ]);
+            ->withQueryString();
+
+        // One grouped query for the page's recipients rather than one per row.
+        $engagement = $this->recipientEngagement($campaign->id, array_map(intval(...), $recipients->getCollection()->pluck('id')->all()));
+
+        $recipients->through(fn (Recipient $recipient): array => $this->recipientRow($recipient, $engagement[$recipient->id] ?? []));
 
         $availableContacts = Contact::query()
             ->forTeam($currentTeam->id)
@@ -182,6 +197,10 @@ class CampaignController extends Controller
             ->values()
             ->all();
 
+        $stepMetrics = $this->stepMetrics($campaign->id);
+        $doNotContact = $this->doNotContactRecipients($campaign->id);
+        $recipientsCount = $campaign->recipients()->count();
+
         $placeholders = collect([
             ['name' => 'name', 'label' => 'Full name'],
             ['name' => 'email', 'label' => 'Email'],
@@ -213,6 +232,7 @@ class CampaignController extends Controller
                 'created_at' => $campaign->created_at?->toISOString(),
                 'updated_at' => $campaign->updated_at?->toISOString(),
             ],
+            'connection' => $this->connectionSummary($campaign->mailerConnection),
             'steps' => $campaign->steps
                 ->map(fn (CampaignStep $step): array => [
                     'id' => $step->id,
@@ -223,12 +243,13 @@ class CampaignController extends Controller
                     'time' => $step->time,
                     'is_threaded' => $step->is_threaded,
                     'setting' => $step->setting,
+                    'metrics' => $stepMetrics[$step->id] ?? ['sent' => 0, 'opened' => 0, 'replied' => 0, 'opened_rate' => null, 'replied_rate' => null],
                 ])
                 ->values()
                 ->all(),
             'stats' => [
                 'steps_count' => $campaign->steps->count(),
-                'recipients_count' => $campaign->recipients()->count(),
+                'recipients_count' => $recipientsCount,
                 'emails_sent' => $campaign->emails()->whereNotNull('dispatched_at')->count(),
                 'emails_failed' => $campaign->emails()->where('status', EmailStatus::Failed)->count(),
                 'opened' => $campaign->emails()->whereNotNull('opened_at')->count(),
@@ -239,6 +260,8 @@ class CampaignController extends Controller
                 'unsubscribed' => Unsubscribe::query()->where('campaign_id', $campaign->id)->count(),
             ],
             'recipients' => $recipients,
+            'recipientsSearch' => $recipientsSearch,
+            'start' => $this->startState($campaign, $recipientsCount, $doNotContact),
             'availableContacts' => $availableContacts,
             'lists' => $lists,
             'templates' => $templates,
@@ -361,6 +384,233 @@ class CampaignController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign duplicated.')]);
 
         return to_route('campaigns.show', ['campaign' => $copy]);
+    }
+
+    /**
+     * Map the campaign's own connection to the fields the detail page shows.
+     *
+     * The smtp settings hold both passwords; only the sender address leaves here.
+     *
+     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string, has_exception: bool}|null
+     */
+    protected function connectionSummary(?MailerConnection $connection): ?array
+    {
+        if (! $connection instanceof MailerConnection) {
+            return null;
+        }
+
+        $settings = $connection->smtp_setting ?? [];
+
+        return [
+            'id' => $connection->id,
+            'name' => $connection->name,
+            'from_email' => $settings['from_email'] ?? $settings['email'] ?? null,
+            'status' => $connection->status->value,
+            'status_label' => $connection->status->label(),
+            'has_exception' => $connection->exception_type !== null,
+        ];
+    }
+
+    /**
+     * Sent, opened and replied counts per step for the campaign.
+     *
+     * `sent` counts dispatched emails only, so an opened or replied email is
+     * always a subset of it and the percentages cannot exceed 100.
+     *
+     * @return array<int, array{sent: int, opened: int, replied: int, opened_rate: int|null, replied_rate: int|null}>
+     */
+    protected function stepMetrics(int $campaignId): array
+    {
+        return CampaignEmail::query()
+            ->where('campaign_id', $campaignId)
+            ->groupBy('campaign_step_id')
+            ->selectRaw('campaign_step_id')
+            ->selectRaw('count(case when dispatched_at is not null then 1 end) as sent_count')
+            ->selectRaw('count(case when opened_at is not null then 1 end) as opened_count')
+            ->selectRaw('count(case when replied_at is not null then 1 end) as replied_count')
+            ->get()
+            ->mapWithKeys(function (CampaignEmail $row): array {
+                $sent = (int) $row->getAttribute('sent_count');
+                $opened = (int) $row->getAttribute('opened_count');
+                $replied = (int) $row->getAttribute('replied_count');
+
+                return [(int) $row->getAttribute('campaign_step_id') => [
+                    'sent' => $sent,
+                    'opened' => $opened,
+                    'replied' => $replied,
+                    'opened_rate' => $sent > 0 ? (int) round($opened / $sent * 100) : null,
+                    'replied_rate' => $sent > 0 ? (int) round($replied / $sent * 100) : null,
+                ]];
+            })
+            ->all();
+    }
+
+    /**
+     * Dispatched, opened, replied and bounced counts for the given recipients.
+     *
+     * @param  array<int, int>  $recipientIds
+     * @return array<int, array{sent: int, opened: int, replied: int, bounced: int}>
+     */
+    protected function recipientEngagement(int $campaignId, array $recipientIds): array
+    {
+        if ($recipientIds === []) {
+            return [];
+        }
+
+        return CampaignEmail::query()
+            ->where('campaign_id', $campaignId)
+            ->whereIn('recipient_id', $recipientIds)
+            ->groupBy('recipient_id')
+            ->selectRaw('recipient_id')
+            ->selectRaw('count(case when dispatched_at is not null then 1 end) as sent_count')
+            ->selectRaw('count(case when opened_at is not null then 1 end) as opened_count')
+            ->selectRaw('count(case when replied_at is not null then 1 end) as replied_count')
+            ->selectRaw('count(case when status = ? then 1 end) as bounced_count', [EmailStatus::Bounced->value])
+            ->get()
+            ->mapWithKeys(fn (CampaignEmail $row): array => [(int) $row->getAttribute('recipient_id') => [
+                'sent' => (int) $row->getAttribute('sent_count'),
+                'opened' => (int) $row->getAttribute('opened_count'),
+                'replied' => (int) $row->getAttribute('replied_count'),
+                'bounced' => (int) $row->getAttribute('bounced_count'),
+            ]])
+            ->all();
+    }
+
+    /**
+     * Count the campaign's recipients whose contact is flagged do-not-contact.
+     *
+     * {@see SuppressionList} refuses to email these, so they
+     * are listed as recipients that will be skipped rather than sent to.
+     */
+    protected function doNotContactRecipients(int $campaignId): int
+    {
+        return Recipient::query()
+            ->join('contacts', 'contacts.id', '=', 'recipients.contact_id')
+            ->where('recipients.campaign_id', $campaignId)
+            ->where('contacts.status', ContactStatus::DoNotContact->value)
+            ->count();
+    }
+
+    /**
+     * Map a recipient row, deriving the board's status vocabulary from data.
+     *
+     * `RecipientStatus` cannot express the board's Contacted / Opened / Not
+     * contacted split; the campaign's own emails can. Terminal recipient states
+     * win over engagement, so a replied contact never reads as merely opened.
+     *
+     * @param  array{sent?: int, opened?: int, replied?: int, bounced?: int}  $engagement
+     * @return array{id: int, contact_id: int, name: string, email: string|null, status: string, status_label: string, display_status: string, display_status_label: string, created_at: string|null}
+     */
+    protected function recipientRow(Recipient $recipient, array $engagement): array
+    {
+        $sent = $engagement['sent'] ?? 0;
+        $opened = $engagement['opened'] ?? 0;
+        $replied = $engagement['replied'] ?? 0;
+        $bounced = $engagement['bounced'] ?? 0;
+
+        [$displayStatus, $displayStatusLabel] = match (true) {
+            $replied > 0 || $recipient->status === RecipientStatus::Replied => ['replied', 'Replied'],
+            $bounced > 0 || $recipient->status === RecipientStatus::Bounced => ['bounced', 'Bounced'],
+            $recipient->status === RecipientStatus::Unsubscribed => ['unsubscribed', 'Unsubscribed'],
+            $opened > 0 => ['opened', 'Opened'],
+            $sent > 0 => ['contacted', 'Contacted'],
+            $recipient->status === RecipientStatus::Error => ['error', 'Error'],
+            $recipient->status === RecipientStatus::Paused => ['paused', 'Paused'],
+            $recipient->status === RecipientStatus::Archived => ['archived', 'Archived'],
+            $recipient->status === RecipientStatus::Completed => ['completed', 'Completed'],
+            default => ['not_contacted', 'Not contacted'],
+        };
+
+        return [
+            'id' => $recipient->id,
+            'contact_id' => $recipient->contact_id,
+            'name' => $recipient->contact->name,
+            'email' => $recipient->contact->emailIdentity?->normalized_value,
+            'status' => $recipient->status->value,
+            'status_label' => $recipient->status->label(),
+            'display_status' => $displayStatus,
+            'display_status_label' => $displayStatusLabel,
+            'created_at' => $recipient->created_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * Derive why the campaign cannot be started, and what will be skipped.
+     *
+     * Every reason comes from stored state; nothing is rendered unconditionally.
+     * `blocking` reasons disable Start. The do-not-contact line is a warning:
+     * those recipients are suppressed at send time, not a reason to refuse.
+     *
+     * @return array{blocked: bool, reasons: array<int, array{type: string, message: string, blocking: bool, step_id: int|null, step_sequence: int|null}>}
+     */
+    protected function startState(Campaign $campaign, int $recipientsCount, int $doNotContact): array
+    {
+        $reasons = [];
+
+        if ($campaign->steps->isEmpty()) {
+            $reasons[] = $this->startReason('steps', __('This campaign has no steps yet.'));
+        }
+
+        foreach ($campaign->steps as $step) {
+            if (trim((string) $step->subject) !== '') {
+                continue;
+            }
+
+            $reasons[] = $this->startReason(
+                'step',
+                __('Step :sequence (Day :day) has an empty subject', [
+                    'sequence' => $step->sequence,
+                    'day' => (int) ($step->day ?? 0),
+                ]),
+                $step->id,
+                $step->sequence,
+            );
+        }
+
+        $connection = $campaign->mailerConnection;
+
+        if (! $connection instanceof MailerConnection) {
+            $reasons[] = $this->startReason('connection', __('This campaign has no sending connection.'));
+        } elseif ($connection->exception_type !== null) {
+            $reasons[] = $this->startReason('connection', __('The sending connection ":name" failed verification', ['name' => $connection->name]));
+        } elseif ($connection->status !== MailerConnectionStatus::Active) {
+            $reasons[] = $this->startReason('connection', __('The sending connection ":name" is :status', [
+                'name' => $connection->name,
+                'status' => mb_strtolower($connection->status->label()),
+            ]));
+        }
+
+        if ($recipientsCount === 0) {
+            $reasons[] = $this->startReason('recipients', __('This campaign has no recipients yet.'));
+        }
+
+        if ($doNotContact > 0) {
+            $reasons[] = $this->startReason('do_not_contact', trans_choice(
+                '{1} :count recipient is marked Do not contact and will be skipped|[2,*] :count recipients are marked Do not contact and will be skipped',
+                $doNotContact,
+            ), blocking: false);
+        }
+
+        return [
+            'blocked' => collect($reasons)->contains('blocking', true),
+            'reasons' => $reasons,
+        ];
+    }
+
+    /**
+     * Build one start reason row.
+     *
+     * @return array{type: string, message: string, blocking: bool, step_id: int|null, step_sequence: int|null}
+     */
+    protected function startReason(string $type, string $message, ?int $stepId = null, ?int $stepSequence = null, bool $blocking = true): array
+    {
+        return [
+            'type' => $type,
+            'message' => $message,
+            'blocking' => $blocking,
+            'step_id' => $stepId,
+            'step_sequence' => $stepSequence,
+        ];
     }
 
     /**

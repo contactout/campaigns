@@ -1,39 +1,47 @@
-import { Form, Head, Link, router, usePage } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import {
-    ArrowDown,
-    ArrowUp,
     Archive,
     Copy,
-    ListChecks,
-    Mail,
+    MoreHorizontal,
     Pencil,
     Play,
     Plus,
     Square,
     Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
-import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
+import { type KeyboardEvent, useRef, useState } from 'react';
 import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
+import CampaignRecipientsTab from '@/components/campaigns/campaign-recipients-tab';
+import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
+import CampaignStepsTab from '@/components/campaigns/campaign-steps-tab';
 import DeleteCampaignModal from '@/components/campaigns/delete-campaign-modal';
 import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
-import StepFormModal from '@/components/campaigns/step-form-modal';
-import EmptyState from '@/components/empty-state';
-import Heading from '@/components/heading';
-import Pagination from '@/components/pagination';
+import SequenceEditor from '@/components/campaigns/sequence-editor';
+import PageHead from '@/components/page-head';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { archive, duplicate, index, start, stop } from '@/routes/campaigns';
-import { destroy as destroyRecipient } from '@/routes/campaigns/recipients';
-import { destroy as destroyStep, reorder } from '@/routes/campaigns/steps';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import {
+    archive,
+    duplicate,
+    index,
+    start as startCampaign,
+    stop,
+} from '@/routes/campaigns';
 import type {
     AvailableContact,
+    CampaignConnection,
     CampaignDetail,
     CampaignListOption,
     CampaignPermissions,
     CampaignSignatureOption,
+    CampaignStartState,
     CampaignStats,
     CampaignStep,
     CampaignTemplateOption,
@@ -45,9 +53,12 @@ import type {
 
 type Props = {
     campaign: CampaignDetail;
+    connection: CampaignConnection | null;
     steps: CampaignStep[];
     stats: CampaignStats;
+    start: CampaignStartState;
     recipients: Paginated<RecipientSummary>;
+    recipientsSearch: string | null;
     availableContacts: AvailableContact[];
     lists: CampaignListOption[];
     templates: CampaignTemplateOption[];
@@ -57,11 +68,21 @@ type Props = {
     can: CampaignPermissions;
 };
 
+type Tab = 'steps' | 'recipients';
+
+const tabs: Array<{ key: Tab; label: string }> = [
+    { key: 'steps', label: 'Steps' },
+    { key: 'recipients', label: 'Recipients' },
+];
+
 export default function CampaignShow({
     campaign,
+    connection,
     steps,
     stats,
+    start,
     recipients,
+    recipientsSearch,
     availableContacts,
     lists,
     templates,
@@ -74,135 +95,210 @@ export default function CampaignShow({
     const slug = currentTeam?.slug ?? '';
     const errors = usePage().props.errors as Record<string, string>;
 
+    const [tab, setTab] = useState<Tab>('steps');
+    const [editor, setEditor] = useState<{ stepId: number | null } | null>(
+        null,
+    );
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [stepModalOpen, setStepModalOpen] = useState(false);
     const [recipientsOpen, setRecipientsOpen] = useState(false);
-    const [editingStep, setEditingStep] = useState<CampaignStep | null>(null);
+    const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
     const canStart =
         can.start && ['Draft', 'Stopped'].includes(campaign.status);
     const canStop = can.stop && campaign.status === 'Active';
     const canArchive = can.archive && campaign.status !== 'Archived';
 
-    const openNewStep = () => {
-        setEditingStep(null);
-        setStepModalOpen(true);
+    const selectTab = (next: Tab) => {
+        setTab(next);
+        setEditor(null);
     };
 
-    const openEditStep = (step: CampaignStep) => {
-        setEditingStep(step);
-        setStepModalOpen(true);
-    };
+    const onTabKeyDown = (
+        event: KeyboardEvent<HTMLButtonElement>,
+        from: Tab,
+    ) => {
+        const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
 
-    const moveStep = (index: number, direction: -1 | 1) => {
-        const next = [...steps];
-        const target = index + direction;
-
-        if (target < 0 || target >= next.length) {
+        if (!keys.includes(event.key)) {
             return;
         }
 
-        [next[index], next[target]] = [next[target], next[index]];
+        event.preventDefault();
 
-        router.post(
-            reorder.url([slug, campaign.id]),
-            { steps: next.map((step) => step.id) },
-            { preserveScroll: true },
-        );
+        const current = tabs.findIndex((item) => item.key === from);
+        const next =
+            event.key === 'ArrowLeft'
+                ? (current - 1 + tabs.length) % tabs.length
+                : event.key === 'ArrowRight'
+                  ? (current + 1) % tabs.length
+                  : event.key === 'Home'
+                    ? 0
+                    : tabs.length - 1;
+
+        selectTab(tabs[next].key);
+        tabRefs.current[next]?.focus();
     };
+
+    const openStep = (step: CampaignStep) => setEditor({ stepId: step.id });
+
+    const actions = (
+        <>
+            {can.update ? (
+                <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil /> Edit
+                </Button>
+            ) : null}
+
+            {can.duplicate ? (
+                <Form {...duplicate.form([slug, campaign.id])}>
+                    {({ processing }) => (
+                        <Button
+                            type="submit"
+                            variant="outline"
+                            disabled={processing}
+                        >
+                            <Copy /> Duplicate
+                        </Button>
+                    )}
+                </Form>
+            ) : null}
+
+            {canArchive ? (
+                <Form {...archive.form([slug, campaign.id])}>
+                    {({ processing }) => (
+                        <Button
+                            type="submit"
+                            variant="outline"
+                            disabled={processing}
+                        >
+                            <Archive /> Archive
+                        </Button>
+                    )}
+                </Form>
+            ) : null}
+
+            {canStop ? (
+                <Form {...stop.form([slug, campaign.id])}>
+                    {({ processing }) => (
+                        <Button
+                            type="submit"
+                            variant="outline"
+                            disabled={processing}
+                        >
+                            <Square /> Stop
+                        </Button>
+                    )}
+                </Form>
+            ) : null}
+
+            {canStart ? (
+                <Form {...startCampaign.form([slug, campaign.id])}>
+                    {({ processing }) => (
+                        <Button
+                            type="submit"
+                            disabled={processing || start.blocked}
+                            aria-describedby={
+                                start.blocked ? 'start-blocked' : undefined
+                            }
+                            data-test="campaign-start-button"
+                        >
+                            <Play /> Start
+                        </Button>
+                    )}
+                </Form>
+            ) : null}
+
+            {can.update ? (
+                <Button
+                    variant={canStart ? 'outline' : 'default'}
+                    onClick={() => setRecipientsOpen(true)}
+                    data-test="campaign-add-recipients-button"
+                >
+                    <Plus /> Add recipients
+                </Button>
+            ) : null}
+
+            {can.delete ? (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            aria-label="More campaign actions"
+                        >
+                            <MoreHorizontal />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setDeleteOpen(true)}
+                        >
+                            <Trash2 /> Delete campaign
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            ) : null}
+        </>
+    );
 
     return (
         <>
             <Head title={campaign.name} />
 
-            <h1 className="sr-only">{campaign.name}</h1>
-
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Heading variant="small" title={campaign.name} />
+            <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-6">
+                <PageHead
+                    title={campaign.name}
+                    back={{
+                        href: index.url(slug),
+                        label: 'Back to campaigns',
+                    }}
+                    titleAddon={
                         <CampaignStatusBadge
                             status={campaign.status}
                             label={campaign.status_label}
                         />
-                    </div>
+                    }
+                    actions={actions}
+                    mobileNav
+                />
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        {canStart ? (
-                            <Form {...start.form([slug, campaign.id])}>
-                                {({ processing }) => (
-                                    <Button
-                                        type="submit"
-                                        disabled={processing}
-                                        data-test="campaign-start-button"
-                                    >
-                                        <Play /> Start
-                                    </Button>
+                <div
+                    role="tablist"
+                    aria-label="Campaign sections"
+                    className="flex gap-6 border-b"
+                >
+                    {tabs.map((item, index) => {
+                        const active = tab === item.key;
+
+                        return (
+                            <button
+                                key={item.key}
+                                ref={(element) => {
+                                    tabRefs.current[index] = element;
+                                }}
+                                type="button"
+                                role="tab"
+                                id={`campaign-tab-${item.key}`}
+                                aria-selected={active}
+                                aria-controls={`campaign-panel-${item.key}`}
+                                tabIndex={active ? 0 : -1}
+                                onClick={() => selectTab(item.key)}
+                                onKeyDown={(event) =>
+                                    onTabKeyDown(event, item.key)
+                                }
+                                className={cn(
+                                    '-mb-px border-b-2 pt-2.5 pb-1 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border',
+                                    active
+                                        ? 'border-primary text-primary'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground',
                                 )}
-                            </Form>
-                        ) : null}
-
-                        {canStop ? (
-                            <Form {...stop.form([slug, campaign.id])}>
-                                {({ processing }) => (
-                                    <Button
-                                        type="submit"
-                                        variant="secondary"
-                                        disabled={processing}
-                                    >
-                                        <Square /> Stop
-                                    </Button>
-                                )}
-                            </Form>
-                        ) : null}
-
-                        {can.duplicate ? (
-                            <Form {...duplicate.form([slug, campaign.id])}>
-                                {({ processing }) => (
-                                    <Button
-                                        type="submit"
-                                        variant="secondary"
-                                        disabled={processing}
-                                    >
-                                        <Copy /> Duplicate
-                                    </Button>
-                                )}
-                            </Form>
-                        ) : null}
-
-                        {canArchive ? (
-                            <Form {...archive.form([slug, campaign.id])}>
-                                {({ processing }) => (
-                                    <Button
-                                        type="submit"
-                                        variant="secondary"
-                                        disabled={processing}
-                                    >
-                                        <Archive /> Archive
-                                    </Button>
-                                )}
-                            </Form>
-                        ) : null}
-
-                        {can.update ? (
-                            <Button
-                                variant="secondary"
-                                onClick={() => setEditOpen(true)}
                             >
-                                <Pencil /> Edit
-                            </Button>
-                        ) : null}
-
-                        {can.delete ? (
-                            <Button
-                                variant="destructive"
-                                onClick={() => setDeleteOpen(true)}
-                            >
-                                <Trash2 /> Delete
-                            </Button>
-                        ) : null}
-                    </div>
+                                {item.label}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {errors.campaign ? (
@@ -211,250 +307,55 @@ export default function CampaignShow({
                     </Alert>
                 ) : null}
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <StatCard label="Steps" value={stats.steps_count} />
-                    <StatCard
-                        label="Recipients"
-                        value={stats.recipients_count}
-                    />
-                    <StatCard label="Sent" value={stats.emails_sent} />
-                    <StatCard label="Failed" value={stats.emails_failed} />
-                    <StatCard label="Opened" value={stats.opened} />
-                    <StatCard label="Clicked" value={stats.clicked} />
-                    <StatCard label="Unsubscribed" value={stats.unsubscribed} />
-                    <StatCard label="Timezone" value={campaign.timezone} />
-                </div>
-
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">Recipients</h2>
-                        {can.update ? (
-                            <Button
-                                variant="secondary"
-                                onClick={() => setRecipientsOpen(true)}
-                                data-test="campaign-add-recipients-button"
-                            >
-                                <Plus /> Add recipients
-                            </Button>
-                        ) : null}
+                {tab === 'steps' ? (
+                    <div
+                        role="tabpanel"
+                        id="campaign-panel-steps"
+                        aria-labelledby="campaign-tab-steps"
+                        className="flex flex-col gap-4"
+                    >
+                        {editor ? (
+                            <SequenceEditor
+                                campaignId={campaign.id}
+                                campaignName={campaign.name}
+                                steps={steps}
+                                activeStepId={editor.stepId}
+                                templates={templates}
+                                signatures={signatures}
+                                placeholders={placeholders}
+                                canUpdate={can.update}
+                                onSelectStep={openStep}
+                                onAddStep={() => setEditor({ stepId: null })}
+                                onClose={() => setEditor(null)}
+                            />
+                        ) : (
+                            <CampaignStepsTab
+                                campaign={campaign}
+                                connection={connection}
+                                steps={steps}
+                                stats={stats}
+                                start={start}
+                                canUpdate={can.update}
+                                onEditStep={openStep}
+                                onAddStep={() => setEditor({ stepId: null })}
+                            />
+                        )}
                     </div>
-
-                    {recipients.data.length === 0 ? (
-                        <EmptyState
-                            className="py-12"
-                            icon={ListChecks}
-                            title="No recipients yet"
-                            description="Add contacts or lists to start this campaign."
-                            actions={
-                                can.update ? (
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => setRecipientsOpen(true)}
-                                    >
-                                        <Plus /> Add recipients
-                                    </Button>
-                                ) : null
-                            }
-                        />
-                    ) : (
-                        <div className="overflow-x-auto rounded-lg border">
-                            <table className="w-full text-sm">
-                                <thead className="bg-muted/50 text-left">
-                                    <tr>
-                                        <th className="px-4 py-2 font-medium">
-                                            Name
-                                        </th>
-                                        <th className="px-4 py-2 font-medium">
-                                            Email
-                                        </th>
-                                        <th className="px-4 py-2 font-medium">
-                                            Status
-                                        </th>
-                                        <th className="px-4 py-2" />
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {recipients.data.map((recipient) => (
-                                        <tr
-                                            key={recipient.id}
-                                            className="border-t"
-                                            data-test="campaign-recipient-row"
-                                        >
-                                            <td className="px-4 py-2 font-medium">
-                                                {recipient.name}
-                                            </td>
-                                            <td className="px-4 py-2 text-muted-foreground">
-                                                {recipient.email}
-                                            </td>
-                                            <td className="px-4 py-2">
-                                                <Badge variant="secondary">
-                                                    {recipient.status_label}
-                                                </Badge>
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                {can.update ? (
-                                                    <Form
-                                                        {...destroyRecipient.form(
-                                                            [
-                                                                slug,
-                                                                campaign.id,
-                                                                recipient.id,
-                                                            ],
-                                                        )}
-                                                    >
-                                                        {({ processing }) => (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                type="submit"
-                                                                disabled={
-                                                                    processing
-                                                                }
-                                                            >
-                                                                Remove
-                                                            </Button>
-                                                        )}
-                                                    </Form>
-                                                ) : null}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-
-                    <Pagination links={recipients.links} />
-                </div>
-
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Steps</h2>
-                    {can.update ? (
-                        <Button
-                            variant="secondary"
-                            onClick={openNewStep}
-                            data-test="campaign-add-step-button"
-                        >
-                            <Plus /> Add step
-                        </Button>
-                    ) : null}
-                </div>
-
-                {steps.length === 0 ? (
-                    <EmptyState
-                        className="py-12"
-                        icon={Mail}
-                        title="No steps yet"
-                        description="Add your first email step to build this sequence."
-                        actions={
-                            can.update ? (
-                                <Button variant="outline" onClick={openNewStep}>
-                                    <Plus /> Add step
-                                </Button>
-                            ) : null
-                        }
-                    />
                 ) : (
-                    <div className="flex flex-col gap-3">
-                        {steps.map((step, index) => (
-                            <Card key={step.id} data-test="campaign-step-row">
-                                <CardContent className="flex flex-wrap items-start justify-between gap-4 sm:flex-nowrap">
-                                    <div className="flex min-w-0 gap-4">
-                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium">
-                                            {step.sequence}
-                                        </span>
-                                        <div className="min-w-0 space-y-1">
-                                            <p className="font-medium">
-                                                {step.subject || '(no subject)'}
-                                            </p>
-                                            <p className="line-clamp-2 text-sm text-muted-foreground">
-                                                {step.body}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                Day {step.day ?? 0}
-                                                {step.time
-                                                    ? ` at ${step.time.slice(0, 5)}`
-                                                    : ''}
-                                                {step.is_threaded
-                                                    ? ' · threaded'
-                                                    : ''}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-1 sm:shrink-0">
-                                        {can.update ? (
-                                            <>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    disabled={index === 0}
-                                                    onClick={() =>
-                                                        moveStep(index, -1)
-                                                    }
-                                                    aria-label={`Move step ${step.sequence} up`}
-                                                >
-                                                    <ArrowUp className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    disabled={
-                                                        index ===
-                                                        steps.length - 1
-                                                    }
-                                                    onClick={() =>
-                                                        moveStep(index, 1)
-                                                    }
-                                                    aria-label={`Move step ${step.sequence} down`}
-                                                >
-                                                    <ArrowDown className="h-4 w-4" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() =>
-                                                        openEditStep(step)
-                                                    }
-                                                    aria-label={`Edit step ${step.sequence}`}
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                                <Form
-                                                    {...destroyStep.form([
-                                                        slug,
-                                                        campaign.id,
-                                                        step.id,
-                                                    ])}
-                                                >
-                                                    {({ processing }) => (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            type="submit"
-                                                            disabled={
-                                                                processing
-                                                            }
-                                                            aria-label={`Delete step ${step.sequence}`}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    )}
-                                                </Form>
-                                            </>
-                                        ) : null}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
+                    <div
+                        role="tabpanel"
+                        id="campaign-panel-recipients"
+                        aria-labelledby="campaign-tab-recipients"
+                    >
+                        <CampaignRecipientsTab
+                            campaignId={campaign.id}
+                            recipients={recipients}
+                            search={recipientsSearch}
+                            canUpdate={can.update}
+                            onAddRecipients={() => setRecipientsOpen(true)}
+                        />
                     </div>
                 )}
-
-                <div>
-                    <Button variant="ghost" asChild>
-                        <Link href={index(slug)}>Back to campaigns</Link>
-                    </Button>
-                </div>
             </div>
 
             <EditCampaignModal
@@ -468,15 +369,6 @@ export default function CampaignShow({
                 open={deleteOpen}
                 onOpenChange={setDeleteOpen}
             />
-            <StepFormModal
-                campaignId={campaign.id}
-                step={editingStep}
-                templates={templates}
-                signatures={signatures}
-                placeholders={placeholders}
-                open={stepModalOpen}
-                onOpenChange={setStepModalOpen}
-            />
             <AddRecipientsModal
                 campaignId={campaign.id}
                 availableContacts={availableContacts}
@@ -488,19 +380,6 @@ export default function CampaignShow({
     );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
-    return (
-        <Card>
-            <CardContent className="grid gap-1">
-                <span className="text-xs tracking-wide text-muted-foreground uppercase">
-                    {label}
-                </span>
-                <span className="text-2xl font-semibold">{value}</span>
-            </CardContent>
-        </Card>
-    );
-}
-
 CampaignShow.layout = (props: { currentTeam?: { slug: string } | null }) => ({
     breadcrumbs: [
         {
@@ -508,4 +387,5 @@ CampaignShow.layout = (props: { currentTeam?: { slug: string } | null }) => ({
             href: props.currentTeam ? index(props.currentTeam.slug) : '/',
         },
     ],
+    showHeader: false,
 });

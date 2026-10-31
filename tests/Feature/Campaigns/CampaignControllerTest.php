@@ -1,16 +1,20 @@
 <?php
 
 use App\Enums\CampaignStatus;
+use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
 use App\Enums\MailerConnectionStatus;
+use App\Enums\RecipientStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
+use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\EmailTemplate;
 use App\Models\LinkClick;
 use App\Models\MailerConnection;
+use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Models\TrackedLink;
@@ -528,4 +532,254 @@ test('the campaign index and show pages expose the teams mailer connections', fu
             ->component('campaigns/show')
             ->has('mailerConnections', 2)
             ->where('mailerConnections.0.name', 'Backup'));
+});
+
+test('the show page counts sent opened and replied per step', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $first = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1, 'subject' => 'First']);
+    $second = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2, 'subject' => 'Second']);
+
+    $email = fn (CampaignStep $step, array $attributes = []): CampaignEmail => CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'campaign_step_id' => $step->id,
+        'status' => EmailStatus::Sent,
+        'dispatched_at' => now(),
+        ...$attributes,
+    ]);
+
+    // Step one: four dispatched, two opened, one of those replied.
+    $email($first, ['status' => EmailStatus::Opened, 'opened_at' => now()]);
+    $email($first, ['status' => EmailStatus::Opened, 'opened_at' => now()]);
+    $email($first, ['status' => EmailStatus::Replied, 'opened_at' => now(), 'replied_at' => now()]);
+    $email($first);
+    // Step two: one dispatched, nothing opened.
+    $email($second);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('steps.0.metrics.sent', 4)
+            ->where('steps.0.metrics.opened', 3)
+            ->where('steps.0.metrics.replied', 1)
+            ->where('steps.0.metrics.opened_rate', 75)
+            ->where('steps.0.metrics.replied_rate', 25)
+            ->where('steps.1.metrics.sent', 1)
+            ->where('steps.1.metrics.opened_rate', 0)
+            ->where('steps.1.metrics.replied_rate', 0));
+});
+
+test('the recipients payload derives the boards status labels', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $recipient = function (string $name, RecipientStatus $status, int $minutesAgo) use ($team, $campaign): Recipient {
+        $contact = Contact::factory()->forTeam($team)->create(['name' => $name]);
+
+        return Recipient::factory()->create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'status' => $status,
+            'created_at' => now()->subMinutes($minutesAgo),
+        ]);
+    };
+
+    $replied = $recipient('Replied Person', RecipientStatus::Active, 6);
+    $bounced = $recipient('Bounced Person', RecipientStatus::Active, 5);
+    $unsubscribed = $recipient('Unsubscribed Person', RecipientStatus::Unsubscribed, 4);
+    $opened = $recipient('Opened Person', RecipientStatus::Active, 3);
+    $contacted = $recipient('Contacted Person', RecipientStatus::Active, 2);
+    $recipient('Untouched Person', RecipientStatus::Active, 1);
+
+    $email = fn (Recipient $target, array $attributes): CampaignEmail => CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'recipient_id' => $target->id,
+        'status' => EmailStatus::Sent,
+        'dispatched_at' => now(),
+        ...$attributes,
+    ]);
+
+    $email($replied, ['status' => EmailStatus::Replied, 'opened_at' => now(), 'replied_at' => now()]);
+    $email($bounced, ['status' => EmailStatus::Bounced]);
+    $email($opened, ['status' => EmailStatus::Opened, 'opened_at' => now()]);
+    $email($contacted, []);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('recipients.data', 6)
+            // newest first: latest() orders by created_at
+            ->where('recipients.data.0.name', 'Untouched Person')
+            ->where('recipients.data.0.display_status', 'not_contacted')
+            ->where('recipients.data.0.display_status_label', 'Not contacted')
+            ->where('recipients.data.0.status', RecipientStatus::Active->value)
+            ->where('recipients.data.0.status_label', 'Active')
+            ->where('recipients.data.1.display_status', 'contacted')
+            ->where('recipients.data.2.display_status', 'opened')
+            ->where('recipients.data.3.display_status', 'unsubscribed')
+            ->where('recipients.data.4.display_status', 'bounced')
+            ->where('recipients.data.5.display_status', 'replied'));
+});
+
+test('start is blocked by an empty subject a failed connection and do not contact recipients', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'Mailgun relay',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => 'SmtpAuthenticationFailed',
+    ]);
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => $connection->id,
+        'status' => CampaignStatus::Draft,
+    ]);
+
+    CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1, 'day' => 1, 'subject' => 'Founders, quick question']);
+    CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2, 'day' => 3, 'subject' => '']);
+
+    $recipient = function (ContactStatus $status, Campaign $for) use ($team): Recipient {
+        $contact = Contact::factory()->forTeam($team)->create(['status' => $status]);
+
+        return Recipient::factory()->create([
+            'campaign_id' => $for->id,
+            'contact_id' => $contact->id,
+        ]);
+    };
+
+    $recipient(ContactStatus::DoNotContact, $campaign);
+    $recipient(ContactStatus::NotContacted, $campaign);
+    $recipient(ContactStatus::NotContacted, $campaign);
+
+    // A do-not-contact contact on another campaign of the same team must not count.
+    $otherCampaign = Campaign::factory()->forTeam($team)->create();
+    $recipient(ContactStatus::DoNotContact, $otherCampaign);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('start.blocked', true)
+            ->has('start.reasons', 3)
+            ->where('start.reasons.0.message', 'Step 2 (Day 3) has an empty subject')
+            ->where('start.reasons.0.step_id', $campaign->steps()->where('sequence', 2)->value('id'))
+            ->where('start.reasons.0.blocking', true)
+            ->where('start.reasons.1.message', 'The sending connection "Mailgun relay" failed verification')
+            ->where('start.reasons.1.type', 'connection')
+            ->where('start.reasons.2.message', '1 recipient is marked Do not contact and will be skipped')
+            ->where('start.reasons.2.blocking', false));
+});
+
+test('start stays enabled when nothing blocks the campaign', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'Primary',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => null,
+    ]);
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => $connection->id,
+        'status' => CampaignStatus::Draft,
+    ]);
+
+    CampaignStep::factory()->forCampaign($campaign)->create(['subject' => 'Ready']);
+
+    $contact = Contact::factory()->forTeam($team)->create();
+    Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $contact->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('start.blocked', false)
+            ->has('start.reasons', 0));
+});
+
+test('a campaign without steps connection or recipients lists every blocker', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => null,
+        'status' => CampaignStatus::Draft,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('start.blocked', true)
+            ->has('start.reasons', 3)
+            ->where('start.reasons.0.message', 'This campaign has no steps yet.')
+            ->where('start.reasons.1.message', 'This campaign has no sending connection.')
+            ->where('start.reasons.2.message', 'This campaign has no recipients yet.'));
+});
+
+test('the recipients tab can be searched by name or email', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $ada = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
+    $grace = Contact::factory()->forTeam($team)->create(['name' => 'Grace Hopper']);
+
+    Recipient::factory()->create(['campaign_id' => $campaign->id, 'contact_id' => $ada->id]);
+    Recipient::factory()->create(['campaign_id' => $campaign->id, 'contact_id' => $grace->id]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+            'recipients_q' => 'Ada',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('recipientsSearch', 'Ada')
+            ->has('recipients.data', 1)
+            ->where('recipients.data.0.name', 'Ada Lovelace'));
+});
+
+test('the show page exposes the campaigns sending connection without its credentials', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'Primary',
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'from_email' => 'sam@northwind.io',
+            'password' => 'super-secret',
+            'host' => 'smtp.northwind.io',
+        ],
+    ]);
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => $connection->id,
+        'timezone' => 'Asia/Kuala_Lumpur',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('connection.name', 'Primary')
+            ->where('connection.from_email', 'sam@northwind.io')
+            ->where('connection.status', MailerConnectionStatus::Active->value)
+            ->where('connection.has_exception', false)
+            ->missing('connection.smtp_setting')
+            ->missing('connection.password'));
 });

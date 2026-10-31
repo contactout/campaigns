@@ -1,3 +1,5 @@
+import { Link } from '@inertiajs/react';
+import { ChevronLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 
@@ -5,6 +7,10 @@ type Props = {
     title: string;
     description?: string;
     actions?: ReactNode;
+    /** Renders a back chevron before the title, as on the campaign detail boards. */
+    back?: { href: string; label: string };
+    /** Rendered after the title, inside the title block (for example a status pill). */
+    titleAddon?: ReactNode;
     /**
      * Product pages hide the breadcrumb bar, so they render the only sidebar
      * trigger left on small screens here. Keep it until the 390 layout lands.
@@ -16,6 +22,8 @@ export default function PageHead({
     title,
     description,
     actions,
+    back,
+    titleAddon,
     mobileNav = false,
 }: Props) {
     return (
@@ -24,13 +32,27 @@ export default function PageHead({
                 <SidebarTrigger className="-ml-1.5 md:hidden" />
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="min-w-0">
-                    <h1 className="text-h1 leading-7 font-bold">{title}</h1>
-                    {description ? (
-                        <p className="text-body leading-5 text-muted-foreground">
-                            {description}
-                        </p>
+                <div className="flex min-w-0 items-center gap-3">
+                    {back ? (
+                        <Link
+                            href={back.href}
+                            aria-label={back.label}
+                            className="-ml-1.5 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary-border"
+                        >
+                            <ChevronLeft className="size-4" aria-hidden />
+                        </Link>
                     ) : null}
+                    <div className="min-w-0">
+                        <h1 className="truncate text-h1 leading-7 font-bold">
+                            {title}
+                        </h1>
+                        {description ? (
+                            <p className="text-body leading-5 text-muted-foreground">
+                                {description}
+                            </p>
+                        ) : null}
+                    </div>
+                    {titleAddon}
                 </div>
                 {actions ? (
                     <div className="flex shrink-0 items-center gap-2">
