@@ -557,6 +557,28 @@ test('the show page counts sent opened and replied per step', function () {
     // Step two: one dispatched, nothing opened.
     $email($second);
 
+    // Another campaign's emails, including one that reuses this campaign's step
+    // id, must not reach this campaign's metrics.
+    $otherCampaign = Campaign::factory()->forTeam($team)->create();
+    $otherStep = CampaignStep::factory()->forCampaign($otherCampaign)->create(['sequence' => 1]);
+
+    CampaignEmail::factory()->create([
+        'campaign_id' => $otherCampaign->id,
+        'campaign_step_id' => $otherStep->id,
+        'status' => EmailStatus::Opened,
+        'dispatched_at' => now(),
+        'opened_at' => now(),
+        'replied_at' => now(),
+    ]);
+
+    CampaignEmail::factory()->create([
+        'campaign_id' => $otherCampaign->id,
+        'campaign_step_id' => $first->id,
+        'status' => EmailStatus::Opened,
+        'dispatched_at' => now(),
+        'opened_at' => now(),
+    ]);
+
     $this->actingAs($user)
         ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
         ->assertOk()
@@ -654,6 +676,28 @@ test('start is blocked by an empty subject a failed connection and do not contac
     };
 
     $recipient(ContactStatus::DoNotContact, $campaign);
+
+    // "Do not contact" is also the timestamp: the contact page reports it from
+    // `do_not_contact_at`, and SuppressionList blocks on either signal.
+    $timestamped = Contact::factory()->forTeam($team)->create([
+        'status' => ContactStatus::NotContacted,
+        'do_not_contact_at' => now(),
+    ]);
+    Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $timestamped->id,
+    ]);
+
+    // A soft-deleted contact is gone everywhere else, so it is not counted.
+    $deleted = Contact::factory()->forTeam($team)->create([
+        'status' => ContactStatus::DoNotContact,
+    ]);
+    Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $deleted->id,
+    ]);
+    $deleted->delete();
+
     $recipient(ContactStatus::NotContacted, $campaign);
     $recipient(ContactStatus::NotContacted, $campaign);
 
@@ -673,7 +717,7 @@ test('start is blocked by an empty subject a failed connection and do not contac
             ->where('start.reasons.0.blocking', true)
             ->where('start.reasons.1.message', 'The sending connection "Mailgun relay" failed verification')
             ->where('start.reasons.1.type', 'connection')
-            ->where('start.reasons.2.message', '1 recipient is marked Do not contact and will be skipped')
+            ->where('start.reasons.2.message', '2 recipients are marked Do not contact and will be skipped')
             ->where('start.reasons.2.blocking', false));
 });
 
@@ -780,6 +824,29 @@ test('a campaign that cannot be started reports no blockers', function () {
             ->has('start.reasons', 0));
 });
 
+test('a recipient whose contact was deleted still renders', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $contact = Contact::factory()->forTeam($team)->create(['name' => 'Gone Person']);
+
+    Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $contact->id,
+    ]);
+
+    $contact->delete();
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('recipients.data', 1)
+            ->where('recipients.data.0.name', 'Gone Person')
+            ->where('recipients.data.0.email', null));
+});
+
 test('the recipients tab can be searched by name or email', function () {
     [$team, $user] = campaignTeamWithMember();
 
@@ -788,8 +855,24 @@ test('the recipients tab can be searched by name or email', function () {
     $ada = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
     $grace = Contact::factory()->forTeam($team)->create(['name' => 'Grace Hopper']);
 
+    $ada->identities()->create([
+        'team_id' => $team->id,
+        'identity_type' => 'email',
+        'normalized_value' => 'ada@analytical.engine',
+    ]);
+    $grace->identities()->create([
+        'team_id' => $team->id,
+        'identity_type' => 'email',
+        'normalized_value' => 'grace@navy.mil',
+    ]);
+
     Recipient::factory()->create(['campaign_id' => $campaign->id, 'contact_id' => $ada->id]);
     Recipient::factory()->create(['campaign_id' => $campaign->id, 'contact_id' => $grace->id]);
+
+    // Same name, different campaign: the search must stay inside this campaign.
+    $otherCampaign = Campaign::factory()->forTeam($team)->create();
+    $otherAda = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
+    Recipient::factory()->create(['campaign_id' => $otherCampaign->id, 'contact_id' => $otherAda->id]);
 
     $this->actingAs($user)
         ->get(route('campaigns.show', [
@@ -803,6 +886,19 @@ test('the recipients tab can be searched by name or email', function () {
             ->where('recipientsSearch', 'Ada')
             ->has('recipients.data', 1)
             ->where('recipients.data.0.name', 'Ada Lovelace'));
+
+    // The email branch of the search finds the same recipient by address.
+    $this->actingAs($user)
+        ->get(route('campaigns.show', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+            'recipients_q' => 'grace@navy',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('recipients.data', 1)
+            ->where('recipients.data.0.name', 'Grace Hopper'));
 });
 
 test('the show page exposes the campaigns sending connection without its credentials', function () {

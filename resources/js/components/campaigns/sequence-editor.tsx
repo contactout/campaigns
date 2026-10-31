@@ -1,7 +1,8 @@
 import { router, usePage } from '@inertiajs/react';
 import { Mail, Plus, Trash2 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import StepForm from '@/components/campaigns/step-form';
+import ConfirmDialog from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { destroy as destroyStep } from '@/routes/campaigns/steps';
@@ -25,6 +26,7 @@ type Props = {
     onSelectStep: (step: CampaignStep) => void;
     onAddStep: () => void;
     onClose: () => void;
+    onDirtyChange?: (isDirty: boolean) => void;
 };
 
 const timeLabel = (step: CampaignStep): string =>
@@ -42,12 +44,36 @@ export default function SequenceEditor({
     onSelectStep,
     onAddStep,
     onClose,
+    onDirtyChange,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const activeStep = steps.find((step) => step.id === activeStepId) ?? null;
 
-    // The board's `Esc` hint is a real affordance, not a label.
+    const headingRef = useRef<HTMLHeadingElement | null>(null);
+    const dirtyRef = useRef(false);
+    const [pendingAction, setPendingAction] = useState<(() => void) | null>(
+        null,
+    );
+
+    // The row menu that opened the editor is unmounted with it, so focus has to
+    // land somewhere useful inside the pane instead of falling to <body>.
+    useEffect(() => {
+        headingRef.current?.focus();
+    }, [activeStepId]);
+
+    const requestAction = (action: () => void) => {
+        if (dirtyRef.current) {
+            setPendingAction(() => action);
+
+            return;
+        }
+
+        action();
+    };
+
+    // The board's `Esc` hint is a real affordance, but a dirty draft is not
+    // discarded without asking.
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key !== 'Escape' || event.defaultPrevented) {
@@ -61,6 +87,12 @@ export default function SequenceEditor({
                     '[role="menu"],[role="listbox"],[role="dialog"]',
                 )
             ) {
+                return;
+            }
+
+            if (dirtyRef.current) {
+                setPendingAction(() => onClose);
+
                 return;
             }
 
@@ -104,7 +136,11 @@ export default function SequenceEditor({
                             <button
                                 key={step.id}
                                 type="button"
-                                onClick={() => onSelectStep(step)}
+                                onClick={() => {
+                                    if (!active) {
+                                        requestAction(() => onSelectStep(step));
+                                    }
+                                }}
                                 aria-current={active ? 'true' : undefined}
                                 data-test="campaign-sequence-item"
                                 className={cn(
@@ -138,7 +174,11 @@ export default function SequenceEditor({
                         type="button"
                         variant="outline"
                         className="w-full"
-                        onClick={onAddStep}
+                        onClick={() => {
+                            if (activeStep !== null) {
+                                requestAction(onAddStep);
+                            }
+                        }}
                         data-test="campaign-add-step-button"
                     >
                         <Plus /> Add step
@@ -152,7 +192,11 @@ export default function SequenceEditor({
             >
                 <div className="flex items-start justify-between gap-4 px-4 pt-4 pb-3">
                     <div className="min-w-0">
-                        <h2 className="text-h3 leading-6 font-semibold">
+                        <h2
+                            ref={headingRef}
+                            tabIndex={-1}
+                            className="text-h3 leading-6 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
+                        >
                             {activeStep
                                 ? `Edit step · Day ${activeStep.day ?? 0}`
                                 : 'New step'}
@@ -175,6 +219,10 @@ export default function SequenceEditor({
                     placeholders={placeholders}
                     onSuccess={onClose}
                     formClassName="flex flex-col"
+                    onDirtyChange={(isDirty) => {
+                        dirtyRef.current = isDirty;
+                        onDirtyChange?.(isDirty);
+                    }}
                 >
                     {({ processing, fields }) => (
                         <>
@@ -188,7 +236,7 @@ export default function SequenceEditor({
                                     <Button
                                         type="button"
                                         variant="ghost"
-                                        className="text-destructive hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                        className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
                                         onClick={deleteStep}
                                         data-test="campaign-delete-step-button"
                                     >
@@ -202,7 +250,7 @@ export default function SequenceEditor({
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={onClose}
+                                        onClick={() => requestAction(onClose)}
                                     >
                                         Cancel
                                     </Button>
@@ -219,6 +267,23 @@ export default function SequenceEditor({
                     )}
                 </StepForm>
             </div>
+
+            <ConfirmDialog
+                open={pendingAction !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPendingAction(null);
+                    }
+                }}
+                title="Discard your changes?"
+                description="This step has edits that have not been saved. Leaving now discards them."
+                confirmLabel="Discard changes"
+                onConfirm={() => {
+                    const action = pendingAction;
+                    setPendingAction(null);
+                    action?.();
+                }}
+            />
         </div>
     );
 }

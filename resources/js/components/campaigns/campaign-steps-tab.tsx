@@ -243,9 +243,15 @@ export default function CampaignStepsTab({
                                         <div
                                             key={step.id}
                                             draggable={canUpdate}
-                                            onDragStart={() =>
-                                                setDragIndex(index)
-                                            }
+                                            onDragStart={(event) => {
+                                                event.dataTransfer.setData(
+                                                    'text/plain',
+                                                    String(step.id),
+                                                );
+                                                event.dataTransfer.effectAllowed =
+                                                    'move';
+                                                setDragIndex(index);
+                                            }}
                                             onDragEnd={() => setDragIndex(null)}
                                             onDragOver={(event) =>
                                                 event.preventDefault()
@@ -257,7 +263,8 @@ export default function CampaignStepsTab({
                                             data-test="campaign-step-row"
                                             className={cn(
                                                 'flex items-center rounded-lg border bg-card pl-3',
-                                                blocked && 'border-destructive',
+                                                blocked &&
+                                                    'border-destructive-foreground',
                                                 dragIndex === index &&
                                                     'opacity-60',
                                             )}

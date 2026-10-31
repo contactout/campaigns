@@ -1,5 +1,5 @@
 import { Form, usePage } from '@inertiajs/react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import InputError from '@/components/input-error';
 import RichTextEditor from '@/components/templates/rich-text-editor';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,8 @@ const SENDER_SIGNATURE = 'sender';
 export type StepFormState = {
     errors: Record<string, string>;
     processing: boolean;
+    /** True when any field differs from the step it was opened with. */
+    isDirty: boolean;
     /** The subject, body, placeholder, day/time and threading fields. */
     fields: ReactNode;
 };
@@ -45,6 +47,8 @@ type Props = {
     onSuccess?: () => void;
     formClassName?: string;
     fieldsClassName?: string;
+    /** Reports dirtiness so a caller can confirm before discarding a draft. */
+    onDirtyChange?: (isDirty: boolean) => void;
     children: (state: StepFormState) => ReactNode;
 };
 
@@ -64,6 +68,7 @@ export default function StepForm({
     onSuccess,
     formClassName,
     fieldsClassName = 'flex flex-col gap-4',
+    onDirtyChange,
     children,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -71,16 +76,41 @@ export default function StepForm({
 
     const [subject, setSubject] = useState(step?.subject ?? '');
     const [body, setBody] = useState(step?.body ?? '');
+    const [day, setDay] = useState(String(step?.day ?? 0));
+    const [time, setTime] = useState(step?.time ? step.time.slice(0, 5) : '');
+    const [isThreaded, setIsThreaded] = useState(Boolean(step?.is_threaded));
     const [templateId, setTemplateId] = useState('');
+
+    const initial = {
+        subject: step?.subject ?? '',
+        body: step?.body ?? '',
+        day: String(step?.day ?? 0),
+        time: step?.time ? step.time.slice(0, 5) : '',
+        threaded: Boolean(step?.is_threaded),
+    };
+
+    const isDirty =
+        subject !== initial.subject ||
+        body !== initial.body ||
+        day !== initial.day ||
+        time !== initial.time ||
+        isThreaded !== initial.threaded;
+
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
 
     const formProps = step
         ? update.form([slug, campaignId, step.id])
         : store.form([slug, campaignId]);
 
     const applyTemplate = (id: string) => {
-        setTemplateId(id);
-
         const template = templates.find((item) => String(item.id) === id);
+
+        // Clear the selection afterwards: a Radix Select fires nothing when the
+        // same item is picked twice, and re-applying a template is a real case
+        // (edit the subject, then put the template back).
+        setTemplateId('');
 
         if (!template) {
             return;
@@ -123,6 +153,7 @@ export default function StepForm({
                     {children({
                         errors,
                         processing,
+                        isDirty,
                         fields: (
                             <div className={fieldsClassName}>
                                 {templates.length > 0 ? (
@@ -173,12 +204,12 @@ export default function StepForm({
                                 </div>
 
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor="step-body">Body</Label>
+                                    <Label id="step-body-label">Body</Label>
                                     <RichTextEditor
                                         name="body"
                                         value={body}
                                         onChange={setBody}
-                                        labelledBy="step-body"
+                                        labelledBy="step-body-label"
                                         toolbar="board"
                                         minHeightClass="min-h-[220px]"
                                         actions={
@@ -239,7 +270,10 @@ export default function StepForm({
                                             type="number"
                                             min={0}
                                             max={365}
-                                            defaultValue={step?.day ?? 0}
+                                            value={day}
+                                            onChange={(event) =>
+                                                setDay(event.target.value)
+                                            }
                                             required
                                         />
                                         <InputError message={errors.day} />
@@ -253,10 +287,9 @@ export default function StepForm({
                                             id="time"
                                             name="time"
                                             type="time"
-                                            defaultValue={
-                                                step?.time
-                                                    ? step.time.slice(0, 5)
-                                                    : ''
+                                            value={time}
+                                            onChange={(event) =>
+                                                setTime(event.target.value)
                                             }
                                         />
                                         <InputError message={errors.time} />
@@ -267,7 +300,10 @@ export default function StepForm({
                                     <Checkbox
                                         name="is_threaded"
                                         value="1"
-                                        defaultChecked={step?.is_threaded}
+                                        checked={isThreaded}
+                                        onCheckedChange={(checked) =>
+                                            setIsThreaded(checked === true)
+                                        }
                                     />
                                     Send as a reply in the same thread
                                 </label>

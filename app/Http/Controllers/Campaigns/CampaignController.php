@@ -126,7 +126,6 @@ class CampaignController extends Controller
             : null;
 
         $recipients = $campaign->recipients()
-            ->with('contact.emailIdentity')
             ->when($recipientsSearch, fn (Builder $query, string $search): Builder => $query->whereHas(
                 'contact',
                 fn (Builder $contact): Builder => $contact
@@ -138,9 +137,25 @@ class CampaignController extends Controller
             ->withQueryString();
 
         // One grouped query for the page's recipients rather than one per row.
-        $engagement = $this->recipientEngagement($campaign->id, array_map(intval(...), $recipients->getCollection()->pluck('id')->all()));
+        $recipientIds = array_map(intval(...), $recipients->getCollection()->pluck('id')->all());
+        $engagement = $this->recipientEngagement($campaign->id, $recipientIds);
 
-        $recipients->through(fn (Recipient $recipient): array => $this->recipientRow($recipient, $engagement[$recipient->id] ?? []));
+        // Deleting a contact leaves its recipient rows behind, so the page
+        // resolves the contacts itself, soft-deleted ones included, instead of
+        // letting the relation return null and take the page down with it.
+        $contacts = Contact::query()
+            ->withTrashed()
+            ->with('emailIdentity')
+            ->whereIn('id', array_map(intval(...), $recipients->getCollection()->pluck('contact_id')->all()))
+            ->get()
+            ->keyBy('id')
+            ->all();
+
+        $recipients->through(fn (Recipient $recipient): array => $this->recipientRow(
+            $recipient,
+            $contacts[$recipient->contact_id] ?? null,
+            $engagement[$recipient->id] ?? [],
+        ));
 
         $availableContacts = Contact::query()
             ->forTeam($currentTeam->id)
@@ -479,15 +494,23 @@ class CampaignController extends Controller
     /**
      * Count the campaign's recipients whose contact is flagged do-not-contact.
      *
-     * {@see SuppressionList} refuses to email these, so they
-     * are listed as recipients that will be skipped rather than sent to.
+     * This follows the app's own definition rather than the status column
+     * alone: {@see SuppressionList::isBlocked()} also treats `do_not_contact_at`
+     * as blocked, and the contact page reports "Do not contact" from that
+     * column, so a contact with only the timestamp set is counted too.
+     * Soft-deleted contacts are excluded, as everywhere else.
      */
     protected function doNotContactRecipients(int $campaignId): int
     {
         return Recipient::query()
             ->join('contacts', 'contacts.id', '=', 'recipients.contact_id')
             ->where('recipients.campaign_id', $campaignId)
-            ->where('contacts.status', ContactStatus::DoNotContact->value)
+            ->whereNull('contacts.deleted_at')
+            ->where(function (Builder $query): void {
+                $query
+                    ->where('contacts.status', ContactStatus::DoNotContact->value)
+                    ->orWhereNotNull('contacts.do_not_contact_at');
+            })
             ->count();
     }
 
@@ -501,7 +524,7 @@ class CampaignController extends Controller
      * @param  array{sent?: int, opened?: int, replied?: int, bounced?: int}  $engagement
      * @return array{id: int, contact_id: int, name: string, email: string|null, status: string, status_label: string, display_status: string, display_status_label: string, created_at: string|null}
      */
-    protected function recipientRow(Recipient $recipient, array $engagement): array
+    protected function recipientRow(Recipient $recipient, ?Contact $contact, array $engagement): array
     {
         $sent = $engagement['sent'] ?? 0;
         $opened = $engagement['opened'] ?? 0;
@@ -524,8 +547,8 @@ class CampaignController extends Controller
         return [
             'id' => $recipient->id,
             'contact_id' => $recipient->contact_id,
-            'name' => $recipient->contact->name,
-            'email' => $recipient->contact->emailIdentity?->normalized_value,
+            'name' => $contact === null ? __('Deleted contact') : $contact->name,
+            'email' => $contact?->emailIdentity?->normalized_value,
             'status' => $recipient->status->value,
             'status_label' => $recipient->status->label(),
             'display_status' => $displayStatus,

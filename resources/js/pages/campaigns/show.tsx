@@ -1,5 +1,6 @@
 import { Form, Head, usePage } from '@inertiajs/react';
 import {
+    AlertCircle,
     Archive,
     Copy,
     MoreHorizontal,
@@ -9,7 +10,7 @@ import {
     Square,
     Trash2,
 } from 'lucide-react';
-import { type KeyboardEvent, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
 import CampaignRecipientsTab from '@/components/campaigns/campaign-recipients-tab';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
@@ -17,6 +18,7 @@ import CampaignStepsTab from '@/components/campaigns/campaign-steps-tab';
 import DeleteCampaignModal from '@/components/campaigns/delete-campaign-modal';
 import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
 import SequenceEditor from '@/components/campaigns/sequence-editor';
+import ConfirmDialog from '@/components/confirm-dialog';
 import PageHead from '@/components/page-head';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -95,10 +97,22 @@ export default function CampaignShow({
     const slug = currentTeam?.slug ?? '';
     const errors = usePage().props.errors as Record<string, string>;
 
-    const [tab, setTab] = useState<Tab>('steps');
-    const [editor, setEditor] = useState<{ stepId: number | null } | null>(
-        null,
+    // A Recipients URL must open on Recipients: Back, a reload or a shared
+    // `?recipients_q=…` link all remount the page with that query string.
+    const [tab, setTab] = useState<Tab>(() =>
+        recipientsSearch || recipients.current_page > 1
+            ? 'recipients'
+            : 'steps',
     );
+    const [editor, setEditor] = useState<{
+        stepId: number | null;
+        opener: 'row' | 'add';
+        sequence?: number;
+    } | null>(null);
+    const [pendingTab, setPendingTab] = useState<Tab | null>(null);
+    const editorDirty = useRef(false);
+    const openerSelector = useRef<string | null>(null);
+    const campaignId = useRef(campaign.id);
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [recipientsOpen, setRecipientsOpen] = useState(false);
@@ -109,12 +123,82 @@ export default function CampaignShow({
     // The server only reports reasons for Draft/Stopped; a member without
     // can.start still has no Start action to explain.
     const startBlocked = canStart && start.blocked;
+    const blockingReasonCount = start.reasons.filter(
+        (reason) => reason.blocking,
+    ).length;
     const canStop = can.stop && campaign.status === 'Active';
     const canArchive = can.archive && campaign.status !== 'Archived';
 
-    const selectTab = (next: Tab) => {
+    // Duplicate redirects to a copy of the campaign in the same component, so
+    // the tab and the open editor have to be reset when the campaign changes.
+    useEffect(() => {
+        if (campaignId.current === campaign.id) {
+            return;
+        }
+
+        campaignId.current = campaign.id;
+        setEditor(null);
+        setPendingTab(null);
+        editorDirty.current = false;
+        setTab(
+            recipientsSearch || recipients.current_page > 1
+                ? 'recipients'
+                : 'steps',
+        );
+    }, [campaign.id, recipientsSearch, recipients.current_page]);
+
+    const applyTab = (next: Tab) => {
         setTab(next);
         setEditor(null);
+        editorDirty.current = false;
+    };
+
+    const selectTab = (next: Tab) => {
+        if (next === tab) {
+            return;
+        }
+
+        if (editor !== null && editorDirty.current) {
+            setPendingTab(next);
+
+            return;
+        }
+
+        applyTab(next);
+    };
+
+    // Return focus to whatever opened the editor; the trigger unmounts with it.
+    useEffect(() => {
+        if (editor !== null || openerSelector.current === null) {
+            return;
+        }
+
+        const selector = openerSelector.current;
+        openerSelector.current = null;
+
+        requestAnimationFrame(() => {
+            document.querySelector<HTMLElement>(selector)?.focus();
+        });
+    }, [editor]);
+
+    const openEditor = (next: {
+        stepId: number | null;
+        opener: 'row' | 'add';
+        sequence?: number;
+    }) => {
+        setEditor(next);
+    };
+
+    const closeEditor = () => {
+        if (editor !== null) {
+            openerSelector.current =
+                editor.opener === 'add'
+                    ? '[data-test="campaign-add-step-button"]'
+                    : `[data-test="campaign-step-row"] button[aria-label="Actions for step ${editor.sequence ?? ''}"]`;
+        }
+
+        setEditor(null);
+        editorDirty.current = false;
     };
 
     const onTabKeyDown = (
@@ -143,7 +227,12 @@ export default function CampaignShow({
         tabRefs.current[next]?.focus();
     };
 
-    const openStep = (step: CampaignStep) => setEditor({ stepId: step.id });
+    const openStep = (step: CampaignStep) =>
+        openEditor({
+            stepId: step.id,
+            opener: 'row',
+            sequence: step.sequence,
+        });
 
     const actions = (
         <>
@@ -200,10 +289,17 @@ export default function CampaignShow({
                     {({ processing }) => (
                         <Button
                             type="submit"
-                            disabled={processing || startBlocked}
+                            disabled={processing}
+                            aria-disabled={startBlocked || undefined}
                             aria-describedby={
                                 startBlocked ? 'start-blocked' : undefined
                             }
+                            onClick={
+                                startBlocked
+                                    ? (event) => event.preventDefault()
+                                    : undefined
+                            }
+                            className={startBlocked ? 'opacity-50' : undefined}
                             data-test="campaign-start-button"
                         >
                             <Play /> Start
@@ -212,7 +308,7 @@ export default function CampaignShow({
                 </Form>
             ) : null}
 
-            {can.update ? (
+            {can.update && tab !== 'recipients' ? (
                 <Button
                     variant={canStart ? 'outline' : 'default'}
                     onClick={() => setRecipientsOpen(true)}
@@ -267,6 +363,23 @@ export default function CampaignShow({
                     mobileNav
                 />
 
+                {startBlocked ? (
+                    <p
+                        id="start-blocked"
+                        className="flex items-center gap-2 rounded-md border border-destructive-foreground/30 bg-badge-danger px-3 py-2 text-body leading-5 text-badge-danger-foreground"
+                    >
+                        <AlertCircle
+                            className="size-4 shrink-0 text-destructive-foreground"
+                            aria-hidden
+                        />
+                        Can&apos;t start this campaign —{' '}
+                        {blockingReasonCount === 1
+                            ? '1 blocking reason'
+                            : `${blockingReasonCount} blocking reasons`}{' '}
+                        before Start.
+                    </p>
+                ) : null}
+
                 <div
                     role="tablist"
                     aria-label="Campaign sections"
@@ -292,7 +405,7 @@ export default function CampaignShow({
                                     onTabKeyDown(event, item.key)
                                 }
                                 className={cn(
-                                    '-mb-px border-b-2 pt-2.5 pb-1 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border',
+                                    '-mb-px border-b-2 pt-1.5 pb-2 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border',
                                     active
                                         ? 'border-primary text-primary'
                                         : 'border-transparent text-muted-foreground hover:text-foreground',
@@ -312,6 +425,7 @@ export default function CampaignShow({
 
                 {tab === 'steps' ? (
                     <div
+                        key={campaign.id}
                         role="tabpanel"
                         id="campaign-panel-steps"
                         aria-labelledby="campaign-tab-steps"
@@ -328,8 +442,16 @@ export default function CampaignShow({
                                 placeholders={placeholders}
                                 canUpdate={can.update}
                                 onSelectStep={openStep}
-                                onAddStep={() => setEditor({ stepId: null })}
-                                onClose={() => setEditor(null)}
+                                onAddStep={() =>
+                                    openEditor({
+                                        stepId: null,
+                                        opener: 'add',
+                                    })
+                                }
+                                onClose={closeEditor}
+                                onDirtyChange={(isDirty) => {
+                                    editorDirty.current = isDirty;
+                                }}
                             />
                         ) : (
                             <CampaignStepsTab
@@ -341,12 +463,18 @@ export default function CampaignShow({
                                 startBlocked={startBlocked}
                                 canUpdate={can.update}
                                 onEditStep={openStep}
-                                onAddStep={() => setEditor({ stepId: null })}
+                                onAddStep={() =>
+                                    openEditor({
+                                        stepId: null,
+                                        opener: 'add',
+                                    })
+                                }
                             />
                         )}
                     </div>
                 ) : (
                     <div
+                        key={campaign.id}
                         role="tabpanel"
                         id="campaign-panel-recipients"
                         aria-labelledby="campaign-tab-recipients"
@@ -361,6 +489,26 @@ export default function CampaignShow({
                     </div>
                 )}
             </div>
+
+            <ConfirmDialog
+                open={pendingTab !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setPendingTab(null);
+                    }
+                }}
+                title="Discard your changes?"
+                description="This step has edits that have not been saved. Switching tabs discards them."
+                confirmLabel="Discard changes"
+                onConfirm={() => {
+                    const next = pendingTab;
+                    setPendingTab(null);
+
+                    if (next !== null) {
+                        applyTab(next);
+                    }
+                }}
+            />
 
             <EditCampaignModal
                 campaign={campaign}

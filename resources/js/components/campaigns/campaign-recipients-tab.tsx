@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { ListChecks, MoreVertical, Plus, Search, Trash2 } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import RecipientStatusBadge from '@/components/campaigns/recipient-status-badge';
+import ConfirmDialog from '@/components/confirm-dialog';
 import EmptyState from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -49,6 +50,7 @@ export default function CampaignRecipientsTab({
     const slug = currentTeam?.slug ?? '';
     const [term, setTerm] = useState(search ?? '');
     const [selected, setSelected] = useState<number[]>([]);
+    const [confirmOpen, setConfirmOpen] = useState(false);
 
     // `preserveState` keeps this component mounted across pagination and search
     // visits, so ids from the previous page would otherwise stay selected and
@@ -58,8 +60,13 @@ export default function CampaignRecipientsTab({
     }, [recipients.current_page, search]);
 
     const pageIds = recipients.data.map((recipient) => recipient.id);
+    // Only ids that are on the page can be acted on, so a row removed from the
+    // table can never be posted again.
+    const selectedOnPage = selected.filter((id) => pageIds.includes(id));
     const allSelected =
-        pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
+        pageIds.length > 0 &&
+        pageIds.every((id) => selectedOnPage.includes(id));
+    const someSelected = selectedOnPage.length > 0 && !allSelected;
     const previousLink = recipients.links.find((link) =>
         previousLabels.includes(link.label),
     );
@@ -96,7 +103,7 @@ export default function CampaignRecipientsTab({
     const removeSelected = () => {
         router.post(
             bulkDestroy.url([slug, campaignId]),
-            { recipients: selected },
+            { recipients: selectedOnPage },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -107,22 +114,36 @@ export default function CampaignRecipientsTab({
 
     return (
         <div className="flex flex-col gap-3">
+            <ConfirmDialog
+                open={confirmOpen}
+                onOpenChange={setConfirmOpen}
+                title="Remove these recipients?"
+                description={`Remove ${selectedOnPage.length} ${
+                    selectedOnPage.length === 1 ? 'recipient' : 'recipients'
+                } from this campaign? Their sent-email history is deleted too, and this cannot be undone.`}
+                confirmLabel="Remove recipients"
+                onConfirm={() => {
+                    setConfirmOpen(false);
+                    removeSelected();
+                }}
+            />
+
             <div className="flex flex-wrap items-center gap-2">
-                {selected.length > 0 ? (
+                {selectedOnPage.length > 0 ? (
                     <div className="flex items-center gap-3">
                         <p
                             className="text-body leading-5 font-medium"
                             data-test="campaign-recipients-selected-count"
                         >
-                            {selected.length} selected
+                            {selectedOnPage.length} selected
                         </p>
                         {canUpdate ? (
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="text-destructive"
-                                onClick={removeSelected}
+                                className="text-destructive-foreground"
+                                onClick={() => setConfirmOpen(true)}
                             >
                                 <Trash2 /> Remove
                             </Button>
@@ -215,7 +236,13 @@ export default function CampaignRecipientsTab({
                             <TableRow className="hover:bg-transparent">
                                 <TableHead className="w-[34px] pr-0">
                                     <Checkbox
-                                        checked={allSelected}
+                                        checked={
+                                            allSelected
+                                                ? true
+                                                : someSelected
+                                                  ? 'indeterminate'
+                                                  : false
+                                        }
                                         onCheckedChange={toggleAll}
                                         aria-label="Select all recipients on this page"
                                     />
@@ -237,7 +264,7 @@ export default function CampaignRecipientsTab({
                                 <TableRow
                                     key={recipient.id}
                                     data-state={
-                                        selected.includes(recipient.id)
+                                        selectedOnPage.includes(recipient.id)
                                             ? 'selected'
                                             : undefined
                                     }
@@ -245,7 +272,7 @@ export default function CampaignRecipientsTab({
                                 >
                                     <TableCell className="h-[44px] pr-0">
                                         <Checkbox
-                                            checked={selected.includes(
+                                            checked={selectedOnPage.includes(
                                                 recipient.id,
                                             )}
                                             onCheckedChange={() =>

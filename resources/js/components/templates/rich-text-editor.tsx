@@ -59,7 +59,12 @@ export default function RichTextEditor({
                 'aria-labelledby': labelledBy ?? '',
                 class: cn(
                     minHeightClass,
-                    'max-w-none px-3 py-2 text-body leading-5 focus:outline-none [&_h2]:text-h3 [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+                    'max-w-none px-3 py-2 focus:outline-none [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+                    // The template screens keep their pre-phase-3 scale; the
+                    // board toolbar is the 13px body role.
+                    toolbar === 'board'
+                        ? 'text-body leading-5 [&_h2]:text-h3'
+                        : 'text-sm [&_h2]:text-lg',
                 ),
             },
         },
@@ -202,7 +207,7 @@ export default function RichTextEditor({
     ];
 
     return (
-        <div className="rounded-md border bg-background">
+        <div className="rounded-md border bg-background focus-within:ring-2 focus-within:ring-primary-border">
             {!readOnly ? (
                 toolbar === 'board' ? (
                     <div className="flex flex-wrap items-center gap-1 border-b px-1.5 py-1">

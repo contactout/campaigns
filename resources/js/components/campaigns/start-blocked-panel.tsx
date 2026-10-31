@@ -31,14 +31,13 @@ export default function StartBlockedPanel({
 
     return (
         <section
-            id="start-blocked"
             aria-labelledby="start-blocked-title"
             data-test="campaign-start-blocked"
-            className="rounded-lg border border-destructive/30 bg-badge-danger px-4 py-4"
+            className="rounded-lg border border-destructive-foreground/30 bg-badge-danger px-4 py-4"
         >
             <div className="flex gap-3">
                 <AlertCircle
-                    className="mt-0.5 size-4 shrink-0 text-destructive"
+                    className="mt-0.5 size-4 shrink-0 text-destructive-foreground"
                     aria-hidden
                 />
                 <div className="min-w-0">
