@@ -373,3 +373,30 @@ Interactions driven over CDP on that build:
    database and `storage/render/`. The preview route, the seeder and the render scripts were
    removed from the tree after the final render and before the final checks; none of them
    were ever in the host worktree or the commits.
+
+## Corrections (phase 6)
+
+Three statements in this report were wrong or became stale; the phase-6 review
+carry-overs fixed the code and the text.
+
+1. **"none on `mailer_connection_id`" (§ The new aggregate) is wrong.** The column is
+   `foreignId('mailer_connection_id')->constrained()`, and InnoDB creates
+   `campaign_emails_mailer_connection_id_foreign` for it automatically. The probe still
+   read a table scan because all 50,000 rows belonged to the three probed ids, so the
+   optimizer preferred a scan. On a multi-team database the lookup is a `ref` on that
+   index plus a `dispatched_at` filter, so the claim that the cost "scales with the
+   total row count until the index lands" overstated it. The composite index
+   recommendation itself still holds, and SQLite (the test and `.env.example` driver)
+   creates no automatic FK index.
+2. **"the campaign start-blocked panel now all read the same methods" (status mapping,
+   § Status mapping, unified) was not true when written.** `CampaignController::startState()`
+   still tested `exception_type` and `status` inline (P2-2). Phase 6 changed it to switch
+   on `displayStatus()` and removed the unused `connection.has_exception`; from commit
+   `ae5bdae` the sentence is accurate.
+3. **The aggregate is no longer the meter's source.** Phase 6 (P2-1) made `sent_today`
+   read `sent_count` while `sending_limit_refreshed_at` is in the future — the exact
+   number `SendEmail::isRateLimited()` enforces — and deleted
+   `sentTodayByConnection()`. So the query, its EXPLAIN, the 8.81 → 1.53 ms figures and
+   gap 2 ("`sent_count` and the aggregate can disagree") describe code that no longer
+   ships. The § The new aggregate section is kept for the record of how the decision was
+   made, not as a description of the current implementation.
