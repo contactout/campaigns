@@ -328,7 +328,9 @@ Measured (all `true` below means asserted from a DOM read, not from a screenshot
 | Confirm leaves and the draft is gone | `confirm_url` `/northwind/templates`, `confirm_draft` null | — |
 | Browser Back on a dirty draft | `back_dialog` = dialog text, `back_url` unchanged, `back_draft` `Draft B`, cancel keeps it | `m_back_*` on the template editor and `m_step_back_*` on the step editor: dialog, URL unchanged, draft `Cold intro (390)` / `Draft C` |
 | A hover prefetch raises nothing | `hover_dialog` null (sidebar is all `<Link prefetch>`) | — |
-| The editor's own save raises nothing | `save_dialog` null, stayed; template: `tpl_save_dialog` null, `tpl_save_saved` true | — |
+| The editor's own save raises nothing and leaves no dead Back press | step: `save_dialog` null, editor closed, then Back ×2 → `campaigns/1` (Inertia's own entry for the save) → `/northwind/campaigns`; template: `tpl_save_dialog` null, `tpl_save_saved` true, the next Back leaves the page | — |
+| A draft typed back to its original value leaves in one press | `revertPresses` first press leaves the page | — |
+| Deleting a template while dirty runs without a prompt and lands on the list | `afterDelete` `/northwind/templates`, no dialog | — |
 
 Screenshots: `deep-01-guard-link-1280.png`, `deep-02-guard-back-1280.png`,
 `deep-03-guard-template-1280.png`, `deep-05-guard-tabbar-390.png`,

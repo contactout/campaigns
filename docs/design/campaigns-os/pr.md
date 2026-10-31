@@ -240,9 +240,13 @@ deep-review round there. The ones a reviewer should weigh:
   (820↔1180, 834↔1194), so this is a real path, not an edge case. The navigation guard does not
   help: a resize is not a visit, and the remounted form has no draft to restore. Fixing it means
   lifting the form state above the breakpoint branch (follow-up R1).
-- **A confirmed discard mid-Back leaves one extra history entry** behind when the visit is
-  replayed (the hook pops its own entry first, so the stack is clean in the paths proved below;
-  a Forward after a cancelled Back reaches the emptied entry and needs one more press).
+- **A cancelled Back leaves a Forward entry.** The mechanism that survives Back is an emptied
+  history entry with a copy above it; after a cancel the copy is pushed again, so the forward
+  direction holds the emptied entry and a Forward reaches it before the page it skipped.
+  Measured, the Back direction is clean in every path proved: after a step save two presses
+  reach the campaigns list (one for Inertia's own entry for the save, one for the list), a draft
+  edited and typed back to its original value leaves in one press, a confirmed discard leaves,
+  and deleting a template while dirty runs without a prompt and lands on the list.
 - **No JS tests.** The branch ships no runner, so the guard, the bulk loop and the selection
   pruning rest on click-throughs. `vitest` + React Testing Library is a follow-up, not a
   dependency this branch adds.
@@ -279,8 +283,8 @@ deep-review round there. The ones a reviewer should weigh:
 - **The contacts column manager is desktop-only**, so adding a field at 390 has no route.
 - **No recipients status filter:** board 04's funnel has no payload or route behind it.
 - **No signature action in the template editor** (the template payload carries no signatures).
-- **Dark mode has been rendered on a subset of screens** (dashboard, campaigns, contacts,
-  templates), not all eleven; the token set and the phase-2 dark pairs are shared.
+- **Dark mode has been rendered on a subset of screens** (dashboard, campaigns, contacts), not
+  all eleven; the token set and the phase-2 dark pairs are shared.
 - **Board-level differences kept on purpose:** 390 row pitches are 1px over the boards
   (contacts/recipients 57 vs 56, campaign 69 vs 68), the step editor body scrolls at 390, and
   the bottom bar is 57px rather than the board's 64px (which includes an 8px home indicator).
