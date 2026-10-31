@@ -345,7 +345,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                                         slug,
                                                         template.id,
                                                     ])}
-                                                    className="flex min-w-0 flex-1 flex-col justify-center self-stretch rounded-sm text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border lg:flex-row lg:items-center"
+                                                    className="flex min-w-0 flex-1 flex-col justify-center self-stretch rounded-sm text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border lg:flex-row lg:items-center lg:justify-start"
                                                     title={template.name}
                                                 >
                                                     <span className="truncate">

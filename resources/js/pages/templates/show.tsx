@@ -62,6 +62,7 @@ export default function TemplateShow({
         null,
     );
     const nameRef = useRef<HTMLInputElement | null>(null);
+    const discardedRef = useRef(false);
     const insertRef = useRef<((text: string) => void) | null>(null);
 
     const initialFolder =
@@ -403,12 +404,21 @@ export default function TemplateShow({
                 confirmLabel="Discard changes"
                 onCloseAutoFocus={(event) => {
                     // Radix would put focus back on the Discard button after the
-                    // dialog closes, undoing discard()'s own focus target.
+                    // dialog closes, undoing discard()'s own focus target. Only the
+                    // confirmed discard has moved focus itself; on Cancel, leave
+                    // Radix's restore alone so focus returns to whatever opened the
+                    // dialog (the Discard button, the list menu or the back link).
+                    if (!discardedRef.current) {
+                        return;
+                    }
+
+                    discardedRef.current = false;
                     event.preventDefault();
                     nameRef.current?.focus();
                 }}
                 onConfirm={() => {
                     const action = pendingAction;
+                    discardedRef.current = true;
                     setPendingAction(null);
                     action?.();
                 }}
