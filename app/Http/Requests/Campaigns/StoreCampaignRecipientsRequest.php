@@ -7,6 +7,7 @@ use App\Enums\CampaignStatus;
 use App\Models\Campaign;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -22,19 +23,23 @@ class StoreCampaignRecipientsRequest extends FormRequest
      * Without this check the `idle_only` rule below would answer for another
      * team's campaign: 302 back with an error when it is running, 404 when the
      * campaign is not started. That difference is a tenancy oracle over another
-     * team's state, so a foreign id has to fail exactly like a nonexistent one.
+     * team's state, so a foreign id has to fail exactly like a nonexistent one —
+     * including the JSON body, which is why this throws the binding's own
+     * exception instead of aborting.
      */
     public function authorize(): bool
     {
         $campaign = $this->route('campaign');
 
-        abort_unless(
-            $campaign instanceof Campaign
-                && $campaign->team_id === $this->resolveCurrentTeam($this)->id,
-            404,
-        );
+        if (! $campaign instanceof Campaign) {
+            throw (new ModelNotFoundException)->setModel(Campaign::class);
+        }
 
-        return true;
+        if ($campaign->team_id === $this->resolveCurrentTeam($this)->id) {
+            return true;
+        }
+
+        throw (new ModelNotFoundException)->setModel(Campaign::class, [$campaign->id]);
     }
 
     /**

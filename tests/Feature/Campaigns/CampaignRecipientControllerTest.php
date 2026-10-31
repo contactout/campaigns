@@ -454,6 +454,23 @@ test('another teams campaign answers exactly like a missing one', function () {
         ->post($endpoint(987654), ['contacts' => [$contact->id], 'idle_only' => true])
         ->assertNotFound();
 
+    // The JSON body carries the binding's own failure too, so a member cannot
+    // tell a foreign id from a missing one by the message shape.
+    $foreignJson = $this->actingAs($user)->postJson(
+        $endpoint($foreignActive),
+        ['contacts' => [$contact->id], 'idle_only' => true],
+    )->assertNotFound();
+
+    $missingJson = $this->actingAs($user)->postJson(
+        $endpoint(987654),
+        ['contacts' => [$contact->id], 'idle_only' => true],
+    )->assertNotFound();
+
+    $prefix = 'No query results for model [App\\Models\\Campaign]';
+
+    expect($foreignJson->json('message'))->toStartWith($prefix)
+        ->and($missingJson->json('message'))->toStartWith($prefix);
+
     expect($foreignActive->recipients()->count())->toBe(0)
         ->and($foreignDraft->recipients()->count())->toBe(0);
 });

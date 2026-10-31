@@ -1039,7 +1039,7 @@ test('a connection that is not verified names its state in the start blockers', 
     [MailerConnectionStatus::Disconnected, 'disconnected'],
 ]);
 
-test('the recipients search never reaches another teams contact', function () {
+test('the recipients search stays inside the team and the campaign', function () {
     [$team, $user] = campaignTeamWithMember();
 
     $campaign = Campaign::factory()->forTeam($team)->create();
@@ -1057,7 +1057,8 @@ test('the recipients search never reaches another teams contact', function () {
     ]);
 
     // Same name and address shape, another team: neither the name nor the email
-    // branch of the search may cross the team boundary.
+    // branch of the search may reach it, and the page's contact lookup must not
+    // hand its name and address over either.
     $otherTeam = Team::factory()->create();
     $theirs = Contact::factory()->forTeam($otherTeam)->create(['name' => 'Ada Lovelace']);
     $theirs->identities()->create([
@@ -1071,6 +1072,20 @@ test('the recipients search never reaches another teams contact', function () {
         'created_at' => now(),
     ]);
 
+    // Unfiltered, the foreign recipient row still exists (nothing in the API
+    // writes one) but renders as a deleted contact instead of leaking it.
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('recipients.data', 2)
+            ->where('recipients.data.0.name', 'Deleted contact')
+            ->where('recipients.data.0.email', null)
+            ->where('recipients.data.1.name', 'Ada Lovelace')
+            ->where('recipients.data.1.email', 'ada@analytical.engine'));
+
+    // A search for the shared name reaches the team's own contact only.
     $this->actingAs($user)
         ->get(route('campaigns.show', [
             'current_team' => $team->slug,
@@ -1080,12 +1095,7 @@ test('the recipients search never reaches another teams contact', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('campaigns/show')
-            ->has('recipients.data', 2)
-            // The foreign recipient row still exists (nothing in the API writes
-            // one) but the contact lookup is team-scoped, so it renders as a
-            // deleted contact instead of handing over the name and address.
-            ->where('recipients.data.0.name', 'Deleted contact')
-            ->where('recipients.data.0.email', null)
-            ->where('recipients.data.1.name', 'Ada Lovelace')
-            ->where('recipients.data.1.email', 'ada@analytical.engine'));
+            ->has('recipients.data', 1)
+            ->where('recipients.data.0.name', 'Ada Lovelace')
+            ->where('recipients.data.0.email', 'ada@analytical.engine'));
 });

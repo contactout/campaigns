@@ -244,9 +244,10 @@ class MailerConnectionController extends Controller
      * so the banner shows the message the job or the probe recorded. Every member
      * of the team sees it, which the policy intends: `MailerConnectionPolicy`
      * gives every member `update`, so every member is expected to fix the
-     * connection. What is trimmed is the provider echo: Symfony and Guzzle append
-     * the raw SMTP reply or the HTTP response body after `response:`, which is
-     * longer than the banner can use and wider than the fault needs.
+     * connection. What is trimmed is the body around the reason: Guzzle appends
+     * "response: {\"error\":…}", and the useful part is that reason, not the
+     * envelope — so the reason is kept and the rest is dropped. The cap bounds
+     * the rest.
      */
     protected function exceptionMessage(MailerConnection $connection): ?string
     {
@@ -259,9 +260,44 @@ class MailerConnectionController extends Controller
         $echo = stripos($message, 'response:');
 
         if ($echo !== false) {
-            $message = substr($message, 0, $echo);
+            $reason = $this->providerReason(substr($message, $echo + strlen('response:')));
+            $message = trim(substr($message, 0, $echo));
+            $message = $reason === null ? $message : "{$message}; {$reason}";
         }
 
         return Str::limit(trim($message), 300);
+    }
+
+    /**
+     * Pull the provider's own reason out of an echoed response body.
+     *
+     * `invalid_client` plus its description is what separates a revoked grant
+     * from a bad secret; the raw body is what the 300-character cap would cut
+     * first.
+     */
+    protected function providerReason(string $body): ?string
+    {
+        $decoded = json_decode(trim($body), true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $error = $decoded['error'] ?? null;
+        $description = $decoded['error_description'] ?? null;
+
+        if (is_array($error)) {
+            $description = is_string($error['message'] ?? null) ? $error['message'] : $description;
+            $error = $error['type'] ?? $error['code'] ?? null;
+        }
+
+        $error = is_string($error) ? $error : null;
+        $description = is_string($description) ? $description : null;
+
+        return match (true) {
+            $error !== null && $description !== null && $description !== '' => "{$error}: {$description}",
+            $error !== null => $error,
+            default => $description,
+        };
     }
 }

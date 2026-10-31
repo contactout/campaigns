@@ -128,9 +128,13 @@ class CampaignController extends Controller
         $recipients = $campaign->recipients()
             ->when($recipientsSearch, fn (Builder $query, string $search): Builder => $query->whereHas(
                 'contact',
+                // Grouped, so the OR cannot escape the team predicate: the search
+                // is not an existence oracle for another team's contacts.
                 fn (Builder $contact): Builder => $contact
-                    ->where('name', 'like', "%{$search}%")
-                    ->orWhereHas('emailIdentity', fn (Builder $identity): Builder => $identity->where('normalized_value', 'like', "%{$search}%")),
+                    ->where('team_id', $currentTeam->id)
+                    ->where(fn (Builder $match): Builder => $match
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhereHas('emailIdentity', fn (Builder $identity): Builder => $identity->where('normalized_value', 'like', "%{$search}%"))),
             ))
             ->latest()
             ->paginate(25, ['*'], 'recipients_page')

@@ -589,7 +589,9 @@ test('the stored failure message is trimmed and capped before it leaves the serv
             ->component('mailer-connections/index')
             ->has('connections', 4)
             ->where('connections.0.id', $providerEcho->id)
-            ->where('connections.0.last_error_message', 'Client error: `POST https://oauth2.example/token` resulted in a `401 Unauthorized`')
+            // The envelope is dropped and the provider's own reason is kept: the
+            // codes are what separate a revoked grant from a bad secret.
+            ->where('connections.0.last_error_message', 'Client error: `POST https://oauth2.example/token` resulted in a `401 Unauthorized`; invalid_client: Unauthorized')
             ->where('connections.1.id', $long->id)
             ->where('connections.1.last_error_message', str_repeat('S', 300).'...')
             ->where('connections.2.id', $empty->id)
