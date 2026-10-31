@@ -20,21 +20,21 @@ export function UserInfo({
                 {showAvatar ? (
                     <AvatarImage src={user.avatar} alt={user.name} />
                 ) : null}
-                <AvatarFallback className="rounded-full bg-accent text-label font-semibold text-accent-foreground">
+                <AvatarFallback className="rounded-full bg-accent text-caption font-semibold text-accent-foreground">
                     {getInitials(user.name)}
                 </AvatarFallback>
             </Avatar>
             <div className="grid min-w-0 flex-1 text-left leading-tight">
-                <span className="truncate text-body font-semibold">
+                <span className="truncate text-body leading-tight font-semibold">
                     {user.name}
                 </span>
                 {team ? (
-                    <span className="truncate text-label text-muted-foreground">
+                    <span className="truncate text-label leading-tight text-muted-foreground">
                         {team.name}
                     </span>
                 ) : null}
                 {!team && showEmail ? (
-                    <span className="truncate text-label text-muted-foreground">
+                    <span className="truncate text-label leading-tight text-muted-foreground">
                         {user.email}
                     </span>
                 ) : null}

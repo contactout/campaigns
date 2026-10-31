@@ -25,9 +25,9 @@ export default function PageHead({
             ) : null}
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
-                    <h1 className="text-h1 font-bold">{title}</h1>
+                    <h1 className="text-h1 leading-7 font-bold">{title}</h1>
                     {description ? (
-                        <p className="text-body text-muted-foreground">
+                        <p className="text-body leading-5 text-muted-foreground">
                             {description}
                         </p>
                     ) : null}

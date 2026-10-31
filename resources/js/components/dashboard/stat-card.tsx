@@ -21,15 +21,15 @@ const formatDelta = (delta: StatDelta) => {
 export default function StatCard({ label, value, delta }: Props) {
     return (
         <div className="rounded-lg border bg-card px-4 py-4">
-            <p className="text-label font-medium text-muted-foreground">
+            <p className="text-label leading-4 font-medium text-muted-foreground">
                 {label}
             </p>
             <div className="mt-1.5 flex items-baseline gap-2">
-                <p className="text-stat font-bold">{value}</p>
+                <p className="text-stat leading-7 font-bold">{value}</p>
                 {delta ? (
                     <span
                         className={cn(
-                            'text-label font-medium',
+                            'text-label leading-4 font-medium',
                             delta.value > 0
                                 ? 'text-badge-success-foreground'
                                 : delta.value < 0

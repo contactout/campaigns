@@ -260,10 +260,10 @@ export default function Dashboard({
                         <section className="rounded-lg border bg-card pb-5">
                             <div className="px-5 pt-5">
                                 <div className="flex items-baseline justify-between gap-4">
-                                    <h2 className="text-h3 font-semibold">
+                                    <h2 className="text-h3 leading-6 font-semibold">
                                         Finish setting up
                                     </h2>
-                                    <p className="text-body text-muted-foreground">
+                                    <p className="text-body leading-5 text-muted-foreground">
                                         {doneCount} of {checklist.length} done
                                     </p>
                                 </div>
@@ -308,7 +308,7 @@ export default function Dashboard({
                                         <div className="min-w-0 flex-1">
                                             <p
                                                 className={cn(
-                                                    'text-body font-medium',
+                                                    'text-body leading-5 font-medium',
                                                     step.done &&
                                                         'text-muted-foreground line-through',
                                                 )}
@@ -320,7 +320,7 @@ export default function Dashboard({
                                                 </span>{' '}
                                                 {step.title}
                                             </p>
-                                            <p className="text-body text-muted-foreground">
+                                            <p className="text-body leading-5 text-muted-foreground">
                                                 {step.description}
                                             </p>
                                         </div>
@@ -342,7 +342,7 @@ export default function Dashboard({
                     ) : null}
 
                     <section className="rounded-lg border bg-card pb-5">
-                        <h2 className="px-5 pt-5 text-h3 font-semibold">
+                        <h2 className="px-5 pt-5 text-h3 leading-6 font-semibold">
                             Jump back in
                         </h2>
                         <ul className="mx-5 mt-3">
@@ -357,11 +357,11 @@ export default function Dashboard({
                                                 <Icon className="size-4 text-primary" />
                                             </span>
                                             <span className="min-w-0 flex-1">
-                                                <span className="block text-body font-semibold">
+                                                <span className="block text-body leading-5 font-semibold">
                                                     {title}
                                                 </span>
                                                 {qualifier ? (
-                                                    <span className="block text-label text-muted-foreground">
+                                                    <span className="block text-label leading-4 text-muted-foreground">
                                                         {qualifier}
                                                     </span>
                                                 ) : null}

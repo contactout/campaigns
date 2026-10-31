@@ -35,7 +35,9 @@ export default function TeamInvitationAlert(props: Props) {
             role="status"
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-accent bg-banner px-4 py-2.5 text-banner-foreground"
         >
-            <div className="min-w-0 text-body font-medium">{props.message}</div>
+            <div className="min-w-0 text-body leading-5 font-medium">
+                {props.message}
+            </div>
             {props.actionSlot}
         </Alert>
     );

@@ -57,18 +57,18 @@
     --color-badge-danger: var(--badge-danger);
     --color-badge-danger-foreground: var(--badge-danger-foreground);
     --color-badge-neutral-foreground: var(--badge-neutral-foreground);
+    --color-badge-info-border: var(--badge-info-border);
 
+    /* Sizes only: line height stays an explicit leading-* at each call site so a
+       parent leading-tight keeps working inside the shell. */
     --text-h1: 20px;
-    --text-h1--line-height: 28px;
     --text-h1--letter-spacing: -0.01em;
     --text-h3: 16px;
-    --text-h3--line-height: 24px;
     --text-body: 13px;
-    --text-body--line-height: 20px;
     --text-label: 12px;
-    --text-label--line-height: 16px;
     --text-stat: 24px;
-    --text-stat--line-height: 32px;
+    --text-brand: 14px;
+    --text-caption: 11px;
 
     --shadow-dialog: 0 8px 24px #18181b14;
 
@@ -121,6 +121,7 @@
     --badge-danger: #fef2f2;
     --badge-danger-foreground: #b91c1c;
     --badge-neutral-foreground: #52525b;
+    --badge-info-border: #b8afff;
     --banner: #f8f7ff;
     --banner-foreground: #3222b1;
     --chart-1: #3222b1;
@@ -185,6 +186,7 @@
     --badge-danger: #3b1518;
     --badge-danger-foreground: #fca5a5; /* 8.47:1 on its fill */
     --badge-neutral-foreground: #d4d4d8; /* 10.24:1 on dark muted */
+    --badge-info-border: #8b7dff; /* 4.46:1 on the dark info fill, 6.10:1 on the page */
     --banner: #221d3a;
     --banner-foreground: #c9c2ff; /* 9.69:1 on the banner */
     --ring-halo: #2b2544;

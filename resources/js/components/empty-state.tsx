@@ -29,11 +29,16 @@ export default function EmptyState({
                     <Icon className="size-7 text-primary" />
                 </span>
             ) : null}
-            <h2 className={cn('text-h3 font-semibold', Icon && 'mt-4')}>
+            <h2
+                className={cn(
+                    'text-h3 leading-6 font-semibold',
+                    Icon && 'mt-4',
+                )}
+            >
                 {title}
             </h2>
             {description ? (
-                <p className="mt-1.5 max-w-[380px] text-body text-muted-foreground">
+                <p className="mt-1.5 max-w-[380px] text-body leading-5 text-muted-foreground">
                     {description}
                 </p>
             ) : null}

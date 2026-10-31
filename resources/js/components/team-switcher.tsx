@@ -73,7 +73,7 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
                     {inHeader ? (
                         <Users className="hidden size-4 shrink-0" />
                     ) : (
-                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-body font-semibold text-accent-foreground">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-body leading-none font-semibold text-accent-foreground">
                             {teamInitial}
                         </span>
                     )}
@@ -88,13 +88,13 @@ export function TeamSwitcher({ inHeader = false }: TeamSwitcherProps) {
                             className={
                                 inHeader
                                     ? 'max-w-[120px] truncate font-medium'
-                                    : 'truncate text-body font-semibold tracking-[-0.01em]'
+                                    : 'truncate text-body leading-tight font-semibold tracking-[-0.01em]'
                             }
                         >
                             {currentTeam?.name ?? 'Select team'}
                         </span>
                         {!inHeader && (
-                            <span className="truncate text-label text-muted-foreground">
+                            <span className="truncate text-label leading-tight text-muted-foreground">
                                 {teamMeta}
                             </span>
                         )}
