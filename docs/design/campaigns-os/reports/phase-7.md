@@ -98,7 +98,7 @@ inheritance on the same element. All other exported types with no external consu
   `database`.
 - **Repo hygiene:** 0 tracked tarballs, fixture databases, logs, `.bak`/`.orig`, temp
   directories, `__preview` files or Space artefacts. `docs/design/**` contains only the spec,
-  `phases.md`, the prompts and the reports (including their PNG evidence).
+  `phases.md`, the prompts, `pr.md` and the reports (including their PNG evidence).
 - **Git log:** every commit is `type(scope): subject`, one concern per commit, nothing
   squashed or rewritten. The branch was 54 commits ahead of `origin/design/campaigns-os` at the start of the
   sweep and was not pushed.
