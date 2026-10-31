@@ -62,12 +62,13 @@ export default function InlinePropertyCell({
                 type="button"
                 data-grid-cell
                 aria-label={`${fieldName}: ${value || 'empty'}. Click to edit`}
+                title={value ?? undefined}
                 onClick={() => {
                     setDraft(value ?? '');
                     setEditing(true);
                 }}
                 className={cn(
-                    'block min-h-11 w-full truncate px-3 text-left outline-none hover:bg-muted/60 focus-visible:bg-primary/5 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
+                    'block h-8 w-full min-w-0 truncate px-3 text-left outline-none hover:bg-muted/60 focus:bg-primary/5 focus:ring-2 focus:ring-ring focus:ring-inset',
                     className,
                 )}
             >
@@ -99,7 +100,7 @@ export default function InlinePropertyCell({
                 }
             }}
             className={cn(
-                'min-h-11 w-full border-0 bg-background px-3 text-sm ring-2 ring-primary outline-none ring-inset',
+                'h-8 w-full min-w-0 border-0 bg-background px-3 text-body ring-2 ring-ring outline-none ring-inset',
                 className,
             )}
         />

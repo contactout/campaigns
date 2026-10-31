@@ -1,29 +1,41 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    ArrowUpRight,
-    Pencil,
+    Filter,
     Plus,
     Search,
+    Settings,
+    Send,
     Trash2,
     Upload,
+    Users,
 } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import AddToCampaignModal from '@/components/contacts/add-to-campaign-modal';
 import ContactFieldFormModal from '@/components/contacts/contact-field-form-modal';
+import ContactGrid from '@/components/contacts/contact-grid';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
 import DeleteContactFieldModal from '@/components/contacts/delete-contact-field-modal';
 import ImportContactsModal from '@/components/contacts/import-contacts-modal';
 import ImportSummary from '@/components/contacts/import-summary';
-import InlineCell from '@/components/contacts/inline-cell';
-import InlinePropertyCell from '@/components/contacts/inline-property-cell';
-import InlineStatusCell from '@/components/contacts/inline-status-cell';
 import ListTabs from '@/components/contacts/list-tabs';
-import Heading from '@/components/heading';
-import Pagination from '@/components/pagination';
+import ConfirmDialog from '@/components/confirm-dialog';
+import EmptyState from '@/components/empty-state';
+import PageHead from '@/components/page-head';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { index, show } from '@/routes/contacts';
+import { cell, destroy, index as contactsIndex } from '@/routes/contacts';
 import type {
+    ContactCampaignOption,
     ContactField,
     ContactImportSummary,
     ContactListSummary,
@@ -42,10 +54,14 @@ type Props = {
     lists: ContactListSummary[];
     statuses: StatusOption[];
     latestImport: ContactImportSummary | null;
+    campaigns: ContactCampaignOption[];
     can: {
         create: boolean;
     };
 };
+
+const DELETE_COPY =
+    'This removes the contacts from their lists and from this view. It cannot be undone here.';
 
 export default function ContactsIndex({
     contacts,
@@ -54,48 +70,63 @@ export default function ContactsIndex({
     lists,
     statuses,
     latestImport,
+    campaigns,
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
+
     const [search, setSearch] = useState(filters.q ?? '');
-    const gridViewportRef = useRef<HTMLDivElement>(null);
-    const [visibleRows, setVisibleRows] = useState(8);
+    const [selected, setSelected] = useState<number[]>([]);
+    const [busy, setBusy] = useState<'do-not-contact' | 'delete' | null>(null);
+    const [bulkError, setBulkError] = useState<string | null>(null);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [campaignOpen, setCampaignOpen] = useState(false);
     const [fieldModalOpen, setFieldModalOpen] = useState(false);
     const [editingField, setEditingField] = useState<ContactField | null>(null);
     const [deletingField, setDeletingField] = useState<ContactField | null>(
         null,
     );
 
+    // The server owns `q`; keep the field in step when a visit reloads it.
     useEffect(() => {
-        const viewport = gridViewportRef.current;
+        setSearch(filters.q ?? '');
+    }, [filters.q]);
 
-        if (!viewport) {
-            return;
-        }
+    // Selection never crosses a page or filter change.
+    useEffect(() => {
+        setSelected([]);
+    }, [contacts.current_page, filters.q, filters.list]);
 
-        const updateRows = () => {
-            setVisibleRows(
-                Math.max(8, Math.ceil((viewport.clientHeight - 44) / 44)),
-            );
-        };
-
-        updateRows();
-
-        const observer = new ResizeObserver(updateRows);
-        observer.observe(viewport);
-
-        return () => observer.disconnect();
-    }, []);
+    const pageIds = contacts.data.map((contact) => contact.id);
+    const selectedOnPage = selected.filter((id) => pageIds.includes(id));
+    const selectedCount = selectedOnPage.length;
+    const allAlreadyDoNotContact =
+        selectedCount > 0 &&
+        selectedOnPage.every(
+            (id) =>
+                contacts.data.find((contact) => contact.id === id)?.status ===
+                'DoNotContact',
+        );
 
     const listOptions = lists.map((list) => ({
         id: list.id,
         name: list.name,
     }));
 
-    const navigate = (params: { q?: string; list?: number | null }) => {
+    const hasFilters = Boolean(filters.q || filters.list);
+    const isFirstRun = contacts.total === 0 && !hasFilters;
+    const isOutOfRange =
+        contacts.data.length === 0 && !hasFilters && contacts.current_page > 1;
+
+    const previousLink = contacts.links.find((link) =>
+        link.label.includes('Previous'),
+    );
+    const nextLink = contacts.links.find((link) => link.label.includes('Next'));
+
+    const navigate = (params: { q?: string; list?: number | null } = {}) => {
         router.get(
-            index.url(slug),
+            contactsIndex.url(slug),
             {
                 q: params.q ?? filters.q ?? '',
                 list:
@@ -105,6 +136,27 @@ export default function ContactsIndex({
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
+    };
+
+    const clearFilters = () => {
+        setSearch('');
+        router.get(
+            contactsIndex.url(slug),
+            {},
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
+    const toggle = (contactId: number) => {
+        setSelected((current) =>
+            current.includes(contactId)
+                ? current.filter((id) => id !== contactId)
+                : [...current, contactId],
+        );
+    };
+
+    const toggleAll = (checked: boolean) => {
+        setSelected(checked ? pageIds : []);
     };
 
     const openNewField = () => {
@@ -117,422 +169,454 @@ export default function ContactsIndex({
         setFieldModalOpen(true);
     };
 
-    const handleGridKeyDown = (event: KeyboardEvent<HTMLTableElement>) => {
-        if (
-            !(event.target instanceof HTMLElement) ||
-            !event.target.matches('[data-grid-cell]')
-        ) {
-            return;
-        }
-
-        const column = Number(event.target.closest('td')?.dataset.gridColumn);
-        const row = Number(event.target.closest('tr')?.dataset.gridRow);
-
-        if (
-            column === 3 ||
-            !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(
-                event.key,
-            )
-        ) {
-            return;
-        }
-
-        const nextColumn =
-            column +
-            (event.key === 'ArrowRight'
-                ? 1
-                : event.key === 'ArrowLeft'
-                  ? -1
-                  : 0);
-        const nextRow =
-            row +
-            (event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0);
-        const next = event.currentTarget.querySelector<HTMLElement>(
-            `tr[data-grid-row="${nextRow}"] td[data-grid-column="${nextColumn}"] [data-grid-cell]`,
+    const markDoNotContact = () => {
+        const ids = selectedOnPage.filter(
+            (id) =>
+                contacts.data.find((contact) => contact.id === id)?.status !==
+                'DoNotContact',
         );
 
-        if (next) {
-            event.preventDefault();
-            next.focus();
+        if (ids.length === 0) {
+            setSelected([]);
+
+            return;
         }
+
+        setBusy('do-not-contact');
+        setBulkError(null);
+
+        let cursor = 0;
+
+        const next = () => {
+            if (cursor >= ids.length) {
+                setBusy(null);
+                setSelected([]);
+
+                return;
+            }
+
+            const id = ids[cursor++];
+
+            router.patch(
+                cell.url([slug, id]),
+                { field: 'status', value: 'DoNotContact' },
+                {
+                    preserveScroll: true,
+                    preserveState: true,
+                    onSuccess: next,
+                    onError: () => {
+                        setBusy(null);
+                        setBulkError(
+                            'Could not mark every selected contact as do not contact.',
+                        );
+                    },
+                },
+            );
+        };
+
+        next();
     };
+
+    const deleteSelected = () => {
+        const ids = [...selectedOnPage];
+
+        setDeleteOpen(false);
+
+        if (ids.length === 0) {
+            return;
+        }
+
+        setSelected([]);
+        setBusy('delete');
+        setBulkError(null);
+
+        let cursor = 0;
+
+        const restoreFilters = () => {
+            if (filters.q || filters.list) {
+                router.get(
+                    contactsIndex.url(slug),
+                    {
+                        q: filters.q ?? '',
+                        list: filters.list ?? '',
+                    },
+                    {
+                        preserveScroll: true,
+                        preserveState: true,
+                        replace: true,
+                    },
+                );
+            }
+        };
+
+        const next = () => {
+            if (cursor >= ids.length) {
+                setBusy(null);
+                restoreFilters();
+
+                return;
+            }
+
+            const id = ids[cursor++];
+
+            router.delete(destroy.url([slug, id]), {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: next,
+                onError: () => {
+                    setBusy(null);
+                    setBulkError('Could not delete every selected contact.');
+                },
+            });
+        };
+
+        next();
+    };
+
+    const importButton = can.create ? (
+        <ImportContactsModal
+            fields={fields}
+            lists={listOptions}
+            defaultListId={filters.list}
+        >
+            <Button variant="secondary" data-test="contacts-import-button">
+                <Upload /> Import CSV
+            </Button>
+        </ImportContactsModal>
+    ) : null;
+
+    const addContactButton = can.create ? (
+        <CreateContactModal
+            lists={listOptions}
+            statuses={statuses}
+            defaultListIds={filters.list ? [filters.list] : undefined}
+        >
+            <Button data-test="contacts-new-button">
+                <Plus /> Add contact
+            </Button>
+        </CreateContactModal>
+    ) : null;
+
+    const pagination = (
+        <div className="flex items-center gap-2 pr-1 text-body leading-5 text-muted-foreground">
+            <span className="hidden whitespace-nowrap sm:inline">
+                {contacts.total === 0
+                    ? '0 contacts'
+                    : `Showing ${(contacts.from ?? 0).toLocaleString()}–${(contacts.to ?? 0).toLocaleString()} of ${contacts.total.toLocaleString()}`}
+            </span>
+            {previousLink?.url ? (
+                <Button variant="outline" size="sm" asChild>
+                    <Link href={previousLink.url} preserveScroll>
+                        Previous
+                    </Link>
+                </Button>
+            ) : (
+                <Button variant="outline" size="sm" disabled>
+                    Previous
+                </Button>
+            )}
+            {nextLink?.url ? (
+                <Button variant="outline" size="sm" asChild>
+                    <Link href={nextLink.url} preserveScroll>
+                        Next
+                    </Link>
+                </Button>
+            ) : (
+                <Button variant="outline" size="sm" disabled>
+                    Next
+                </Button>
+            )}
+        </div>
+    );
 
     return (
         <>
             <Head title="Contacts" />
 
-            <h1 className="sr-only">Contacts</h1>
+            <div className="flex h-svh min-h-[32rem] w-full min-w-0 flex-col px-4 pt-6 lg:px-6">
+                <PageHead
+                    title="Contacts"
+                    description={`${contacts.total.toLocaleString()} ${
+                        contacts.total === 1 ? 'contact' : 'contacts'
+                    } in this view`}
+                    actions={
+                        can.create && !isFirstRun ? (
+                            <>
+                                {importButton}
+                                {addContactButton}
+                            </>
+                        ) : null
+                    }
+                    mobileNav
+                />
 
-            <div className="flex h-[calc(100svh-4rem)] min-h-[28rem] w-full min-w-0 flex-col gap-5 px-4 py-6 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        variant="small"
-                        title="Contacts"
-                        description={`${contacts.total} ${contacts.total === 1 ? 'contact' : 'contacts'} in this view`}
-                    />
+                {latestImport ? (
+                    <div className="mt-4">
+                        <ImportSummary contactImport={latestImport} />
+                    </div>
+                ) : null}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        {can.create ? (
+                <div
+                    className="mt-6 flex flex-wrap items-center gap-2"
+                    data-test="contacts-toolbar"
+                >
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <Filter /> Filters
+                                {filters.list ? (
+                                    <span
+                                        className="size-1.5 rounded-full bg-primary"
+                                        aria-hidden
+                                    />
+                                ) : null}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                            <DropdownMenuLabel>Lists</DropdownMenuLabel>
+                            <DropdownMenuRadioGroup
+                                value={
+                                    filters.list === null
+                                        ? 'all'
+                                        : String(filters.list)
+                                }
+                                onValueChange={(value) =>
+                                    navigate({
+                                        list:
+                                            value === 'all'
+                                                ? null
+                                                : Number(value),
+                                    })
+                                }
+                            >
+                                <DropdownMenuRadioItem value="all">
+                                    All contacts
+                                </DropdownMenuRadioItem>
+                                {lists.map((list) => (
+                                    <DropdownMenuRadioItem
+                                        key={list.id}
+                                        value={String(list.id)}
+                                    >
+                                        <span className="truncate">
+                                            {list.name}
+                                        </span>
+                                        <span className="ms-auto text-label text-muted-foreground tabular-nums">
+                                            {list.contacts_count}
+                                        </span>
+                                    </DropdownMenuRadioItem>
+                                ))}
+                            </DropdownMenuRadioGroup>
+                            {hasFilters ? (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={clearFilters}>
+                                        Clear filters
+                                    </DropdownMenuItem>
+                                </>
+                            ) : null}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {selectedCount > 0 ? (
+                        <>
+                            <span
+                                className="text-body leading-5 font-medium text-primary"
+                                data-test="contacts-selection-count"
+                            >
+                                <span className="font-semibold tabular-nums">
+                                    {selectedCount}
+                                </span>{' '}
+                                selected
+                            </span>
+
                             <Button
-                                variant="secondary"
-                                onClick={openNewField}
+                                variant="outline"
+                                onClick={() => setCampaignOpen(true)}
+                                disabled={busy !== null}
+                                data-test="contacts-bulk-add-to-campaign"
+                            >
+                                <Send /> Add to campaign
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={markDoNotContact}
+                                disabled={
+                                    busy !== null || allAlreadyDoNotContact
+                                }
+                                data-test="contacts-bulk-do-not-contact"
+                            >
+                                Do not contact
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                onClick={() => setDeleteOpen(true)}
+                                disabled={busy !== null}
+                                data-test="contacts-bulk-delete"
+                            >
+                                <Trash2 /> Delete
+                            </Button>
+                        </>
+                    ) : null}
+
+                    <form
+                        role="search"
+                        className="ms-auto flex items-center gap-2"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            navigate({ q: search });
+                        }}
+                    >
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                aria-label="Search contacts"
+                                value={search}
+                                onChange={(event) =>
+                                    setSearch(event.target.value)
+                                }
+                                placeholder="Search name or email…"
+                                className="h-8 w-[246px] max-w-full pl-8"
+                            />
+                        </div>
+                    </form>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="Manage columns"
+                                data-test="contacts-columns-button"
+                            >
+                                <Settings />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Columns</DropdownMenuLabel>
+                            <DropdownMenuItem
+                                disabled={!can.create}
+                                onSelect={openNewField}
                                 data-test="contacts-add-column"
                             >
                                 <Plus /> Add column
-                            </Button>
-                        ) : null}
-
-                        {can.create ? (
-                            <ImportContactsModal
-                                fields={fields}
-                                lists={listOptions}
-                                defaultListId={filters.list}
-                            >
-                                <Button
-                                    variant="secondary"
-                                    data-test="contacts-import-button"
-                                >
-                                    <Upload /> Import CSV
-                                </Button>
-                            </ImportContactsModal>
-                        ) : null}
-
-                        {can.create ? (
-                            <CreateContactModal
-                                lists={listOptions}
-                                statuses={statuses}
-                                defaultListIds={
-                                    filters.list ? [filters.list] : undefined
-                                }
-                            >
-                                <Button data-test="contacts-new-button">
-                                    <Plus /> New contact
-                                </Button>
-                            </CreateContactModal>
-                        ) : null}
-                    </div>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
 
-                {latestImport ? (
-                    <ImportSummary contactImport={latestImport} />
+                {bulkError ? (
+                    <p
+                        role="alert"
+                        className="mt-2 text-body leading-5 text-destructive-foreground"
+                    >
+                        {bulkError}
+                    </p>
                 ) : null}
 
-                <form
-                    role="search"
-                    className="flex flex-wrap items-center gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        navigate({ q: search });
-                    }}
-                >
-                    <div className="relative min-w-48 flex-1 sm:max-w-xs">
-                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            aria-label="Search contacts"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search by name or email"
-                            className="pl-9"
-                        />
-                    </div>
-                    <Button type="submit" variant="secondary">
-                        Search
-                    </Button>
-                </form>
-
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
-                    <div
-                        ref={gridViewportRef}
-                        className="min-h-0 flex-1 overflow-auto overscroll-x-contain"
-                    >
-                        <table
-                            onKeyDown={handleGridKeyDown}
-                            className="w-full table-fixed border-separate border-spacing-0 text-sm"
-                            style={{ minWidth: 1136 + fields.length * 200 }}
-                            aria-label="Contacts spreadsheet"
-                        >
-                            <colgroup>
-                                <col className="w-12" />
-                                <col className="w-60" />
-                                <col className="w-72" />
-                                <col className="w-48" />
-                                <col className="w-44" />
-                                <col className="w-24" />
-                                {fields.map((field) => (
-                                    <col key={field.id} className="w-[200px]" />
-                                ))}
-                                <col className="w-24" />
-                            </colgroup>
-                            <thead className="sticky top-0 z-20 bg-muted text-left text-muted-foreground">
-                                <tr className="h-11">
-                                    <th
-                                        scope="col"
-                                        className="sticky left-0 z-30 border-r border-b bg-muted text-center font-normal"
-                                    >
-                                        #
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="sticky left-12 z-30 border-r border-b bg-muted px-3 font-medium"
-                                    >
-                                        Name
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Email
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Phone
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Status
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Lists
-                                    </th>
-                                    {fields.map((field) => (
-                                        <th
-                                            key={field.id}
-                                            scope="col"
-                                            className="group border-r border-b px-3 font-medium"
-                                        >
-                                            <span className="flex min-w-0 items-center gap-1">
-                                                <span
-                                                    className="min-w-0 truncate"
-                                                    title={field.name}
-                                                >
-                                                    {field.name}
-                                                </span>
-                                                {can.create && (
-                                                    <span className="ml-auto flex shrink-0 items-center sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                openEditField(
-                                                                    field,
-                                                                )
-                                                            }
-                                                            aria-label={`Edit ${field.name}`}
-                                                            className="rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                                        >
-                                                            <Pencil className="size-3.5" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setDeletingField(
-                                                                    field,
-                                                                )
-                                                            }
-                                                            aria-label={`Delete ${field.name}`}
-                                                            className="rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                                        >
-                                                            <Trash2 className="size-3.5" />
-                                                        </button>
-                                                    </span>
-                                                )}
-                                            </span>
-                                        </th>
-                                    ))}
-                                    <th
-                                        scope="col"
-                                        className="border-b px-3 font-medium"
-                                    >
-                                        Details
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {contacts.data.map((contact, row) => (
-                                    <tr
-                                        key={contact.id}
-                                        data-grid-row={row}
-                                        data-test="contact-row"
-                                        className="group h-11 hover:bg-muted/30"
-                                    >
-                                        <th
-                                            scope="row"
-                                            className="sticky left-0 z-10 border-r border-b bg-muted/60 text-center text-xs font-normal text-muted-foreground group-hover:bg-muted"
-                                        >
-                                            {(contacts.from ?? 1) + row}
-                                        </th>
-                                        <td
-                                            data-grid-column={0}
-                                            className="sticky left-12 z-10 border-r border-b bg-card font-medium group-hover:bg-muted/30"
-                                        >
-                                            <InlineCell
-                                                contactId={contact.id}
-                                                field="name"
-                                                columnLabel="Name"
-                                                value={contact.name}
-                                                placeholder="Add name"
-                                            />
-                                        </td>
-                                        <td
-                                            data-grid-column={1}
-                                            className="border-r border-b text-muted-foreground"
-                                        >
-                                            <InlineCell
-                                                contactId={contact.id}
-                                                field="email"
-                                                columnLabel="Email"
-                                                type="email"
-                                                value={contact.email}
-                                                placeholder="Add email"
-                                            />
-                                        </td>
-                                        <td
-                                            data-grid-column={2}
-                                            className="border-r border-b text-muted-foreground"
-                                        >
-                                            <InlineCell
-                                                contactId={contact.id}
-                                                field="phone"
-                                                columnLabel="Phone"
-                                                value={contact.phone}
-                                                placeholder="Add phone"
-                                            />
-                                        </td>
-                                        <td
-                                            data-grid-column={3}
-                                            className="border-r border-b"
-                                        >
-                                            <InlineStatusCell
-                                                contactId={contact.id}
-                                                status={contact.status}
-                                                label={contact.status_label}
-                                                statuses={statuses}
-                                            />
-                                        </td>
-                                        <td className="border-r border-b px-3 text-muted-foreground">
-                                            {contact.lists_count}
-                                        </td>
-                                        {fields.map((field, column) => (
-                                            <td
-                                                key={field.id}
-                                                data-grid-column={4 + column}
-                                                className="border-r border-b text-muted-foreground"
-                                            >
-                                                <InlinePropertyCell
-                                                    contactId={contact.id}
-                                                    fieldId={field.id}
-                                                    fieldName={field.name}
-                                                    value={
-                                                        contact.properties[
-                                                            field.id
-                                                        ] ?? null
-                                                    }
-                                                />
-                                            </td>
-                                        ))}
-                                        <td className="border-b px-3">
+                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+                    {contacts.data.length === 0 ? (
+                        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+                            {isOutOfRange ? (
+                                <EmptyState
+                                    className="w-full max-w-lg border-0 py-16"
+                                    title="This page has no contacts"
+                                    description="The list has fewer pages than this one. Go back to the first page."
+                                    actions={
+                                        <Button variant="outline" asChild>
                                             <Link
-                                                href={show([slug, contact.id])}
-                                                aria-label={`Open ${contact.name}`}
-                                                className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                                href={contactsIndex.url(slug)}
                                             >
-                                                Open{' '}
-                                                <ArrowUpRight className="size-3.5" />
+                                                Back to page 1
                                             </Link>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {Array.from(
-                                    {
-                                        length: Math.max(
-                                            0,
-                                            visibleRows - contacts.data.length,
-                                        ),
-                                    },
-                                    (_, row) => (
-                                        <tr
-                                            key={`blank-${row}`}
-                                            aria-hidden="true"
-                                            className="h-11 text-muted-foreground/60"
-                                        >
-                                            <td className="sticky left-0 border-r border-b bg-muted/60 text-center text-xs">
-                                                {(contacts.from ?? 1) +
-                                                    contacts.data.length +
-                                                    row}
-                                            </td>
-                                            <td className="sticky left-12 border-r border-b bg-card" />
-                                            <td className="border-r border-b" />
-                                            <td className="border-r border-b" />
-                                            <td className="border-r border-b" />
-                                            <td className="border-r border-b" />
-                                            {fields.map((field) => (
-                                                <td
-                                                    key={field.id}
-                                                    className="border-r border-b"
-                                                />
-                                            ))}
-                                            <td className="border-b" />
-                                        </tr>
-                                    ),
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    {contacts.data.length === 0 && (
-                        <div className="pointer-events-none absolute inset-x-4 top-16 z-10 flex justify-center">
-                            <div className="pointer-events-auto w-full max-w-md rounded-xl border bg-card p-6 text-center shadow-sm">
-                                <h2 className="font-semibold">
-                                    {filters.q || filters.list
-                                        ? 'No matching contacts'
-                                        : 'No contacts yet'}
-                                </h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    {filters.q || filters.list
-                                        ? 'Try another search or switch lists.'
-                                        : 'Add your first contact to start filling this sheet.'}
-                                </p>
-                                {can.create && !filters.q && (
-                                    <CreateContactModal
-                                        lists={listOptions}
-                                        statuses={statuses}
-                                        defaultListIds={
-                                            filters.list
-                                                ? [filters.list]
-                                                : undefined
-                                        }
-                                    >
-                                        <Button className="mt-4">
-                                            <Plus /> New contact
                                         </Button>
-                                    </CreateContactModal>
-                                )}
-                            </div>
+                                    }
+                                />
+                            ) : isFirstRun ? (
+                                <EmptyState
+                                    icon={Users}
+                                    className="w-full max-w-lg border-0 py-16"
+                                    title="No contacts yet"
+                                    description="Add your first contact or import a CSV to start filling this grid."
+                                    actions={
+                                        can.create ? (
+                                            <>
+                                                {importButton}
+                                                {addContactButton}
+                                            </>
+                                        ) : null
+                                    }
+                                />
+                            ) : (
+                                <EmptyState
+                                    className="w-full max-w-lg border-0 py-16"
+                                    title="No contacts match your filters"
+                                    description="Try another search term or switch lists."
+                                    actions={
+                                        <Button
+                                            variant="outline"
+                                            onClick={clearFilters}
+                                        >
+                                            Clear filters
+                                        </Button>
+                                    }
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex min-h-0 flex-1 flex-col [&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto">
+                            <ContactGrid
+                                slug={slug}
+                                contacts={contacts}
+                                fields={fields}
+                                statuses={statuses}
+                                selected={selectedOnPage}
+                                canManageFields={can.create}
+                                onToggle={toggle}
+                                onToggleAll={toggleAll}
+                                onEditField={openEditField}
+                                onDeleteField={setDeletingField}
+                            />
                         </div>
                     )}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
-                        <span>
-                            {contacts.total === 0
-                                ? '0 contacts'
-                                : `Showing ${contacts.from}–${contacts.to} of ${contacts.total} contacts`}
-                        </span>
-                        <span>
-                            Click a cell to edit · Use arrow keys to move
-                        </span>
-                    </div>
+
                     <ListTabs
                         lists={lists}
                         activeListId={filters.list}
                         canCreate={can.create}
+                        search={filters.q}
+                        trailing={pagination}
                     />
                 </div>
-                <Pagination links={contacts.links} />
             </div>
+
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title={
+                    selectedCount === 1
+                        ? 'Delete 1 contact?'
+                        : `Delete ${selectedCount} contacts?`
+                }
+                description={DELETE_COPY}
+                confirmLabel={
+                    selectedCount === 1
+                        ? 'Delete contact'
+                        : `Delete ${selectedCount} contacts`
+                }
+                onConfirm={deleteSelected}
+                processing={busy === 'delete'}
+            />
+
+            {campaignOpen ? (
+                <AddToCampaignModal
+                    campaigns={campaigns}
+                    contactIds={selectedOnPage}
+                    open={campaignOpen}
+                    onOpenChange={setCampaignOpen}
+                    onSuccess={() => setSelected([])}
+                />
+            ) : null}
 
             {fieldModalOpen ? (
                 <ContactFieldFormModal
@@ -557,11 +641,6 @@ export default function ContactsIndex({
     );
 }
 
-ContactsIndex.layout = (props: { currentTeam?: { slug: string } | null }) => ({
-    breadcrumbs: [
-        {
-            title: 'Contacts',
-            href: props.currentTeam ? index(props.currentTeam.slug) : '/',
-        },
-    ],
+ContactsIndex.layout = () => ({
+    showHeader: false,
 });

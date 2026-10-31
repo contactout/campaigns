@@ -3,6 +3,7 @@
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
 use App\Enums\TeamRole;
+use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\ContactIdentity;
 use App\Models\ContactList;
@@ -74,6 +75,25 @@ test('members can list only their teams contacts', function () {
             ->where('contacts.data.0.status_label', 'NotContacted')
             ->has('lists')
             ->has('statuses'));
+});
+
+test('the index lists the campaigns a member can add contacts to', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'name' => 'Q4 outreach',
+    ]);
+    Campaign::factory()
+        ->forTeam(Team::factory()->create())
+        ->create(['name' => 'Another team campaign']);
+
+    $this->actingAs($user)
+        ->get(route('contacts.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('campaigns', 1)
+            ->where('campaigns.0.id', $campaign->id)
+            ->where('campaigns.0.name', 'Q4 outreach'));
 });
 
 test('members can create a contact with identities and lists', function () {

@@ -16,6 +16,11 @@ export type ListOption = {
     name: string;
 };
 
+export type ContactCampaignOption = {
+    id: number;
+    name: string;
+};
+
 export type PaginationLink = {
     url: string | null;
     label: string;

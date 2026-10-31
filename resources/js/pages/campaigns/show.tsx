@@ -366,17 +366,20 @@ export default function CampaignShow({
                 {startBlocked ? (
                     <p
                         id="start-blocked"
-                        className="flex items-center gap-2 rounded-md border border-destructive-foreground/30 bg-badge-danger px-3 py-2 text-body leading-5 text-badge-danger-foreground"
+                        className={cn(
+                            'flex items-center gap-2 rounded-md border border-destructive-foreground/30 bg-badge-danger px-3 py-2 text-body leading-5 text-badge-danger-foreground',
+                            tab === 'steps' && editor === null && 'sr-only',
+                        )}
                     >
                         <AlertCircle
                             className="size-4 shrink-0 text-destructive-foreground"
                             aria-hidden
                         />
-                        Can&apos;t start this campaign —{' '}
+                        This campaign can&apos;t start until you resolve{' '}
                         {blockingReasonCount === 1
-                            ? '1 blocking reason'
-                            : `${blockingReasonCount} blocking reasons`}{' '}
-                        before Start.
+                            ? '1 blocking issue'
+                            : `${blockingReasonCount} blocking issues`}
+                        .
                     </p>
                 ) : null}
 

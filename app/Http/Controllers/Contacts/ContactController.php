@@ -14,6 +14,7 @@ use App\Http\Requests\Contacts\StoreContactRequest;
 use App\Http\Requests\Contacts\UpdateContactCellRequest;
 use App\Http\Requests\Contacts\UpdateContactPropertyRequest;
 use App\Http\Requests\Contacts\UpdateContactRequest;
+use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactIdentity;
@@ -82,6 +83,7 @@ class ContactController extends Controller
                 ])
                 ->all(),
             'latestImport' => $this->latestImport($currentTeam, $user),
+            'campaigns' => $this->campaignOptions($currentTeam, $user),
             'can' => [
                 'create' => $user->can('create', [Contact::class, $currentTeam]),
             ],
@@ -256,6 +258,28 @@ class ContactController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Contact deleted.')]);
 
         return to_route('contacts.index');
+    }
+
+    /**
+     * List the campaigns the user can add the selected contacts to.
+     *
+     * Read-only payload addition for the toolbar's "Add to campaign" action;
+     * the recipients endpoint still owns the update gate and the insert.
+     *
+     * @return array<int, array{id: int, name: string}>
+     */
+    protected function campaignOptions(Team $team, User $user): array
+    {
+        return Campaign::forTeam($team->id)
+            ->orderBy('name')
+            ->get(['id', 'team_id', 'name'])
+            ->filter(fn (Campaign $campaign): bool => $user->can('update', $campaign))
+            ->map(fn (Campaign $campaign): array => [
+                'id' => $campaign->id,
+                'name' => $campaign->name,
+            ])
+            ->values()
+            ->all();
     }
 
     /**

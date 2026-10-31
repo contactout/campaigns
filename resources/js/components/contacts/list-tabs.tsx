@@ -1,10 +1,12 @@
 import { router, usePage } from '@inertiajs/react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import CreateListModal from '@/components/contacts/create-list-modal';
 import DeleteListModal from '@/components/contacts/delete-list-modal';
 import EditListModal from '@/components/contacts/edit-list-modal';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { index } from '@/routes/contacts';
 import type { ContactListSummary } from '@/types';
 
@@ -12,9 +14,19 @@ type Props = {
     lists: ContactListSummary[];
     activeListId: number | null;
     canCreate: boolean;
+    /** The current search, kept when switching lists. */
+    search: string | null;
+    /** Pagination, rendered at the right of the strip. */
+    trailing?: ReactNode;
 };
 
-export default function ListTabs({ lists, activeListId, canCreate }: Props) {
+export default function ListTabs({
+    lists,
+    activeListId,
+    canCreate,
+    search,
+    trailing,
+}: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
 
@@ -26,22 +38,25 @@ export default function ListTabs({ lists, activeListId, canCreate }: Props) {
     const goToList = (listId: number | null) => {
         router.get(
             index.url(slug),
-            { list: listId ?? '' },
+            { q: search ?? '', list: listId ?? '' },
             { preserveState: true, preserveScroll: true, replace: true },
         );
     };
 
     const tabClass = (isActive: boolean) =>
-        [
-            'flex h-10 shrink-0 items-center gap-2 border-t-2 px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        cn(
+            'relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-md px-3 text-body leading-5 font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary-border focus-visible:outline-none',
             isActive
-                ? 'border-primary bg-primary/5 text-foreground'
-                : 'border-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
-        ].join(' ');
+                ? 'bg-accent text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        );
 
     return (
-        <div className="flex min-w-0 items-center justify-between border-t bg-card">
-            <div className="flex min-w-0 items-center overflow-x-auto">
+        <div
+            className="flex h-[35px] shrink-0 items-stretch justify-between gap-2 border-t bg-card"
+            data-test="contacts-list-tabs"
+        >
+            <div className="flex min-w-0 items-end gap-1 overflow-x-auto px-1 pb-0.5">
                 <button
                     type="button"
                     className={tabClass(activeListId === null)}
@@ -63,8 +78,15 @@ export default function ListTabs({ lists, activeListId, canCreate }: Props) {
                             activeListId === list.id ? 'page' : undefined
                         }
                     >
-                        {list.name}
-                        <span className="text-xs opacity-70">
+                        <span className="truncate">{list.name}</span>
+                        <span
+                            className={cn(
+                                'text-label leading-4 tabular-nums',
+                                activeListId === list.id
+                                    ? 'text-primary/70'
+                                    : 'text-muted-foreground',
+                            )}
+                        >
                             {list.contacts_count}
                         </span>
                     </button>
@@ -75,36 +97,42 @@ export default function ListTabs({ lists, activeListId, canCreate }: Props) {
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="mx-2 shrink-0"
+                            className="mx-1 shrink-0 text-muted-foreground"
                         >
-                            <Plus className="h-4 w-4" /> New list
+                            <Plus /> Add list
                         </Button>
                     </CreateListModal>
                 ) : null}
             </div>
 
-            {activeList ? (
-                <div className="flex shrink-0 items-center gap-1 border-l px-2">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEditOpen(true)}
-                        data-test="list-rename-button"
-                        aria-label={`Rename ${activeList.name}`}
-                    >
-                        <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteOpen(true)}
-                        data-test="list-delete-button"
-                        aria-label={`Delete ${activeList.name}`}
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                </div>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-1 pr-2">
+                {activeList ? (
+                    <div className="flex items-center gap-0.5">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => setEditOpen(true)}
+                            data-test="list-rename-button"
+                            aria-label={`Rename ${activeList.name}`}
+                        >
+                            <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={() => setDeleteOpen(true)}
+                            data-test="list-delete-button"
+                            aria-label={`Delete ${activeList.name}`}
+                        >
+                            <Trash2 className="size-3.5" />
+                        </Button>
+                    </div>
+                ) : null}
+
+                {trailing}
+            </div>
 
             {activeList && editOpen ? (
                 <EditListModal
