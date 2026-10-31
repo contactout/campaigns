@@ -1,6 +1,6 @@
 # Campaigns OS — the redesign branch
 
-`design/campaigns-os` rebuilds the product's five screens — dashboard, campaigns, campaign
+`design/campaigns-os` rebuilds the product's six screens — dashboard, campaigns, campaign
 detail, contacts, templates and connections — to the 26 artboards in the Campaigns OS design
 file (`00`–`11`, each with a `a`/`b` desktop board and a `390` mobile board), and adds the
 390 shell they assume: a five-slot bottom tab bar with a More sheet, no sidebar below 1024px.
@@ -52,7 +52,7 @@ a reviewer who has not seen either.
 | 08 | Template editor | ✓ | ✓ | `pages/templates/show.tsx`, `components/templates/placeholder-manager.tsx`, `delete-template-modal.tsx`, `rich-text-editor.tsx` |
 | 09 | Connections | ✓ | ✓ | `pages/mailer-connections/index.tsx`, `components/mailer-connections/cap-meter.tsx`, `signature-select.tsx`, `status-badge.tsx`, `connection-form-modal.tsx` |
 | 10 | Empty · no campaigns | ✓ | ✓ | `pages/campaigns/index.tsx` (empty state), `components/empty-state.tsx` |
-| 11 | Error · start blocked | ✓ | ✓ | `pages/campaigns/show.tsx`, `components/campaigns/start-blocked-panel.tsx`, `CampaignController::startReasons()` |
+| 11 | Error · start blocked | ✓ | ✓ | `pages/campaigns/show.tsx`, `components/campaigns/start-blocked-panel.tsx`, `CampaignController::startState()` |
 | — | Shared | — | — | `components/page-head.tsx`, `form-label.tsx`, `confirm-dialog.tsx`, `empty-state.tsx`, `ui/table.tsx`, `ui/button.tsx`, `ui/input.tsx`, `ui/select.tsx`, `ui/dialog.tsx`, `ui/sheet.tsx` |
 
 Every board exists at both breakpoints; `02` and `03` have two desktop variants, and the
@@ -119,8 +119,9 @@ migration is included, so nothing here adds an index.
 - **Payload additions** (read-only, no write path changed): contacts index gains a `campaigns`
   array of the team's Draft/Stopped campaigns for "Add to campaign" (archived and running
   campaigns are excluded because adding to an Active campaign queues its first step
-  immediately); campaign detail gains `steps[].metrics`, per-recipient `display_status`/
-  `display_status_label` and `stats.do_not_contact_count`; connections gain
+  immediately); campaign detail gains `steps[].metrics` and per-recipient `display_status`/
+  `display_status_label` (the do-not-contact count reaches the start panel through
+  `start.reasons`); connections gain
   `display_status`/`display_status_label` and a `sent_today`/limit pair.
 - **One write-path addition:** `StoreCampaignRecipientsRequest` accepts an optional
   `idle_only` flag, validated in the request's `after` hook against the bound campaign's
@@ -134,14 +135,15 @@ migration is included, so nothing here adds an index.
 
 ## What was verified, and how
 
-On the committed tree, in an isolated cua Space (`local:devtest`), one command at a time:
+On the final commit `dc6dfbf`, in an isolated cua Space (`local:devtest`), one command at a
+time:
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | exit 0, `✓ built in 2.86s` |
+| `npm run build` | exit 0, `✓ built in 2.95s` |
 | `npm run types:check` | exit 0, `tsc --noEmit` clean |
-| `npm run check` | exit 0, 151 files formatted, 136 lint files, no warnings |
-| `php artisan test` | exit 0, **577 passed** (2,568 assertions) in 8.65s |
+| `npm run check` | exit 0, **151 files** formatted, 136 lint files, no warnings |
+| `php artisan test` | exit 0, **577 passed** (2,568 assertions) in 8.84s |
 | `pint --test` | exit 0, **367 files** PASS |
 | `phpstan analyse` (level 7) | exit 0, `[OK] No errors` |
 

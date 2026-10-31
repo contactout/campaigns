@@ -44,21 +44,24 @@ edits; now fixed with a canonical-body baseline).
 
 ## Checks
 
-Six checks, one at a time, on the committed tree `086fc59` extracted into the Space:
+Six checks, one at a time, on the final commit `dc6dfbf` extracted into the Space from
+`git archive` (no symlinked dependencies, no preview route):
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | `BUILD_EXIT=0`, `✓ built in 3.63s` |
+| `npm run build` | `BUILD_EXIT=0`, `✓ built in 2.95s` |
 | `npm run types:check` | `TSC_EXIT=0`, `tsc --noEmit` clean |
-| `npm run check` | `CHECK_EXIT=0`, **158 files** formatted, no warnings in **143** lint files |
-| `php artisan test` | `TEST_EXIT=0`, **577 passed** (2,568 assertions) in 8.65s |
+| `npm run check` | `CHECK_EXIT=0`, **151 files** formatted, no warnings in **136** lint files |
+| `php artisan test` | `TEST_EXIT=0`, **577 passed** (2,568 assertions) in 8.84s |
 | `pint --test` | `PINT_EXIT=0`, **367 files** PASS |
 | `phpstan analyse` (level 7) | `PHPSTAN_EXIT=0`, `[OK] No errors` |
 
-After the sweep removals the checks were repeated on the final bytes: build `✓ built in
-2.86s`, `types:check` exit 0, `check` exit 0 with **151 files** formatted and no warnings in
-**136** lint files (twelve source files gone). PHP is untouched by the sweep, so `artisan
-test`, `pint` and `phpstan` results carry over unchanged.
+The same set ran earlier on `086fc59` (the pre-sweep tree, 158 formatted / 143 linted) with the
+same PHP results; the twelve removed files were not reachable from any route. The suite's
+first attempt in the verify tree used a symlinked `vendor/`, which resolves composer's
+`baseDir` to the other tree and made PHPUnit derive path-based class names (539 failures in
+0.34s). With a real `vendor/` copy the suite is green; that failure was the harness, not the
+code, and it is recorded here rather than hidden.
 
 The Space's PHP is 8.4.27; the suite ran against the `:memory:` SQLite the repo's
 `phpunit.xml` forces. The database checks are not a MySQL run.
