@@ -159,7 +159,7 @@ box is the honest measure. "Glyph" means the dark-pixel band, not the line box.
 | Element | Board | Render |
 | --- | --- | --- |
 | Tab bar: active underline | y 98–100 | y 98–100 (tablist 64–100, 36px) |
-| Tab bar: label glyphs | 75–89 | 78–92 (3px lower in the same bar) |
+| Tab bar: label glyphs | 75–86 | 78–92 (includes the `p` descender; 3px lower in the same bar) |
 | Stat cards | x 240–484, 497–741; y 117–201 | x 240–485, 497–742, 754–999, 1011–1256; y 116–200 |
 | Stat-card height / gap | 84px / 12px | 84px / 12px |
 | Stat value | 24px (spec amendment) | 24px, line height 28px (computed) |
@@ -183,7 +183,7 @@ the board's gap above it is 18px against the render's 20px. Row pitch and lane x
 | Column glyph x: Name / Email / Status | 290 / 510 / 1060 | 292 / 512 / 1061 |
 | Row `⋮` glyph x | 1206–1208 | 1224–1225 (18px further right) |
 | Bulk bar: search field | y 113–144, x 897–1117 | y 116–148, x 871–1091 |
-| Bulk bar: `Add recipients` fill | x 1123–1256 | x 1099–1256 |
+| Bulk bar: `Add recipients` fill | x ≈1123–1256 (JPEG fill edge 1123–1125) | x 1099–1256 |
 | Selected row tint | lavender | `rgb(240, 238, 255)` = `--accent` |
 
 The `Add recipients` button on this tab is the soft `secondary` fill on the board too
