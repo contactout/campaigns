@@ -200,13 +200,14 @@ and a clean `npm ci` installs 321 packages.
 
 In an isolated cua Space (`local:devtest`), one command at a time. The six checks ran on
 `dc6dfbf` (pre-review); after the review fixes the affected checks ran again on `858a9e0`, and
-the whole set again after the deep-review round:
+the whole set again on a clean `git archive` of the deep-review head (`756ad56`, 0 dirty
+lines), one command at a time:
 
 | Check | Result |
 | --- | --- |
 | `npm run build` | exit 0, `✓ built in 3.2s` |
 | `npm run types:check` | exit 0, `tsc --noEmit` clean |
-| `npm run check` | exit 0, **162 files** formatted, 145 lint files, no warnings |
+| `npm run check` | exit 0, **155 files** formatted, 138 lint files, no warnings |
 | `php artisan test` | exit 0, **603 passed** (2,927 assertions) in 8.3s |
 | `pint --test` | exit 0, **367 files** PASS |
 | `phpstan analyse` (level 7) | exit 0, `[OK] No errors` |

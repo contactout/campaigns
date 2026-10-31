@@ -372,6 +372,24 @@ WCAG 2.x relative luminance over sRGB; “before” values match the review's ow
 | dark sidebar logo tile (white on `sidebar-primary`) | 1.00 | **10.50** (`#3222b1`) |
 | dark badge-danger body text (`badge-danger-foreground` on `#3b1518`) | 4.21 when it was `destructive-foreground`; the panel text already used the badge token at `HEAD` | 8.47 unchanged; its two icons moved to the same token |
 
+### Checks on the round's head
+
+`git archive 756ad56` extracted over `/home/cua/work/campaigns-design` (the Space-only preview
+route and seeder removed, `routes/web.php` restored from the archive), one command at a time:
+
+| Check | Result |
+| --- | --- |
+| `npm run build` | `BUILD=0`, `✓ built in 2.88s` |
+| `npm run types:check` | `TYPES=0` |
+| `npm run check` | `CHECK=0`, **155 files** formatted, no warnings in **138** lint files |
+| `php artisan test` | `TEST=0`, **603 passed** (2,927 assertions) — 577 before this round |
+| `pint --test` | `PINT=0`, **367 files** PASS |
+| `phpstan analyse` | `PHPSTAN=0`, `[OK] No errors` |
+
+The tenancy tests on their own: `4 passed (21 assertions)` for
+`another teams campaign answers exactly like a missing one`, the Completed/Archived `idle_only`
+pair and the bulk failure paths.
+
 ### Deferred
 
 P2-5 (`async` bulk delete keeps running and can pull the user back), P2-6 (`only: []` sends N full
