@@ -9,7 +9,8 @@ desktop variant for `02` and `03`), and adds the
 It is a rewrite of the presentation layer plus the read paths those screens need. The
 routes, models and write actions are the existing ones; the changes to `app/` are new
 aggregate queries, four payload groups, one shared status derivation and one optional
-request flag (below). No migrations, no new dependencies, no schema change.
+request flag (below). No migrations, no new dependencies and no schema change; it also removes
+four unused dependencies (below).
 
 Read it as: the boards are the visual contract, the phase reports in
 `docs/design/campaigns-os/reports/` are the measurement record, and this file is the map for
@@ -29,12 +30,13 @@ a reviewer who has not seen either.
 - **Campaign detail.** Steps and Recipients tabs, a start-blocked panel that lists every
   reason, and per-step sent/opened/replied metrics. The step editor is a two-pane inline
   editor at `lg` and a full-screen modal dialog below it.
-- **Contacts.** The board's grid: 25 rows a page, 33px rows at 1280, a scrolling grid with the
-  list chips and pagination fixed below it, a mobile card list with 44px selection targets and
-  a sticky selection bar.
+- **Contacts.** The board's grid: 25 rows a page, 33px rows at 1280, a scrolling grid whose
+  fixed and custom-column header cells stay sticky over the rows, with the list chips and
+  pagination fixed below it; a mobile card list with 44px selection targets and a sticky
+  selection bar.
 - **Templates.** Folder groups, 39px rows at 1280 and 55px rows with an `Updated …` subline at
   390, and a template editor with a rich-text body, placeholder chips that keep their stored
-  fallback visible, and a guarded discard.
+  fallback visible, and a discard guard that clears once a save or a discard has been confirmed.
 - **Connections.** Cards at 390 and a table at 1280, derived status pills, a `Sent today /
   limit` counter, the signature clamp and a signature select aligned to its column.
 
@@ -91,8 +93,9 @@ Each has a number behind it in the phase reports. The short list:
    accessibility waiver in the spec's Amendments.
 10. **The shared Sheet/Dialog close is a bare 16×16 ✕** in an unpadded `Primitive.Close`,
     below the 24×24 WCAG 2.5.8 minimum. Left as-is per the brief and recorded: Escape and
-    Cancel/Close are present, and the step editor hides it, but it is the only pointer route out
-    of a sheet for a user who cannot see the small target.
+    Cancel/Close are present, the step editor hides it, and Radix also closes on an outside
+    pointer-down, so it is not the only pointer route — the waiver rests on the undersized
+    target itself, not on reachability.
 
 ## Backend and data changes, with costs
 
@@ -136,10 +139,20 @@ migration is included, so nothing here adds an index.
   start-block rules themselves. The disabled Start and the panel are UI-only. Recorded as a
   gap.
 
+## Sweep
+
+The branch also deletes thirteen unreachable files left by the redesign and the starter — the old
+step-form modal, the header component, its layout and its navigation-menu primitive, the
+standalone pagination, the nav footer, two unused auth layouts, and the collapsible, icon,
+placeholder-pattern, toggle-group and toggle primitives — and the four Radix packages that
+would otherwise stay in `package.json` with no consumer (`react-toggle`, `react-toggle-group`,
+`react-collapsible`, `react-navigation-menu`). Each file was grepped for importers first; the lockfile is regenerated
+and a clean `npm ci` installs 321 packages.
+
 ## What was verified, and how
 
-On the final commit `dc6dfbf`, in an isolated cua Space (`local:devtest`), one command at a
-time:
+In an isolated cua Space (`local:devtest`), one command at a time. The six checks ran on
+`dc6dfbf` (pre-review); after the review fixes the affected checks ran again on `858a9e0`:
 
 | Check | Result |
 | --- | --- |
@@ -150,10 +163,14 @@ time:
 | `pint --test` | exit 0, **367 files** PASS |
 | `phpstan analyse` (level 7) | exit 0, `[OK] No errors` |
 
-The six phase-6 fixes were then proved with live renders (Chromium 156, headless, CDP,
+On `858a9e0`, after a clean `npm ci`: build exit 0 (3.41s), `tsc` clean, `vp check` 151/136,
+and `php artisan test tests/Feature/Templates tests/Feature/Contacts` **138 passed** (573
+assertions). The full suite is unchanged by that commit (no PHP file was touched).
+
+The fixes were then proved with live renders (Chromium 156, headless, CDP,
 1280×900 and 390×844, real mouse and key events) and measured, not eyeballed. The nine items
-and their numbers are in `reports/phase-7.md`; the screenshots are in
-`reports/phase-7/`. The short version: the contacts grid scrolls to `scrollTop 125 = max`, the
+and their numbers are in `reports/phase-7.md`; the screenshots and the DOM readings
+(`evidence.json`) are in `reports/phase-7/`. The short version: the contacts grid scrolls to `scrollTop 125 = max`, the
 last row ends at y 864 and the pagination row starts at 868; template names start at x 285
 beside an icon at 257; one tap on the threaded label toggles exactly once at both breakpoints;
 the 390 editor is `role=dialog`, `aria-modal=true`, 14 consecutive Tab presses stayed
@@ -161,8 +178,8 @@ inside it, it locks body scroll and closes on Escape with no edits while still g
 real edit; both 390 selection bars
 sit above the pagination row; the signature value and header text both start at x 847; the
 More tab and the sheet's Settings row are current at `/settings/security`; an emulated 34px
-safe-area inset is carried by the tab bar's padding and the sticky bar sits above it; and a
-dark 390 render of the contacts screen.
+safe-area inset is carried by the tab bar's padding and the sticky bar sits above it; and
+the contacts screen renders in dark at 390.
 
 ## Remaining gaps
 
@@ -170,11 +187,17 @@ The full list with numbers is in `reports/phase-6.md` and `reports/phase-7.md`. 
 reviewer should weigh:
 
 - **Start blockers are UI-only** (server-side check missing).
-- **The 390 step editor remounts across the 1024px line**, so an unsaved edit is lost if the
-  window is resized while the editor is open. Guarding it means lifting the form state above
-  the breakpoint branch; recorded as a trade-off, not fixed.
+- **The 390 step editor remounts across the 1024px line**, so an unsaved step edit is lost
+  silently when the window is resized — and every common tablet rotation crosses it
+  (820↔1180, 834↔1194), so this is a real path, not an edge case. Guarding it means lifting the
+  form state above the breakpoint branch; recorded as a trade-off, not fixed.
 - **The 16×16 sheet close** (waiver above).
 - **The page-head sheet trigger on mobile** (deviation 2).
+- **The contacts column manager is desktop-only**, so adding a field at 390 has no route.
+- **No recipients status filter:** board 04's funnel has no payload or route behind it.
+- **No signature action in the template editor** (the template payload carries no signatures).
+- **Dark mode has been rendered on a subset of screens** (dashboard, campaigns, contacts), not
+  all eleven; the token set and the phase-2 dark pairs are shared.
 - **No index for the new aggregates** (`dispatched_at`, `(mailer_connection_id,
   dispatched_at)`, `(campaign_id, campaign_step_id)`); costs above, a follow-up migration.
 - **Board-level differences kept on purpose:** 390 row pitches are 1px over the boards
