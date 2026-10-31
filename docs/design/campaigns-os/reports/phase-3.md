@@ -1,9 +1,11 @@
 # Phase 3 report — campaign detail, recipients, step editor, blocked start
 
-Commit `2a78fa4` on `design/campaigns-os`, on top of `15baf71`. Worktree
-`/home/azri/projects/contactout/campaigns-design`. Paper MCP was not called; every
-measurement below is from the boards in `/home/azri/projects/contactout/.design-refs/campaigns-os/`
-and from a 1280×900 headless Chromium render in the cua Space `local:devtest`.
+Branch `design/campaigns-os`: `2a78fa4` (feature), `845d69c` + `85f4d53` (report),
+`88a4ca4` (fix round) on top of `15baf71`. Worktree
+`/home/azri/projects/contactout/campaigns-design`. Paper MCP was not called; every number
+below comes from a pixel scan of the boards in
+`/home/azri/projects/contactout/.design-refs/campaigns-os/` or from a 1280×900 headless
+Chromium render in the cua Space `local:devtest`.
 
 ## What changed
 
@@ -21,14 +23,16 @@ Frontend:
 - `resources/js/pages/campaigns/show.tsx` — rebuilt: `PageHead` with the back chevron, status pill
   and action cluster; `Steps | Recipients` tab bar (roving `tabIndex`, `aria-selected`,
   Arrow/Home/End); the steps tab or the two-pane editor; the recipients tab; the existing
-  edit/delete/add-recipients modals.
+  edit/delete/add-recipients modals. The blocked UI is gated on `canStart && start.blocked`.
 - `resources/js/components/campaigns/campaign-steps-tab.tsx` (new) — stat cards, "Sends from" meta
   line, day groups, step rows with the three fixed metric lanes, native HTML5 drag reorder and a
   `⋮` menu (Edit step / Move up / Move down / Delete step).
 - `resources/js/components/campaigns/campaign-recipients-tab.tsx` (new) — bulk bar, server-side
   search, table with select-all, selected-row tint, row menu and the "Showing x–y of N" footer.
-- `resources/js/components/campaigns/sequence-editor.tsx` (new) — the two-pane step editor with the
-  `Esc` handler and the destructive `Delete step`.
+  Selection resets when the page or the search changes.
+- `resources/js/components/campaigns/sequence-editor.tsx` (new) — the two-pane step editor, the
+  `Esc` handler (guarded against open Radix layers), the destructive `Delete step` that closes the
+  pane on success.
 - `resources/js/components/campaigns/step-form.tsx` (new) — the form logic and fields extracted
   from the modal (state, template/signature/placeholder insertion, day/time, threading).
 - `resources/js/components/campaigns/step-form-modal.tsx` — now a thin `Dialog` wrapper over
@@ -48,13 +52,11 @@ Frontend:
   `CampaignStartReason`, `CampaignStartState`, `RecipientDisplayStatus`, and the new step/recipient
   fields.
 
-Tests:
-
-- `tests/Feature/Campaigns/CampaignControllerTest.php` — seven tests: per-step metrics, the six
-  derived recipient statuses, the empty-subject + failed-connection + do-not-contact blockers
-  (including a do-not-contact contact on another campaign that must not count), the unblocked
-  case, the no-steps/no-connection/no-recipients case, `recipients_q`, and the connection payload
-  with its credentials missing.
+Tests — nine new tests in `tests/Feature/Campaigns/CampaignControllerTest.php`: per-step metrics,
+the six derived recipient statuses, the empty-subject + failed-connection + do-not-contact blockers
+(including a do-not-contact contact on another campaign that must not count), the unblocked case,
+no-steps/no-connection, an empty recipient list not blocking, a campaign that cannot be started
+reporting nothing, `recipients_q`, and the connection payload with its credentials missing.
 
 No migration, no new table, no route or middleware change, no `.dark` change, no
 `resources/js/components/ui/*` change.
@@ -138,7 +140,7 @@ SQLite). MySQL's optimizer may pick differently.
    scan. The existing `latest()` sort already used a temp B-tree on this query.
 
 6. **Recipients count** — pre-existing `select count(*) from recipients where campaign_id = ?`,
-   now also feeding the "no recipients" blocker. Plan: covering
+   which also feeds the "no recipients" number in `stats`. Plan: covering
    `recipients_campaign_id_contact_id_unique (campaign_id=?)`.
 
 Measured with `DB::enableQueryLog()`: **39 queries** for a campaign with a connection and one page
@@ -148,44 +150,46 @@ per-page recipient hydration.
 
 ## Board vs render measurements
 
-Board coordinates were read off the JPGs with ImageMagick pixel scans; render coordinates come from
-`getBoundingClientRect()` at a 1280×900 viewport with the 216px sidebar (content 240–1256).
+Board coordinates come from ImageMagick pixel scans of the JPGs; render coordinates are glyph scans
+of the PNG screenshots at 1280×900 with the 216px sidebar (content 240–1256) or DOM rects where a
+box is the honest measure. "Glyph" means the dark-pixel band, not the line box.
 
 ### 03 A — Steps
 
 | Element | Board | Render |
 | --- | --- | --- |
-| Tab bar bottom border / active underline | y 98–100 | y 98–100 (tablist 64–100, 36px) |
-| Tab label glyphs | 77–86 | 78–87 |
+| Tab bar: active underline | y 98–100 | y 98–100 (tablist 64–100, 36px) |
+| Tab bar: label glyphs | 75–89 | 78–92 (3px lower in the same bar) |
 | Stat cards | x 240–484, 497–741; y 117–201 | x 240–485, 497–742, 754–999, 1011–1256; y 116–200 |
 | Stat-card height / gap | 84px / 12px | 84px / 12px |
-| Stat value | 24px | 24px, line height 28px |
+| Stat value | 24px (spec amendment) | 24px, line height 28px (computed) |
 | Step row 1 | y 298–358 (60px) | y 302–362 (60px) |
 | Step row pitch (group to group) | 106px (298→404) | 106px (302→408) |
-| Day-group header glyphs (Day 3) | 381–393 | 385–396 |
+| Day-group header glyphs (Day 3) | 381–393 | 384–395 |
 | `Sent` / `Opened` / `Replied` lane x | 940 / 1036 / 1132 | 939 / 1035 / 1131 |
 | `Add step` button | x 1157–1255 (98px), y 219–251 | x 1154–1256 (102px), y 220–252 |
 
-The whole Steps block sits 4px lower than the board (302 vs 298) because the meta line's button is
-32px tall and the board's group gap above it is 18px against the render's 20px; the row pitch and
-the lane x are exact.
+The Steps block sits 4px lower than the board (302 vs 298): the meta-line button is 32px tall and
+the board's gap above it is 18px against the render's 20px. Row pitch and lane x are exact.
 
 ### 04 A — Recipients
 
 | Element | Board | Render |
 | --- | --- | --- |
 | Table card | x 240–1256 | x 241–1255 (1px border inside the card) |
-| Header height | 34px + 1px (157→191) | 34px + 1px (161→195) |
-| Row pitch | 44px (dividers 191.5/235.5/279.5/323.5…) | 44px |
-| Footer | 52px | 52px |
-| Column x: checkbox / Name / Email / Status / ⋮ | 256 / 290 / 510 / 1060 / 1206 | 257 / 291 / 511 / 1059 / 1207 |
-| Bulk bar | y 118–148 | y 116–148 |
-| Search field | x 897–1117 (220px) | x 871–1091 (220px) |
-| `Add recipients` button | x 1123–1256 (133px) | x 1099–1256 (157px) |
+| Header height | 34px (157–191) | 34px (161–195) |
+| Row pitch | 44px (dividers 191.5/235.5/279.5/323.5) | 44px |
+| Footer | 52px (499.5–552) | 52px |
+| Column glyph x: Name / Email / Status | 290 / 510 / 1060 | 292 / 512 / 1061 |
+| Row `⋮` glyph x | 1206–1208 | 1224–1225 (18px further right) |
+| Bulk bar: search field | y 113–144, x 897–1117 | y 116–148, x 871–1091 |
+| Bulk bar: `Add recipients` fill | x 1123–1256 | x 1099–1256 |
 | Selected row tint | lavender | `rgb(240, 238, 255)` = `--accent` |
 
-The search sits 26px further left because the render's `Add recipients` button is 24px wider than
-the board's; both are right-aligned to the same edge.
+The `Add recipients` button on this tab is the soft `secondary` fill on the board too
+(`#F1EEFF`), which is what the render uses. It is 24px wider than the board's, which pushes the
+search field 26px left; both right edges align. The `⋮` sits 18px further right because the render
+right-aligns it inside a 64px cell with 16px padding; the board places it ~48px from the card edge.
 
 ### 05 A — Step editor
 
@@ -194,9 +198,9 @@ the board's; both are right-aligned to the same edge.
 | Sequence list | x 240–540 (300px) | x 240–540 (300px) |
 | Gap between panes | 24px | 24px |
 | Editor card | x 564–1263 (700px), y 117–878 | x 564–1256 (692px), y 116–883 |
-| Active sequence item | 54px tall, tinted | 52px tall, tinted |
-| Editor body | 221px (416–637) | 220px (340–560) |
-| Editor footer | 56px (822–878) | 57px (825–882) |
+| Active sequence item | y 203–256 (54px) | y 202–254 (52px) |
+| Editor body | y 416–637 (221px) | y 416–636 (220px) |
+| Editor footer | y 822–878 (56px) | y 825–882 (57px) |
 | Toolbar | `B I U • 1. Link` + `Placeholder` + `Signature` | same eight controls |
 
 Board 05 A's card ends at x 1263 while boards 03 A and 04 A end at 1256 — an 8px inconsistency in
@@ -212,6 +216,9 @@ is 692px against the board's 700px.
 | Inline actions | `Edit step 2`, `Go to Connections` | same |
 | `Start` | disabled | disabled, `aria-describedby="start-blocked"` |
 | Offending step | red outline on step 2 | `rgb(220, 38, 38)` on row 2 only |
+
+An Active campaign wired to the same failed connection was rendered as well: no panel, no Start
+button, and no outlined row (`panel: false, startButton: false, outlined: ["rgb(228, 228, 231)"]`).
 
 ### Dark mode
 
@@ -245,16 +252,18 @@ first match wins:
 
 `status` and `status_label` are **kept unchanged** in the payload (`RecipientStatus`), so
 `CampaignRecipientControllerTest`'s `status_label === 'Active'` assertion still holds and nothing
-else that reads them breaks. `display_status` / `display_status_label` are additive. Badge
-variants follow the spec table: Replied → success, Bounced → danger, Opened → warning, Contacted →
-info, Unsubscribed / Not contacted / Completed / Paused / Archived → neutral, Error → danger.
+else that reads them breaks. `display_status` / `display_status_label` are additive. Badge variants
+follow the spec table: Replied → success, Bounced → danger, Opened → warning, Contacted → info,
+Unsubscribed / Not contacted / Completed / Paused / Archived → neutral, Error → danger.
 
-On the board the derived labels are `Contacted`, `Replied`, `Opened`, `Contacted`, `Bounced`,
-`Not contacted`, `Unsubscribed`; the render reproduces exactly that sequence.
+On the board the sequence reads `Contacted`, `Replied`, `Opened`, `Contacted`, `Bounced`,
+`Not contacted`, `Unsubscribed`; the render reproduces exactly that.
 
 ## Start blockers
 
-`start.reasons` is computed in `show()`; nothing is hardcoded:
+`start.reasons` is computed in `show()` and only for a campaign that can actually be started:
+`startState()` returns `blocked: false, reasons: []` unless the status is Draft or Stopped, and the
+page additionally requires `can.start`. Nothing is hardcoded:
 
 | Type | Blocking | Condition | Copy |
 | --- | --- | --- | --- |
@@ -263,7 +272,6 @@ On the board the derived labels are `Contacted`, `Replied`, `Opened`, `Contacted
 | `connection` | yes | `mailer_connection_id` is null | `This campaign has no sending connection.` |
 | `connection` | yes | `exception_type !== null` | `The sending connection "Mailgun relay" failed verification` |
 | `connection` | yes | `status !== Active` | `The sending connection "X" is pending` (status label lowercased) |
-| `recipients` | yes | recipient count is 0 | `This campaign has no recipients yet.` |
 | `do_not_contact` | no | DNC recipient count > 0 | `4 recipients are marked Do not contact and will be skipped` |
 
 Why these are real:
@@ -278,9 +286,11 @@ Why these are real:
 - The empty-subject check is not enforced by the API (`subject` is `required` on create/update), so
   it only appears for legacy or duplicated rows — still derived, never rendered blind.
 
-`blocking` reasons disable `Start`; the do-not-contact line is a warning, because refusing to start
-a campaign that happens to contain do-not-contact contacts would block a legitimate send. The panel
-only renders when something blocks, which is what 11 A shows.
+An empty recipient list is **not** a blocker: `StartCampaign` allows it and
+`CampaignStepScheduler::baselineFor` explicitly supports recipients who join a running campaign, so
+refusing to start would change behaviour the prompt says to keep. The do-not-contact line is a
+warning (`blocking: false`) for the same reason — those recipients are suppressed at send time, not
+a reason to refuse the send.
 
 ## Deviations
 
@@ -318,57 +328,67 @@ only renders when something blocks, which is what 11 A shows.
     campaign whose only issue is do-not-contact recipients shows no panel and starts normally.
 15. **`display_status` is additive** next to `status`/`status_label` (see the vocabulary section).
 16. **Tab state is local** (`useState`). Search, pagination and bulk remove pass `preserveState`, so
-    the tab survives those visits; a full page reload returns to Steps.
+    the tab survives those visits; a full page reload returns to Steps. The recipient selection is
+    reset whenever the page or the search changes, so the bulk Remove can never act on rows that are
+    no longer on screen.
 17. **Native HTML5 drag** reorders step rows (no DnD library); the keyboard path is
     `Move up`/`Move down` in the row's `⋮` menu, which replaces the old arrow buttons.
 18. **The recipient search matches `%q%` literally**, so a typed `%` or `_` acts as a wildcard.
+19. **`Esc` in the editor ignores the key while a Radix menu, listbox or dialog is open**, so
+    dismissing the Placeholder menu or the template select does not close the editor and lose the
+    draft; `Esc` on its own still closes it.
 
 ## Verification
 
-Space provenance: staged as a `tar` of the working tree at `17ba0fa` (0 dirty paths at staging) into
-`/home/cua/work/campaigns-phase3`, with `vendor/`, `node_modules/` and `.env` copied from the
-phase-2 tree, so nothing was installed, built or served on the host. The post-render edits were
-copied in per file and the final checks below ran on a tree whose 60 files under
-`app/Http/Controllers/Campaigns`, `resources/js/{components/campaigns,components/templates,pages/campaigns,lib,types}`
-and `tests/Feature/Campaigns` are byte-identical to commit `2a78fa4` (md5 comparison).
+Space provenance: the tree was staged as a `tar` of the working tree into
+`/home/cua/work/campaigns-phase3` with `vendor/`, `node_modules/` and `.env` copied from the
+phase-2 tree, so nothing was installed, built or served on the host. After the fix round, the 60
+files under `app/Http/Controllers/Campaigns`,
+`resources/js/{components/campaigns,components/templates,pages/campaigns,lib,types}` and
+`tests/Feature/Campaigns` were md5-compared between the Space tree and commit `88a4ca4`: identical.
 
 ```
-$ npm run build            BUILD_EXIT=0    ✓ built in 2.44s
+$ npm run build            BUILD_EXIT=0    ✓ built in 2.35s
 $ npm run check            CHECK_EXIT=0    All 153 files are correctly formatted
                                             Found no warnings or lint errors in 136 files
 $ npm run types:check      TYPES_EXIT=0    tsc --noEmit
-$ php artisan test         TEST_EXIT=0     Tests: 567 passed (2418 assertions)
+$ php artisan test         TEST_EXIT=0     Tests: 569 passed (2444 assertions)
 $ php vendor/bin/pint --test …             PINT_EXIT=0     PASS 2 files
 $ php vendor/bin/phpstan analyse …         PHPSTAN_EXIT=0  [OK] No errors
 ```
 
-`php artisan test` is the full suite on SQLite `:memory:` from `phpunit.xml`, not a subset. The
-first run of the suite failed only because `public/build/manifest.json` was missing (the tar excludes
+`php artisan test` is the full suite on SQLite `:memory:` from `phpunit.xml`, not a subset. The first
+run of the suite failed only because `public/build/manifest.json` was missing (the tar excludes
 `public/build`); it passed after the build above.
 
-Render fixture (temporary, not committed): Northwind Growth team, one Active connection
-`Primary` (`from_email` `sam@northwind.io`) and one Active connection `Mailgun relay` with
-`exception_type`, campaign `Q4 Fintech CFO outreach` (4 steps on days 1/3/7/12, 37 recipients,
-47 emails) and campaign `Series A founders — APAC` (Draft, 3 steps of which step 2 has an empty
-subject, 8 recipients of which 4 are do-not-contact). Screenshots were taken with headless
-Chromium over CDP at 1280×900: steps, recipients, step editor, blocked start, and one dark-mode
-steps page.
+Render fixture (temporary, not committed): Northwind Growth team, an Active connection `Primary`
+(`from_email` `sam@northwind.io`), an Active connection `Mailgun relay` with `exception_type`,
+campaign `Q4 Fintech CFO outreach` (4 steps on days 1/3/7/12, 37 recipients, 47 emails),
+campaign `Series A founders — APAC` (Draft, 3 steps of which step 2 has an empty subject, 8
+recipients of which 4 are do-not-contact) and `Active with a broken relay` (Active, same failed
+connection, empty subject). Screenshots: steps, recipients, step editor, blocked start, dark-mode
+steps.
 
-Interactions driven through CDP on the same fixture:
+Interactions driven through CDP on the final build:
 
-- `ArrowRight` on the tab bar selects `Recipients`, moves focus to it, and the roving `tabIndex`
+- `ArrowRight` on the tab bar selects `Recipients`, moves focus to it and the roving `tabIndex`
   becomes `[-1, 0]`; `Home` returns to `Steps`.
-- `Esc` closes the step editor (`[data-test="campaign-step-editor-pane"]` disappears).
-- Selecting two recipients shows `2 selected`; `Remove` posts to the existing
-  `campaigns.recipients.bulk-destroy`, the footer moves from `Showing 1–25 of 37` to
-  `Showing 1–25 of 35`, the selection clears and the `Recipients removed.` toast appears.
+- `Esc` with the Placeholder menu open closes only the menu (`menu: false, editor: true`); `Esc`
+  alone closes the editor.
+- Selecting a recipient shows `1 selected`; clicking `Next` lands on `Showing 26–37 of 37` with no
+  selected rows and the Recipients tab still active.
+- Selecting two recipients and pressing `Remove` posts to `campaigns.recipients.bulk-destroy`: the
+  footer moves from `Showing 1–25 of 37` to `Showing 1–25 of 35`, the selection clears and the
+  `Recipients removed.` toast appears. (37 is the seeded total; the pre-remove footer text was not
+  captured, only the post-remove one.)
 - The header select-all shows `25 selected` — the current page only.
-- The recipients search submits `?recipients_q=Priya`, returns one row and keeps the Recipients tab
-  selected.
+- `Delete step` in the editor closes the pane, drops the row count from 4 to 3 and flashes
+  `Step deleted.`.
+- The recipients search submits `?recipients_q=Priya`, returns one row and keeps the Recipients tab.
 
-Not exercised in a browser: the `Link` toolbar flow (the inline URL row appears, the mark is not
+Not exercised in a browser: the `Link` toolbar flow (the inline URL row appears; the mark is not
 asserted), the drag-and-drop reorder (only `Move up`/`Move down` share its POST path), and the
-placeholder/signature dropdowns.
+signature dropdown.
 
 ## Gaps and open questions
 
@@ -384,10 +404,12 @@ placeholder/signature dropdowns.
 6. **Drag-and-drop is mouse-only**; the menu items are the accessible path.
 7. **The blocked panel is 9px taller than the board** (190 vs 181); not chased further because the
    board's own type scale is a step off the shared 13px body.
-8. **The recipients `Add recipients` button is 24px wider than the board's**, which shifts the
-   search field 26px left; the right edges align.
+8. **The recipients `⋮` is 18px right of the board's** and the `Add recipients` button 24px wider,
+   which shifts the search field 26px left; the right edges align. Shifting the button without
+   changing the table's column distribution needs a layout-neutral transform, which was not worth
+   the extra mechanism for 18px.
 9. **`Team · Owner` in the sidebar** is the phase 1 deviation (no member count in `UserTeam`).
-10. **The Space keeps `/home/cua/work/campaigns-phase3`** with `vendor/`, `node_modules/` and the
-    render database for phase 4. The temporary preview route, seeder, render scripts and
-    `storage/render` screenshots were removed from the tree after the final checks; none of them
-    were ever in the host worktree or the commit.
+10. **The Space keeps `/home/cua/work/campaigns-phase3`** with `vendor/`, `node_modules/` for
+    phase 4. The temporary preview route, seeder, render scripts, SQLite database and screenshots
+    were removed from the tree after the final checks; none of them were ever in the host worktree
+    or the commits.
