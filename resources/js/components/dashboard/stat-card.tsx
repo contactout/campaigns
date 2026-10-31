@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export type StatDelta = {
@@ -6,7 +7,7 @@ export type StatDelta = {
 };
 
 type Props = {
-    label: string;
+    label: ReactNode;
     value: string;
     delta?: StatDelta | null;
 };

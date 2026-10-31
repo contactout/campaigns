@@ -297,7 +297,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                     className="overflow-hidden rounded-lg border bg-card"
                                     data-test="template-group"
                                 >
-                                    <div className="flex h-[39px] items-center gap-2 border-b bg-muted/50 px-4">
+                                    <div className="flex h-11 items-center gap-2 border-b bg-muted/50 px-4 lg:h-[39px]">
                                         <FolderClosed
                                             className="size-4 shrink-0 text-primary"
                                             aria-hidden
@@ -333,7 +333,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                         group.templates.map((template) => (
                                             <div
                                                 key={template.id}
-                                                className="group flex min-h-[39px] min-w-0 items-center gap-2 border-b px-4 py-2 last:border-b-0 hover:bg-accent/40 lg:py-0"
+                                                className="group flex min-h-[55px] min-w-0 items-center gap-2 border-b px-4 py-0.5 last:border-b-0 hover:bg-accent/40 lg:min-h-[39px] lg:py-0"
                                                 data-test="template-row"
                                             >
                                                 <FileText
@@ -345,7 +345,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                                         slug,
                                                         template.id,
                                                     ])}
-                                                    className="flex h-full min-w-0 flex-1 flex-col justify-center rounded-sm py-1 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border lg:flex-row lg:items-center lg:py-0"
+                                                    className="flex min-w-0 flex-1 flex-col justify-center self-stretch rounded-sm text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border lg:flex-row lg:items-center"
                                                     title={template.name}
                                                 >
                                                     <span className="truncate">

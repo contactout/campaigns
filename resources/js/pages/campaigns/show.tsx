@@ -490,7 +490,7 @@ export default function CampaignShow({
                                     onTabKeyDown(event, item.key)
                                 }
                                 className={cn(
-                                    '-mb-px border-b-2 pt-1.5 pb-2 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border',
+                                    '-mb-px inline-flex items-center border-b-2 pt-1.5 pb-2 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border max-lg:min-h-11',
                                     active
                                         ? 'border-primary text-primary'
                                         : 'border-transparent text-muted-foreground hover:text-foreground',

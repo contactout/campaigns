@@ -65,16 +65,16 @@ export default function PlaceholderManager({
                                     ? `Insert ${placeholder.name}, fallback ${placeholder.fallback}`
                                     : `Insert ${placeholder.name}`
                             }
-                            className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border"
+                            className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border max-lg:h-11"
                         >
                             {`{{${placeholder.name}}}`}
                         </button>
 
-                        {/* The 390 board shows chips only; the stored fallback
-                            stays reachable through the chip's accessible name and
-                            is visible from lg up. */}
+                        {/* The 390 board shows chips only. The stored fallback is
+                            shown next to the chip rather than dropped, so a sighted
+                            390 user keeps the same information the desktop rail has. */}
                         <span
-                            className="hidden min-w-0 truncate text-label leading-4 text-muted-foreground group-focus-within:opacity-0 group-hover:opacity-0 lg:block"
+                            className="min-w-0 flex-1 truncate text-right text-label leading-4 text-muted-foreground group-focus-within:opacity-0 group-hover:opacity-0"
                             title={placeholder.fallback ?? undefined}
                         >
                             {placeholder.fallback ?? '—'}

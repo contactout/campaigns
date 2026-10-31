@@ -258,7 +258,7 @@ export default function StepForm({
                                                             placeholder.name,
                                                         )
                                                     }
-                                                    className="rounded-md border border-badge-info-border bg-accent px-1.5 py-0.5 font-mono text-label leading-4 text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
+                                                    className="inline-flex items-center rounded-md border border-badge-info-border bg-accent px-1.5 py-0.5 font-mono text-label leading-4 text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary-border max-lg:min-h-11"
                                                     aria-label={`Insert ${placeholder.label}`}
                                                 >
                                                     {`{{${placeholder.name}}}`}

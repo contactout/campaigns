@@ -75,7 +75,7 @@ export default function SignatureSelect({
                 aria-label={`Signature for ${connection.name}`}
                 title={label}
                 className={cn(
-                    'w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-0.5 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate',
+                    'w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-0.5 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate lg:[&>svg]:hidden',
                     triggerClassName,
                 )}
                 data-test="connection-signature"

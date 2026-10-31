@@ -268,7 +268,7 @@ export default function ContactGrid({
                         <li
                             key={contact.id}
                             className={cn(
-                                'flex min-h-[68px] items-center gap-1 py-2 pr-4 pl-1',
+                                'flex min-h-14 items-center gap-1 py-1.5 pr-4 pl-1',
                                 isSelected && 'bg-accent',
                             )}
                             onClick={() => onToggle(contact.id)}
@@ -294,7 +294,7 @@ export default function ContactGrid({
                                 href={show.url([slug, contact.id])}
                                 onClick={(event) => event.stopPropagation()}
                                 aria-label={`Open ${contact.name}`}
-                                className="mx-2 min-w-0 flex-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
+                                className="mx-2 flex min-w-0 flex-1 flex-col justify-center self-stretch rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
                             >
                                 <span className="block truncate text-body leading-5 font-semibold">
                                     {contact.name}

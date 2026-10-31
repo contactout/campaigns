@@ -218,7 +218,16 @@ export default function Dashboard({
                 {metrics ? (
                     <div className="grid grid-cols-2 gap-4 lg:gap-3 xl:grid-cols-4">
                         <StatCard
-                            label="Emails sent · 30d"
+                            label={
+                                <>
+                                    <span className="lg:hidden">
+                                        Sent · 30d
+                                    </span>
+                                    <span className="hidden lg:inline">
+                                        Emails sent · 30d
+                                    </span>
+                                </>
+                            }
                             value={formatCount(metrics.emails_sent)}
                             delta={
                                 metrics.emails_sent_delta === null
@@ -254,7 +263,14 @@ export default function Dashboard({
                             }
                         />
                         <StatCard
-                            label="Active campaigns"
+                            label={
+                                <>
+                                    <span className="lg:hidden">Active</span>
+                                    <span className="hidden lg:inline">
+                                        Active campaigns
+                                    </span>
+                                </>
+                            }
                             value={formatCount(metrics.active_campaigns)}
                         />
                     </div>

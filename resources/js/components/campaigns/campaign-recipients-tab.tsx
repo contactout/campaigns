@@ -254,7 +254,7 @@ export default function CampaignRecipientsTab({
                                 <li
                                     key={recipient.id}
                                     className={cn(
-                                        'flex min-h-[64px] items-center gap-1 py-2.5 pr-4 pl-1',
+                                        'flex min-h-14 items-center gap-1 py-1.5 pr-4 pl-1',
                                         isSelected && 'bg-accent',
                                     )}
                                     onClick={() => {
