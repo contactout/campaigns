@@ -83,7 +83,7 @@ class ContactController extends Controller
                 ])
                 ->all(),
             'latestImport' => $this->latestImport($currentTeam, $user),
-            'campaigns' => $this->campaignOptions($currentTeam, $user),
+            'campaigns' => $this->campaignOptions($currentTeam),
             'can' => [
                 'create' => $user->can('create', [Contact::class, $currentTeam]),
             ],
@@ -261,19 +261,18 @@ class ContactController extends Controller
     }
 
     /**
-     * List the campaigns the user can add the selected contacts to.
+     * List the team's campaigns for the toolbar's "Add to campaign" action.
      *
-     * Read-only payload addition for the toolbar's "Add to campaign" action;
-     * the recipients endpoint still owns the update gate and the insert.
+     * Read-only payload addition; the recipients endpoint owns the update gate
+     * and the insert.
      *
      * @return array<int, array{id: int, name: string}>
      */
-    protected function campaignOptions(Team $team, User $user): array
+    protected function campaignOptions(Team $team): array
     {
         return Campaign::forTeam($team->id)
             ->orderBy('name')
-            ->get(['id', 'team_id', 'name'])
-            ->filter(fn (Campaign $campaign): bool => $user->can('update', $campaign))
+            ->get(['id', 'name'])
             ->map(fn (Campaign $campaign): array => [
                 'id' => $campaign->id,
                 'name' => $campaign->name,
