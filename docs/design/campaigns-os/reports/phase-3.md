@@ -42,9 +42,12 @@ Frontend:
 - `resources/js/components/campaigns/recipient-status-badge.tsx` (new) — maps the derived status
   onto the spec's badge table.
 - `resources/js/components/templates/rich-text-editor.tsx` — adds an opt-in `toolbar="board"`
-  (`B I U • 1. Link` + an `actions` slot), an inline link input and a `minHeightClass` prop. The
-  icon toolbar stays the default and its markup is unchanged, so the template screens take the
-  same code path; the template editor was not re-rendered in this phase.
+  (`B I U • 1. Link` + an `actions` slot), an inline link input, a `minHeightClass` prop and a
+  `focus-within` ring. The board's 13px typography is gated on `toolbar === 'board'`, so the
+  template screens keep their `text-sm` scale and the icon toolbar; the template editor was not
+  re-rendered in this phase.
+- `resources/js/components/confirm-dialog.tsx` (new) — one confirmation dialog used by the bulk
+  recipient removal and by the discard-changes guard.
 - `resources/js/components/page-head.tsx` — optional `back` (chevron) and `titleAddon` (status
   pill). Additive; every existing caller is unchanged.
 - `resources/js/lib/timezone.ts` (new) — `(UTC+08:00) Kuala Lumpur` formatting via `Intl`.
@@ -159,7 +162,7 @@ box is the honest measure. "Glyph" means the dark-pixel band, not the line box.
 | Element | Board | Render |
 | --- | --- | --- |
 | Tab bar: active underline | y 98–100 | y 98–100 (tablist 64–100, 36px) |
-| Tab bar: label glyphs | 75–86 | 78–92 (includes the `p` descender; 3px lower in the same bar) |
+| Tab bar: label glyphs | 75–86 | 74–88 (includes the `p` descender; 1px high in the same bar) |
 | Stat cards | x 240–484, 497–741; y 117–201 | x 240–485, 497–742, 754–999, 1011–1256; y 116–200 |
 | Stat-card height / gap | 84px / 12px | 84px / 12px |
 | Stat value | 24px (spec amendment) | 24px, line height 28px (computed) |
@@ -272,7 +275,7 @@ page additionally requires `can.start`. Nothing is hardcoded:
 | `connection` | yes | `mailer_connection_id` is null | `This campaign has no sending connection.` |
 | `connection` | yes | `exception_type !== null` | `The sending connection "Mailgun relay" failed verification` |
 | `connection` | yes | `status !== Active` | `The sending connection "X" is pending` (status label lowercased) |
-| `do_not_contact` | no | DNC recipient count > 0 | `4 recipients are marked Do not contact and will be skipped` |
+| `do_not_contact` | no | DNC recipient count > 0 (`contacts.status = DoNotContact` **or** `do_not_contact_at` set, soft-deleted excluded) | `4 recipients are marked Do not contact and will be skipped` |
 
 Why these are real:
 
@@ -327,10 +330,11 @@ a reason to refuse the send.
 14. **The do-not-contact line only renders inside the blocked panel**, exactly as on 11 A. A
     campaign whose only issue is do-not-contact recipients shows no panel and starts normally.
 15. **`display_status` is additive** next to `status`/`status_label` (see the vocabulary section).
-16. **Tab state is local** (`useState`). Search, pagination and bulk remove pass `preserveState`, so
-    the tab survives those visits; a full page reload returns to Steps. The recipient selection is
-    reset whenever the page or the search changes, so the bulk Remove can never act on rows that are
-    no longer on screen.
+16. **Tab state is local** (`useState`), initialised from the URL: a `?recipients_page=2` or
+    `?recipients_q=…` page opens on Recipients. Search, pagination and bulk remove pass
+    `preserveState`, so the tab survives those visits; a URL with no recipients query returns to
+    Steps. The recipient selection is pruned to the rows on screen, so the bulk Remove can never act
+    on ids from another page.
 17. **Native HTML5 drag** reorders step rows (no DnD library); the keyboard path is
     `Move up`/`Move down` in the row's `⋮` menu, which replaces the old arrow buttons.
 18. **The recipient search matches `%q%` literally**, so a typed `%` or `_` acts as a wildcard.
@@ -348,11 +352,11 @@ files under `app/Http/Controllers/Campaigns`,
 `tests/Feature/Campaigns` were md5-compared between the Space tree and commit `88a4ca4`: identical.
 
 ```
-$ npm run build            BUILD_EXIT=0    ✓ built in 2.35s
-$ npm run check            CHECK_EXIT=0    All 153 files are correctly formatted
-                                            Found no warnings or lint errors in 136 files
+$ npm run build            BUILD_EXIT=0    ✓ built in 2.43s
+$ npm run check            CHECK_EXIT=0    All 154 files are correctly formatted
+                                            Found no warnings or lint errors in 137 files
 $ npm run types:check      TYPES_EXIT=0    tsc --noEmit
-$ php artisan test         TEST_EXIT=0     Tests: 569 passed (2444 assertions)
+$ php artisan test         TEST_EXIT=0     Tests: 570 passed (2470 assertions)
 $ php vendor/bin/pint --test …             PINT_EXIT=0     PASS 2 files
 $ php vendor/bin/phpstan analyse …         PHPSTAN_EXIT=0  [OK] No errors
 ```
@@ -413,3 +417,62 @@ signature dropdown.
     phase 4. The temporary preview route, seeder, render scripts, SQLite database and screenshots
     were removed from the tree after the final checks; none of them were ever in the host worktree
     or the commits.
+
+## Review round — phase 3 (BLOCK → fixed)
+
+The independent review (`review/phase-3.md`) returned BLOCK on P1-1 and 14 P2s. Every item is
+addressed in `2aefc98`; nothing was deferred.
+
+| Item | What changed | Evidence |
+| --- | --- | --- |
+| **P1-1** | The header action cluster is gated on `tab !== 'recipients'`, so only the bulk bar has `Add recipients` there. | Recipients tab: `[data-test="campaign-add-recipients-button"]` matches **1** element (was 2); screenshot `04-recipients-1280`. |
+| **P2-1** | Bulk `Remove` opens `ConfirmDialog` ("Remove 1 recipient from this campaign? Their sent-email history is deleted too, and this cannot be undone.") before posting. | Dialog text captured; `Cancel` leaves the 25 rows in place. |
+| **P2-2** | `StepForm` tracks every field and reports `isDirty`; Esc, a step switch, Cancel and a tab switch ask before discarding. Clicking the active tab is a no-op. | Typing in Subject then Esc opens "Discard your changes?" with the editor still mounted; `Discard changes` closes it. |
+| **P2-3** | `selectedOnPage` (ids present in the table) drives the count, `allSelected`, the tint and the POST; the header checkbox goes indeterminate; a campaign change resets tab, editor and selection. | Duplicate with the editor open lands on `/northwind/campaigns/4` with no editor, tab `Steps`, no selection. |
+| **P2-4** | The tab initialises from the URL (`recipients_q` or `recipients_page > 1` → Recipients). | Direct `/northwind/campaigns/1?recipients_page=2` renders tab `Recipients`, `Showing 26–37 of 37`, 12 rows. |
+| **P2-5** | `dragstart` calls `dataTransfer.setData('text/plain', id)` and sets `effectAllowed = 'move'`. | Code; not exercised in Firefox (no Firefox in the Space). |
+| **P2-6** | The board typography (`text-body leading-5`, `[&_h2]:text-h3`) is gated on `toolbar === 'board'`; the template screens keep `text-sm`/`text-lg`. | Code path; the template editor was not re-rendered. |
+| **P2-7** | The do-not-contact count uses `status = DoNotContact` **or** `do_not_contact_at`, and excludes `contacts.deleted_at`. | New test rows: one contact with only the timestamp, one soft-deleted DNC contact → count 2, not 3. |
+| **P2-8** | Tests for the email branch of the search, a same-name recipient on another campaign, and emails from another campaign (including one reusing this campaign's step id). | `the recipients tab can be searched by name or email`, `the show page counts sent opened and replied per step`. |
+| **P2-9** | Destructive text, the offending-step outline and the panel icon use `--destructive-foreground`; the panel text stays `--badge-danger-foreground`. | Dark: Remove, Delete step, the row outline and the icon all compute `oklch(0.637 0.237 25.331)` ≈ `#fb2c36` — **5.20:1** on `#0a0a0a`, **4.22:1** on `--badge-danger` `#3b1518`; the old `--destructive` was **1.97:1** / **1.60:1**. Panel text `#fca5a5` on `#3b1518` is **8.47:1**. Screenshots `11-start-blocked-1280-dark`, `04-recipients-1280-dark`. |
+| **P2-10** | A one-line summary (`id="start-blocked"`) sits above the tab bar in every view; Start keeps `aria-disabled="true"`, stays focusable (`tabIndex` 0, native `disabled` false) and its click is prevented. | Summary: "Can't start this campaign — 2 blocking reasons before Start."; `aria-describedby="start-blocked"`; clicking Start leaves the URL and the Draft state unchanged; the summary is present on the Recipients tab too. |
+| **P2-11** | The editor heading takes focus on open (and on step change); closing restores focus to the row kebab or `Add step`. | `activeElement` after open: `H2 "Edit step · Day 1"`; after Discard: `BUTTON` labelled `Actions for step 1`. |
+| **P2-12** | `<Label id="step-body-label">`, `labelledBy="step-body-label"`, and `focus-within:ring-2 focus-within:ring-primary-border` on the editor wrapper. | Code; the ring is on the same 2px `--primary-border` treatment as every other focusable control. |
+| **P2-13** | Tab padding `pt-2.5 pb-1` → `pt-1.5 pb-2`; the bar stays 36px and the underline stays at 98–100. | Render glyph run **74–88** (was 78–92); board 75–86. |
+| **P2-14** | `applyTemplate` clears the select after applying, so the same template can be re-picked. | Edit the subject, re-pick `Cold open` → subject returns to `Quick idea for {{company}}`. |
+
+Two extra findings from writing the new tests:
+
+- **A soft-deleted contact crashed the page.** `DeleteContact` leaves recipient rows behind and
+  `$recipient->contact` is then null, so `show()` returned 500. The page now resolves the contacts
+  for the page itself (`withTrashed()`), so the row keeps its name; a hard-deleted contact would
+  read `Deleted contact`. Covered by `a recipient whose contact was deleted still renders`.
+- **The DNC count and the recipients table disagreed** on soft-deleted contacts: the count excludes
+  them, the table shows them. That is deliberate — the count follows "who is blocked from email",
+  the table follows "who is enrolled" — and is now stated in the controller docblock.
+
+Verification after the round (Space `local:devtest`, tree md5-identical to `2aefc98`):
+
+```
+$ npm run build            BUILD_EXIT=0    ✓ built in 2.43s
+$ npm run check            CHECK_EXIT=0    All 154 files are correctly formatted
+                                            Found no warnings or lint errors in 137 files
+$ npm run types:check      TYPES_EXIT=0
+$ php artisan test         TEST_EXIT=0     Tests: 570 passed (2470 assertions)
+$ pint --test …            PINT_EXIT=0     PASS 2 files
+$ phpstan analyse …        PHPSTAN_EXIT=0  [OK] No errors
+```
+
+One process note for the next phase: exporting `DB_DATABASE` into `php artisan test` overrides
+`phpunit.xml`'s `:memory:` and lets `RefreshDatabase` wipe the render fixture. The suite is run
+without that variable.
+
+Remaining deviations from this round:
+
+- The summary counts **blocking** reasons while the panel below lists the warning line too, so the
+  two numbers differ when there are do-not-contact recipients (2 vs 3 bullets on 11 A).
+- `Esc` cannot see Chrome's autofill dropdown (it is browser UI, not DOM). The dirty guard means the
+  first Esc now asks instead of closing, which covers the loss; a second Esc (or `Discard changes`)
+  still closes.
+- The discard and remove confirmations are two instances of the same `ConfirmDialog`, one owned by
+  the editor and one by the recipients tab, because the editor owns its own transitions.
