@@ -142,8 +142,9 @@ Board / render at 390. Rows with a board value the scan could not settle are mar
 Horizontal overflow: `document.scrollWidth === innerWidth` on all 390 screens.
 
 Touch targets, measured in the DOM on every 390 screen (campaigns, dashboard, campaign
-detail, recipients, step editor, contacts with and without a selection, templates,
-template editor, connections, blocked, empty): every button, input, select trigger,
+detail, recipients with and without a selection, step editor, contacts with and without
+a selection, templates, template editor, connections, blocked, the filtered-empty list
+and the first-run empty state): every button, input, select trigger,
 tab, list chip and row is **44px or taller** — head controls 44, search 44, select 44,
 campaign tabs 44, list rows 57–68, template rows 55, chips 44, tab-bar items 56, More
 rows 44, checkbox wrappers 44. The one exception the probe flags is the `Checkbox`
@@ -166,7 +167,7 @@ Re-rendered every screen at 1280×900 (`*-1280-regression.png`) and read the DOM
 | Detail `⋯` buttons on screen | 1 | **1** (the mobile menu is `lg:hidden`) |
 | Contacts row / cells | 33, `px-3` | **33**, table visible, mobile list hidden |
 | Connections row / meter | 44, bar visible | **44**, bar visible |
-| Connections signature | 109px column | trigger **99px**, right edge **936 < 940** (cell edge); chevron hidden at `lg` so `Sam — default` is not clipped |
+| Connections signature | 109px column | trigger **99px**, right edge **936 < 940** (cell edge); chevron hidden at `lg`, and the render shows `Sam — default` in full |
 | Connections `+ Add` (mobile) | — | **hidden** at 1280 |
 | Step editor | list 300, pane 692, footer | **list visible, pane 692, footer visible** |
 
@@ -332,3 +333,8 @@ Interactions driven over CDP on that build:
 7. **The connection card is 174px tall** against the board's ~130 because the signature
    control is a 44px target. If the review prefers the board, dropping the inline select
    for static text (and losing assignment at 390) would bring the card back to ~130.
+8. **The Space keeps `campaigns-phase6`** with `vendor/`, `node_modules/`, the fixture
+   `database.sqlite` (Northwind Growth and Quiet Studio) and `storage/render/`, as
+   phase 5 kept its tree. The preview route, the fixture seeder and the render scripts
+   were removed from the tree before the final checks and were never in the host
+   worktree or the commits.
