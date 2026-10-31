@@ -57,6 +57,9 @@ export default function TemplateShow({
     });
 
     const [saved, setSaved] = useState(false);
+    // The editor normalises the stored HTML when it parses it, so the dirty
+    // check compares against what the editor holds rather than the raw prop.
+    const [savedBody, setSavedBody] = useState(template.body);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(
         null,
@@ -72,7 +75,7 @@ export default function TemplateShow({
         form.data.name !== template.name ||
         form.data.subject !== (template.subject ?? '') ||
         form.data.folder_id !== initialFolder ||
-        form.data.body !== template.body;
+        form.data.body !== savedBody;
 
     // A closed tab or a hard reload cannot be intercepted by a dialog; the
     // browser's own confirmation is the only guard there. Inertia visits started
@@ -318,6 +321,10 @@ export default function TemplateShow({
                                 name="body"
                                 value={form.data.body}
                                 onChange={(html) => form.setData('body', html)}
+                                onCanonical={(html) => {
+                                    setSavedBody(html);
+                                    form.setData('body', html);
+                                }}
                                 labelledBy="template-body-label"
                                 readOnly={!can.update}
                                 toolbar="board"

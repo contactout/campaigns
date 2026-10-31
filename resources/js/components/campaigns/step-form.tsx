@@ -77,6 +77,11 @@ export default function StepForm({
 
     const [subject, setSubject] = useState(step?.subject ?? '');
     const [body, setBody] = useState(step?.body ?? '');
+    // What the editor actually holds for the saved body. TipTap normalises the
+    // stored HTML on open (`<br />` -> `<br>`), so comparing against the raw
+    // prop would report every freshly opened step as edited and prompt to
+    // discard changes the user never made.
+    const [savedBody, setSavedBody] = useState(step?.body ?? '');
     const [day, setDay] = useState(String(step?.day ?? 0));
     const [time, setTime] = useState(step?.time ? step.time.slice(0, 5) : '');
     const [isThreaded, setIsThreaded] = useState(Boolean(step?.is_threaded));
@@ -84,7 +89,7 @@ export default function StepForm({
 
     const initial = {
         subject: step?.subject ?? '',
-        body: step?.body ?? '',
+        body: savedBody,
         day: String(step?.day ?? 0),
         time: step?.time ? step.time.slice(0, 5) : '',
         threaded: Boolean(step?.is_threaded),
@@ -218,6 +223,10 @@ export default function StepForm({
                                         name="body"
                                         value={body}
                                         onChange={setBody}
+                                        onCanonical={(html) => {
+                                            setSavedBody(html);
+                                            setBody(html);
+                                        }}
                                         labelledBy="step-body-label"
                                         toolbar="board"
                                         minHeightClass="min-h-[220px]"

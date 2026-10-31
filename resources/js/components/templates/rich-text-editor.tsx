@@ -9,7 +9,7 @@ import {
     Strikethrough,
     Undo2,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,13 @@ type Props = {
     name: string;
     value: string;
     onChange?: (html: string) => void;
+    /**
+     * Receives the editor's own serialisation of the initial content once it
+     * has parsed it. TipTap rewrites the markup it is given (`<br />` becomes
+     * `<br>`, attributes are reordered), so a form that compares `onChange`
+     * against the stored HTML reads a freshly opened document as edited.
+     */
+    onCanonical?: (html: string) => void;
     labelledBy?: string;
     readOnly?: boolean;
     /**
@@ -39,6 +46,7 @@ export default function RichTextEditor({
     name,
     value,
     onChange,
+    onCanonical,
     labelledBy,
     readOnly = false,
     toolbar = 'icons',
@@ -47,6 +55,8 @@ export default function RichTextEditor({
     insertRef,
 }: Props) {
     const [html, setHtml] = useState(value);
+    const onCanonicalRef = useRef(onCanonical);
+    onCanonicalRef.current = onCanonical;
     const [linkOpen, setLinkOpen] = useState(false);
     const [linkHref, setLinkHref] = useState('');
 
@@ -79,6 +89,16 @@ export default function RichTextEditor({
     useEffect(() => {
         editor?.setEditable(!readOnly);
     }, [editor, readOnly]);
+
+    // Once per editor instance: the canonical form of the content it was opened
+    // with, so a caller's dirty check starts from what the editor holds.
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        onCanonicalRef.current?.(editor.getHTML());
+    }, [editor]);
 
     useEffect(() => {
         if (!insertRef) {
