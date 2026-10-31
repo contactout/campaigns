@@ -258,7 +258,7 @@ of the trigger and rely on the tab bar.
 
 ## Verification
 
-Provenance: the committed tree (`b08b626`, on top of `665f078`, `00d58ad` and `ae5bdae`
+Provenance: the committed tree (`063c910`, on top of `b08b626`, `665f078`, `00d58ad` and `ae5bdae`
 for the carry-overs) was tarred from the host worktree and extracted over the Space copy
 after removing the temporary preview route, the fixture seeder and the render scripts.
 `md5sum` of `routes/web.php`, the campaigns index, the campaign controller, the template
@@ -275,11 +275,11 @@ with an empty-subject step, the failed Mailgun relay and four do-not-contact rec
 connections at `142 / 400`, `388 / 400` and `0 / 1,000` with the Mailgun exception.
 
 ```
-$ npm run build            BUILD_EXIT=0    ✓ built in 3.68s
+$ npm run build            BUILD_EXIT=0    ✓ built in 2.91s
 $ npm run types:check      TYPES_EXIT=0    tsc --noEmit
 $ npm run check            CHECK_EXIT=0    All 160 files are correctly formatted
                                            Found no warnings or lint errors in 143 files
-$ php artisan test         TEST_EXIT=0     Tests: 577 passed (2568 assertions), 8.74s
+$ php artisan test         TEST_EXIT=0     Tests: 577 passed (2568 assertions), 8.31s
 $ php vendor/bin/pint --test  PINT_EXIT=0  PASS 367 files
 $ php vendor/bin/phpstan analyse …  PHPSTAN_EXIT=0  [OK] No errors
 ```
