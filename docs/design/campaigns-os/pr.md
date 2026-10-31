@@ -2,13 +2,14 @@
 
 `design/campaigns-os` rebuilds the product's six screens — dashboard, campaigns, campaign
 detail, contacts, templates and connections — to the 26 artboards in the Campaigns OS design
-file (`00`–`11`, each with a `a`/`b` desktop board and a `390` mobile board), and adds the
+file (`00`–`11`, each with a 1280 desktop board and a 390 mobile board, plus a second
+desktop variant for `02` and `03`), and adds the
 390 shell they assume: a five-slot bottom tab bar with a More sheet, no sidebar below 1024px.
 
 It is a rewrite of the presentation layer plus the read paths those screens need. The
 routes, models and write actions are the existing ones; the changes to `app/` are new
-aggregate queries, two payload additions and one shared status derivation (below). No
-migrations, no new dependencies, no schema change.
+aggregate queries, four payload groups, one shared status derivation and one optional
+request flag (below). No migrations, no new dependencies, no schema change.
 
 Read it as: the boards are the visual contract, the phase reports in
 `docs/design/campaigns-os/reports/` are the measurement record, and this file is the map for
@@ -43,7 +44,7 @@ a reviewer who has not seen either.
 | --- | --- | --- | --- | --- |
 | 00 | Navigation, sidebar/tab bar, tokens | ✓ | ✓ | `components/app-sidebar.tsx`, `mobile-tab-bar.tsx`, `nav-main.tsx`, `nav-user.tsx`, `team-switcher.tsx`, `hooks/use-nav-items.ts`, `layouts/app/app-sidebar-layout.tsx`, `resources/css/app.css` |
 | 01 | Dashboard | ✓ | ✓ | `pages/dashboard.tsx`, `components/dashboard/stat-card.tsx`, `team-invitation-alert.tsx`, `app/Http/Controllers/DashboardController.php` |
-| 02 | Campaigns list | ✓ (`a`, `b`) | ✓ | `pages/campaigns/index.tsx`, `components/campaigns/campaign-status-badge.tsx`, `create-campaign-modal.tsx`, `delete-*`, `edit-campaign-modal.tsx` |
+| 02 | Campaigns list | ✓ (`a`, `b`) | ✓ | `pages/campaigns/index.tsx`, `components/campaigns/campaign-status-badge.tsx`, `create-campaign-modal.tsx`, `delete-campaign-modal.tsx`, `edit-campaign-modal.tsx` |
 | 03 | Campaign detail · Steps | ✓ (`a`, `b`) | ✓ | `pages/campaigns/show.tsx`, `components/campaigns/campaign-steps-tab.tsx`, `start-blocked-panel.tsx`, `delete-campaign-modal.tsx` |
 | 04 | Campaign detail · Recipients | ✓ | ✓ | `components/campaigns/campaign-recipients-tab.tsx`, `add-recipients-modal.tsx`, `recipient-status-badge.tsx` |
 | 05 | Sequence step editor | ✓ | ✓ | `components/campaigns/sequence-editor.tsx`, `step-form.tsx`, `components/templates/rich-text-editor.tsx`, `components/ui/dialog.tsx`, `ui/sheet.tsx` |
@@ -68,19 +69,21 @@ Each has a number behind it in the phase reports. The short list:
 2. **The page-head sheet trigger shifts the 390 title to x 44.** It is the only route to the
    team switcher, user menu and sign-out. Accepted for this branch and recorded as a gap: the
    next pass should move those into the More sheet or give the trigger an avatar glyph.
-3. **`+ Recipients` stays on a Draft campaign's head** (board 11 shows only Edit, ⋯, Start).
-   Kept because a draft with no recipients cannot be started and the board's own empty panel
-   tells the user to add them.
+3. **`+ Recipients` stays on a Draft campaign's head** (board 11 shows only Edit, ⋯ and
+   Start) so recipients can still be added at 390, where the recipients toolbar's add button
+   is hidden.
 4. **Recipients sticky bar is `N selected | Remove`** (board 04), not the contacts bar's
    `Add to campaign` (board 06). The two bars are deliberately different.
 5. **Placeholder fallbacks stay visible beside their chips at 390** — the brief's
    no-information-loss rule outranks the board's chips-only treatment. The chip is 44px tall
    rather than the board's 22px.
-6. **`Sent today` is text (`388 / 400`) at 390**, with the meter bar hidden below `lg`.
+6. **A real `Sent today` in the connections cards and an inline signature select**,
+   without the meter bar at 390, rather than the board's static `Signature: None`.
 7. **Connections banner shows the stored error in full** (up to four lines, measured 102px)
    rather than the board's single truncated line.
-8. **`Created …` subline on campaign rows** at 390 (the board has no subline) so sorting by
-   recency is legible.
+8. **The campaign row subline reads `Created …` where the board reads `Updated …`** at both
+   breakpoints: the index payload carries `created_at`, not `updated_at` (a phase-1 decision).
+   The relative format matches.
 9. **Dark-mode tokens are additive.** Light-only board colours that failed contrast were
    replaced and measured: destructive focus ring 2px `#6552ff` **4.99:1** (board `#b8afff`
    **1.98:1**, halo **1.16:1**); `--primary-border` **6.10:1** in dark; success **11.36:1**;
@@ -153,12 +156,13 @@ and their numbers are in `reports/phase-7.md`; the screenshots are in
 `reports/phase-7/`. The short version: the contacts grid scrolls to `scrollTop 125 = max`, the
 last row ends at y 864 and the pagination row starts at 868; template names start at x 285
 beside an icon at 257; one tap on the threaded label toggles exactly once at both breakpoints;
-the 390 editor is `role=dialog`, `aria-modal=true`, contains 14 Tab stops, locks body scroll
-and closes on Escape with no edits while still guarding a real edit; both 390 selection bars
+the 390 editor is `role=dialog`, `aria-modal=true`, 14 consecutive Tab presses stayed
+inside it, it locks body scroll and closes on Escape with no edits while still guarding a
+real edit; both 390 selection bars
 sit above the pagination row; the signature value and header text both start at x 847; the
 More tab and the sheet's Settings row are current at `/settings/security`; an emulated 34px
 safe-area inset is carried by the tab bar's padding and the sticky bar sits above it; and a
-dark 390 render shows the changed screens in dark.
+dark 390 render of the contacts screen.
 
 ## Remaining gaps
 
@@ -177,8 +181,8 @@ reviewer should weigh:
   (contacts/recipients 57 vs 56, campaign 69 vs 68), the step editor body scrolls at 390, and
   the bottom bar is 57px rather than the board's 64px (which includes an 8px home indicator).
 - **Data states:** the fixture's numbers differ from the boards' (1,105 sent vs 2,418, five
-  do-not-contact contacts), so shapes match but figures do not. The empty (10) and blocked (11)
-  boards are rendered from real fixture states; the fixture has no seeded "first run" team
-  other than Quiet Studio's empty campaigns.
+  do-not-contact contacts on the first page), so shapes match but figures do not. The empty
+  (10) board is rendered from Quiet Studio's team, which has no campaigns; the blocked (11)
+  board is a Draft campaign with an empty subject and a connection that failed verification.
 
 The PR is not opened, pushed or created — this file is the description only.

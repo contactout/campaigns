@@ -7,12 +7,15 @@ behind it, and the two items that cannot be proved are named as trade-offs, not 
 
 ## Provenance
 
-- **Checks and renders:** `git archive 086fc59` extracted into a fresh Space tree
+- **Renders:** `git archive 086fc59` extracted into a fresh Space tree
   (`/home/cua/work/campaigns-final`), with `node_modules/`, `vendor/` and `.env` copied from
   the previous run's `/home/cua/work/campaigns-p7`. The committed tree has no
   `__preview-login` route; a Space-only one was appended to `routes/web.php` (never in the
   host tree, never committed), together with an `?as=<user id>` parameter so the Quiet Studio
   empty state could be rendered as its owner.
+- **Final checks:** `git archive dc6dfbf` into `/home/cua/work/campaigns-verify`, with a real
+  `vendor/` copy and a symlinked `node_modules/`. No preview route, so the check set sees the
+  committed bytes exactly.
 - **Browser:** Chromium 156 headless over CDP, viewport 1280×900 or 390×844,
   `deviceScaleFactor: 1`, real `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent`.
   Harness in `/tmp/p7/` in the Space; screenshots in `reports/phase-7/`.
@@ -25,7 +28,7 @@ behind it, and the two items that cannot be proved are named as trade-offs, not 
 
 | # | Item | Measured | Evidence |
 | --- | --- | --- | --- |
-| 1 | P0-1 contacts grid scrolls at 1280 | Scroll container `scrollHeight 860 / clientHeight 735`; scrolled to `scrollTop 125`, its maximum. 25 rows. Last row `noah.novak21@example.com` is 33px tall at y 831–864; `Showing 1–25 of 1,284` at y 872–892 and `Previous` at y 868–896, below the last row and not painted over. The `All contacts / APAC founders 428 / …` strip is visible at y 872–892. | `p7-01-contacts-1280-scrolled.png` |
+| 1 | P0-1 contacts grid scrolls at 1280 | Scroll container `scrollHeight 860 / clientHeight 735`; scrolled to `scrollTop 125`, its maximum. 25 rows. Last row `noah.novak21@example.com` is 33px tall at y 831–864; `Showing 1–25 of 1,284` at y 872–892 and `Previous` at y 868–896, below the last row and not painted over. The `All contacts / APAC founders 428 / …` strip is visible on the same row in the render. | `p7-01-contacts-1280-scrolled.png` |
 | 2 | P1-1 template names left-aligned at the board's x | Icon 16×16 at x 257–273; name span at **x 285**, 171×20, link `285–1103`, `justify-content: flex-start`. The board's 12px icon-to-name gap. | `p7-02-templates-1280.png` |
 | 3 | P1-2 threaded checkbox toggles exactly once per label tap | **390:** label 358×44 at x 16, 16×16 box inside a 44×44 wrapper at x 16; one real tap at the text (156, 737) → `aria-checked` false → **true**; a second tap → **false**. **1280:** label 658×20 at x 581, box 16×16 flush at x 581 (the field edge, no indent); tap at (721, 792) → false → **true** → **false**. | `p7-03-threaded-390.png`, `p7-03-threaded-1280.png` |
 | 4a | P2-5 dialog semantics at 390 | `role="dialog"`, **`aria-modal="true"`**, title `Edit step · Day 1`, box 390×844 at (0, 0), body `overflow: hidden`, `window.scrollTo(0, 400)` left `scrollY 0`, 14 consecutive Tab presses from the initial `Cancel` stayed inside the dialog (Cancel → Save → Apply template → subject → B → I → U → bullet → numbered → Link → Insert placeholder → Insert signature → body → `{{name}}` → `{{email}}`), every stop `inDialog: true`; the covered body siblings carry `aria-hidden="true"`. | `p7-04-editor-dialog-390.png` |
@@ -84,8 +87,8 @@ views). This branch added `step-form-modal`, dead once the editor moved into
 | Tokens `--chart-1…5`, `--ring-halo` (+ their `@theme` mappings) | Zero references in `resources/js`, `views` or `app`; no charts on any board. |
 
 Kept on purpose: `--type-body` and `--radius` are theme-invariant and live only in `:root`;
-`.dark` still defines **44 of the 46** remaining tokens and the two absent ones resolve by
-inheritance on the same element. All other exported types with no external consumer
+`.dark` still defines **40 of the 42** remaining tokens and the two absent ones
+(`--type-body`, `--radius`, both theme-invariant) resolve by inheritance on the same element. All other exported types with no external consumer
 (`StatDelta`, `StepFormState`, `resolveContactColumns`) are used inside their own module.
 
 ## Sweep audits
@@ -107,33 +110,37 @@ inheritance on the same element. All other exported types with no external consu
 
 All 11 screens (12 boards, `02` and `03` have a/b variants) were re-rendered at 1280×900 and
 390×844 from the final code: `p7-final-<screen>-1280.png` and `-390.png` in this directory.
-Pitches below were read from the DOM on the fresh render, not from the boards' screenshots.
+All 22 were opened and compared with the boards. Pitches marked **DOM** were read from the
+fresh render with `getBoundingClientRect()`; the others were checked visually against the
+board for that screen, and where the phase reports already measured the row the value is
+quoted from them.
 
-| Board | Screen | Board | Render | Verdict |
-| --- | --- | --- | --- | --- |
-| 00 | Sidebar / tab bar | 5 slots; 240px sidebar; 56px + 1px bar | 5 slots; 240px; 56px + 1px | matches |
-| 01 | Dashboard | 4 stat cards, checklist, jump rows | same, 2×2 at 390 | matches (figures are fixture data) |
-| 02 | Campaigns list, 1280 | row pitch 44 | **44** (6 rows) | matches |
-| 02 | Campaigns list, 390 | row pitch 68 | **69** (68 + 1px divider) | 1px over, recorded |
-| 03 | Campaign detail · Steps, 1280 | step rows 44 | 44 | matches |
-| 03 | Campaign detail · Steps, 390 | 44px tabs/rows | 44 | matches |
-| 04 | Recipients, 1280 | 33px table rows | 33 (phase-3 measurement, code unchanged) | matches |
-| 04 | Recipients, 390 | row pitch 56 | **57** | 1px over, recorded |
-| 05 | Step editor, 1280 | card 700×761, footer 56 | pane 692×775, footer 690×57 | matches within the 24px padding |
-| 05 | Step editor, 390 | full-bleed sheet | 390×844 dialog, Cancel at top 6 | matches (now modal) |
-| 06 | Contacts grid, 1280 | 33px rows, 25 per page | **33**, 25 | matches |
-| 06 | Contacts grid, 390 | row pitch 56 | **57** | 1px over, recorded |
-| 07 | Templates list, 1280 | icon→name 12px, pitch 39 | name x 285, pitch **39** | matches |
-| 07 | Templates list, 390 | row pitch 55–56 | **55** | matches |
-| 08 | Template editor, 1280 | 2-pane, 39px chips | matches phase-5 geometry | matches |
-| 08 | Template editor, 390 | 44px chips beside fallbacks | 44px, fallback visible | deviation 5 |
-| 09 | Connections, 1280 | signature text x 847 | **847** | matches |
-| 09 | Connections, 390 | card ≈130px | 174px | 44px targets, deviation 1 |
-| 10 | Empty campaigns, 1280/390 | centred empty card + 2 CTAs | same | matches |
-| 11 | Start blocked, 1280/390 | red panel + reasons + disabled Start | 3 reasons, Start disabled, step 2 outlined | matches |
+| Board | Screen | Board | Render | How | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| 00 | Sidebar / tab bar | 240px sidebar; 56px + 1px bar | 240; 56 + 1px | visual + phase-6 measurement | matches |
+| 01 | Dashboard | 4 stat cards, checklist, jump rows; 2×2 stats at 390 | same | visual | matches (figures are fixture data) |
+| 02 | Campaigns list, 1280 | row pitch 44 | **44** | DOM, 6 rows | matches |
+| 02 | Campaigns list, 390 | row pitch 68 | **69** | DOM (68 + 1px divider) | 1px over, recorded |
+| 03 | Campaign detail · Steps, 1280 | 44px step rows, 4 stat cards | 44; same cards | visual | matches |
+| 03 | Campaign detail · Steps, 390 | 44px tabs/rows, 2×2 stats | 44; 2×2 | visual | matches |
+| 04 | Recipients, 1280 | 33px table rows | 33 | visual + phase-3 measurement | matches |
+| 04 | Recipients, 390 | row pitch 56 | **57** | DOM | 1px over, recorded |
+| 05 | Step editor, 1280 | card 700×761, footer 56 | pane 692×775, footer 690×57 | DOM | matches within the 24px padding |
+| 05 | Step editor, 390 | full-bleed sheet | 390×844 dialog, Cancel at top 6 | DOM | matches (now modal) |
+| 06 | Contacts grid, 1280 | 33px rows, 25 per page | **33**, 25 | DOM | matches |
+| 06 | Contacts grid, 390 | row pitch 56 | **57** | DOM | 1px over, recorded |
+| 07 | Templates list, 1280 | icon→name 12px, pitch 39 | name x 285, pitch **39** | DOM | matches |
+| 07 | Templates list, 390 | row pitch 55–56 | **55** | DOM | matches |
+| 08 | Template editor, 1280 | 2-pane, chips + fallbacks | same | visual | matches |
+| 08 | Template editor, 390 | 44px chips beside fallbacks | chips, fallback visible | visual (chip height from phase 6) | deviation 5 |
+| 09 | Connections, 1280 | signature text x 847 | **847** | DOM | matches |
+| 09 | Connections, 390 | card ≈130px | 174px | visual + phase-6 measurement | 44px targets, deviation 1 |
+| 10 | Empty campaigns, 1280/390 | centred empty card + 2 CTAs | same | visual, real Quiet Studio state | matches |
+| 11 | Start blocked, 1280/390 | red panel + reasons + disabled Start | 3 reasons, Start faded at 1280, step 2 outlined | visual | matches |
 
-No drift was found that is not already in the deviations or phase-6 gaps below. The only
-visual difference between the old phase-6 renders and these is the phase-7 fix set itself.
+No drift was found in the 22 renders that is not already in the deviations or the phase-6
+gaps below. The only visual difference between the old phase-6 renders and these is the
+phase-7 fix set itself.
 
 ## Decisions recorded
 
@@ -150,13 +157,12 @@ visual difference between the old phase-6 renders and these is the phase-7 fix s
 
 ## Remaining gaps
 
-Carried from phase 6, unchanged by this run: the sheet trigger and the shifted 390 title,
-44px controls against the boards' 28–32, the 16px checkbox box, `Sent today` as text without
-a meter at 390, the connection-card height, the recipients bar wording, `+ Recipients` on a
-Draft head, no recipients filter, the template editor having no signature action, placeholder
-fallbacks at 390, `Created …` in the campaign subline, data-driven ordering, the contacts
-pagination/select-all rows at 390, the step-editor body scroll, per-breakpoint stat labels,
-the 57px bottom bar, the contacts flowing page, and the two remaining empty-state labels.
+Carried from phase 6, unchanged: its eight-item gap list (fixture sample data, the sheet
+trigger as a board deviation, the desktop-only column manager, no signature action in the
+template editor, no recipients status filter, dark mode rendered on a subset, the 174px
+connection card, and the Space state), and its deviations 1–20 — 44px controls, the 16px
+checkbox box, `Sent today` as text, the recipients bar wording, `+ Recipients` on a Draft head,
+placeholder fallbacks, `Created …` where the board reads `Updated …`, and the rest.
 
 New or still open in this phase:
 
@@ -171,9 +177,17 @@ New or still open in this phase:
 
 ## Space state after this run
 
-- `/home/cua/work/campaigns-final` holds `086fc59` + the Space-only preview route, with
-  `node_modules/`, `vendor/` and the phase-6 fixture database. `/home/cua/work/campaigns-p7`
-  remains from the first run.
+- `/home/cua/work/campaigns-final` is no longer pure `086fc59`: the sweep's twelve file
+  deletions and the edited `app.css` were copied in after the renders, and the post-sweep
+  build ran there. It also carries the Space-only preview route and the phase-6 fixture
+  database.
+- `/home/cua/work/campaigns-verify` is `dc6dfbf` extracted from `git archive` (no preview
+  route), with a real copied `vendor/` and a symlinked `node_modules/`; the final six checks
+  ran there. A symlinked `vendor/` was tried first and is wrong: composer resolves its
+  `baseDir` to the other tree and PHPUnit derives path-based class names, which produced 539
+  spurious failures in 0.34s.
+- `/home/cua/work/campaigns-p7` remains from the first run.
 - `php artisan serve` on `127.0.0.1:8000` and headless Chromium on `127.0.0.1:9222` were
-  stopped after the renders (ports verified free).
-- The `__preview-login` route is Space-only; the host tree and every commit are clean of it.
+  stopped after the renders; both ports were re-checked free.
+- The two source tarballs were deleted from the host and the Space; the
+  `__preview-login` route is Space-only and the host tree and every commit are clean of it.
