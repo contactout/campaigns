@@ -271,3 +271,34 @@ both below the WCAG 2.x 3:1 non-text minimum. The ring values are therefore repl
 `--text-h1/h3/body/label` replace the `text-[20px]/[16px]/[13px]/[12px]` one-offs;
 `--text-stat` is the 24px stat role. Brand and sidebar sublines that used 14px/11px now use
 `text-body`/`text-label` to stay on the scale (a 1px change each).
+
+### Round 2 amendments
+
+- **Static sidebar (R2-1).** `collapsible="none"` renders a `sticky top-0 h-svh` column with a
+  1px `--sidebar-border` right edge. Without the sticky/h-svh pair the column stretched to the
+  document height and Settings/user scrolled away on lists taller than the viewport.
+  Verified on a 25-row list: document 1348px, viewport 813px, after `scrollY 535` the sidebar
+  top is still 0, height 813, and the user block is inside the viewport.
+- **Info pill border (R2-3).** The `info` variant no longer reads `--ring`; it has its own
+  `--badge-info-border` (`#b8afff`, dark `#8b7dff`, 4.46:1 on the dark info fill). Changing
+  `--ring` cannot move the pill border again.
+- **Text tokens carry no line height (R2-4).** `--text-h1/h3/body/label/stat` set size (and h1
+  tracking) only; `leading-*` is explicit at each call site. The tokens' own line heights were
+  overriding `leading-tight` inside the shell and made the team card 54px against the board's
+  50px. Two roles were added: `--text-brand` 14px (the wordmark is 14/700 on the board, not
+  13/600) and `--text-caption` 11px (settings-only chips stay at their pre-refactor size).
+- **Stat value line height (R2-6).** `text-stat leading-7` (24/28) makes the card 84px, matching
+  01 A; the earlier 32px line height made it 88px.
+- **Destructive focus (R2-0).** The destructive button variant no longer carries
+  `focus-visible:ring-destructive/20`; the base 2px `--primary-border` ring (4.99:1) now applies
+  to confirm buttons too. The badge variant keeps the class because badges are not focusable.
+- **Out-of-range page (R2-7).** An empty page with no filters says "This page has no campaigns"
+  with a "Back to page 1" link; the filtered copy and `Clear filters` only appear when a filter
+  is active.
+- **Collapse plumbing (R2-2, accepted).** `SidebarTrigger` remains for the mobile sheet and the
+  Ctrl/⌘+B shortcut and `sidebar_state` cookie are left alone. With a static sidebar the desktop
+  trigger and shortcut have no visible effect; a stale `false` cookie can still move `NavUser`'s
+  menu placement. Revisit when the 390 layout lands.
+- **Connections pills vs needs-attention (phase 5 note).** Deactivated and Disconnected render
+  neutral pills but count as "needs attention", and an Active connection with an exception is
+  still green. The Verified/Failed derivation in phase 5 must reconcile the pill and the count.

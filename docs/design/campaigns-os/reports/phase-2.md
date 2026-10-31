@@ -383,3 +383,65 @@ click-tested.
 - **`--ring-halo`** is now unused by focus treatments; it remains a decoration token.
 - **`local:devtest`** keeps `/home/cua/work/campaigns-phase2` for the next phase; the source
   tarball was deleted on the host and in the Space.
+
+## Round 2 — review of the fix round
+
+The second review blocked on R2-1 (the static sidebar scrolled with the page and lost its right
+border) and the R2-0 residual (the destructive variant's red 20% ring won over the visible ring).
+Both are fixed, along with R2-3..7. R2-2 was accepted as-is.
+
+### Fixes
+
+- **R2-1** — the `collapsible="none"` branch is `sticky top-0 h-svh border-r
+  border-sidebar-border`. Measured on a 25-row list: document 1348px against an 813px viewport;
+  after scrolling to the bottom (`scrollY 535`) the sidebar top is 0, its height is 813, the
+  user block is inside the viewport, and the computed right border is `1px rgb(228, 228, 231)`.
+- **R2-0** — `focus-visible:ring-destructive/20` is gone from the destructive Button. A
+  keyboard Tab to `/settings/profile`'s `Delete account` now computes
+  `rgb(101, 82, 255) 0 0 0 2px` (the 2px `--primary-border` ring, 4.99:1) with a `#6552ff`
+  border, instead of the 1.37:1 red ring.
+- **R2-3** — the info pill has `--badge-info-border` (`#b8afff`, dark `#8b7dff`); `--ring` no
+  longer controls it. The dark border is 4.46:1 on the dark info fill and 6.10:1 on the page.
+- **R2-4** — `--text-*` tokens now carry no line height; every call site sets `leading-*`
+  explicitly. The team card measures **50px** (was 54px, board 50px) and the user block is back
+  to its 31px content height.
+- **R2-5** — the wordmark is `text-brand` (14px) with `font-bold`, measured 14px/700 in the
+  render; the settings passkey chip is back to `text-caption` (11px), and avatar initials use
+  the same 11px caption.
+- **R2-6** — `text-stat leading-7` (24/28) makes the stat card **84px**, matching 01 A (was
+  88px with the 32px line height).
+- **R2-7** — an out-of-range page with no filters now says "This page has no campaigns" with a
+  "Back to page 1" link; "No campaigns match your filters" and `Clear filters` only appear
+  when a filter is active. Verified with 25 campaigns and `?page=2`.
+- **R2-2 (accepted)** — `SidebarTrigger` stays for the mobile sheet; the shortcut and
+  `sidebar_state` cookie are untouched. Noted in the spec Amendments as a known dead desktop
+  affordance until phase 6.
+
+### Verification (round 2)
+
+Same Space (`local:devtest`), same checks. Final tree after removing the temporary seeder,
+preview route and SQLite database:
+
+```
+$ npm run build            BUILD_EXIT=0
+$ npm run types:check      TYPES_EXIT=0
+$ npm run check            CHECK_EXIT=0   All 146 files formatted, 129 lint-clean
+$ php artisan test         TEST_EXIT=0    560 passed (2276 assertions)
+$ pint --test ...          PINT_EXIT=0    PASS 2 files
+$ phpstan analyse ...      PHPSTAN_EXIT=0 [OK] No errors
+```
+
+Render measurements (headless Chromium, 1280×900, 25 seeded campaigns):
+
+| Item | Board | Render |
+| --- | --- | --- |
+| Sidebar top after scrolling 535px | pinned | 0 |
+| Sidebar height | viewport | 813 (viewport 813) |
+| Sidebar right border | 1px `#EAEAEA` | 1px `rgb(228,228,231)` |
+| Team card height | 50px | 50px |
+| Stat card height | 84px | 84px |
+| Wordmark | 14px/700 | 14px/700 |
+| Destructive focus ring | 3:1 visible | 2px `#6552ff` (4.99:1) |
+
+Screenshots: the 25-row list at the top and scrolled (Settings/user still pinned), the
+out-of-range page, the dashboard stat cards, and the focused destructive button.
