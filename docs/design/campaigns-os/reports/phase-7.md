@@ -1,148 +1,176 @@
-# Phase 7 — sweep, proof and the PR description (partial)
+# Phase 7 — sweep, proof and the PR description
 
 Worktree `/home/azri/projects/contactout/campaigns-design`, branch `design/campaigns-os`.
-This run started from `04db541` and was killed by the host's OOM killer twice while the
-Space ran the check set, so the phase is **partially done and explicitly unfinished**.
-Nothing below is marked proven without the measurement or render behind it.
+The first run of this phase was killed twice by the host OOM killer and left the phase
+partially proven; this run finished it. Every claim below has a measurement or a render
+behind it, and the two items that cannot be proved are named as trade-offs, not fixed.
+
+## Provenance
+
+- **Checks and renders:** `git archive 086fc59` extracted into a fresh Space tree
+  (`/home/cua/work/campaigns-final`), with `node_modules/`, `vendor/` and `.env` copied from
+  the previous run's `/home/cua/work/campaigns-p7`. The committed tree has no
+  `__preview-login` route; a Space-only one was appended to `routes/web.php` (never in the
+  host tree, never committed), together with an `?as=<user id>` parameter so the Quiet Studio
+  empty state could be rendered as its owner.
+- **Browser:** Chromium 156 headless over CDP, viewport 1280×900 or 390×844,
+  `deviceScaleFactor: 1`, real `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent`.
+  Harness in `/tmp/p7/` in the Space; screenshots in `reports/phase-7/`.
+- **Sweep:** the dead-code removals and the token edits were made **after** the renders. They
+  remove files no route imports and tokens no class references, and were re-verified with a
+  green `build`, `types:check` and `check` on the final commit (see Checks). The PHP bytes are
+  unchanged by the sweep, so the PHP checks below apply to the final tree too.
 
 ## Proven (measured, screenshot kept)
 
-Provenance for every render in this section: `HEAD` archived with
-`git archive 04db541` and extracted into a fresh Space tree
-(`/home/cua/work/campaigns-p7`) with `node_modules/`, `vendor/`, `.env` and the phase-6
-fixture `database/sqlite` moved over from `/home/cua/work/campaigns-phase6`. A
-Space-only `/__preview-login?to=…` route was appended to `routes/web.php` for the renders
-(never in the host tree, never committed). Chromium 156 headless over CDP, viewport
-1280×900 or 390×844, `deviceScaleFactor: 1`, real `Input.dispatchMouseEvent` taps and
-`Input.dispatchKeyEvent` keys. Screenshots are in
-`docs/design/campaigns-os/reports/phase-7/`.
-
-Builds used: **build A** = the phase-6 HEAD tree (no phase-7 change) → `BUILD_EXIT=0`,
-`✓ built in 3.27s`; **build B** = one temporary instrumentation patch (not committed);
-**build C** = build A plus the six fix files in §"Fixed in this phase" → `BUILD_EXIT=0`.
-
 | # | Item | Measured | Evidence |
 | --- | --- | --- | --- |
-| 1 | P0-1 contacts grid scrolls at 1280 | Scroll container `scrollHeight 860 / clientHeight 735`; scrolled to `scrollTop 125` = its maximum. 25 rows. Last row `noah.novak21@example.com` is 33px tall at y 831–864; `Showing 1–25 of 1,284` at y 872–892 and `Previous` at y 868–896 — below the last row, not painted over. The `All contacts / APAC founders / Fintech CFOs / Webinar Oct 8 / + Add list` strip is visible in the render at the same height. Card y 128–900. | `p7-01-contacts-1280-scrolled.png` (build A) |
-| 2 | P1-1 template names left-aligned at the board's x | Board scan (`07-templates-list-a-1280.jpg`, icon/stem columns y 175–192): icon box starts x 257, name starts **x 285** — a 12px gap, not 8. Phase-6 build measured name x **281** (row `gap-2`). Changed to `lg:gap-3`; re-measured **name x 285**, icon 257–273, link 285–1103, name span 285–456 (20px tall), `justify-content: flex-start`. | `p7-02-templates-1280.png` (build C) |
-| 3 | P1-2 threaded checkbox toggles exactly once per label tap | **390:** label 358×44 at x 16, 44×44 wrapper, 16×16 box at x 30; one real tap at the text (156, 737) → `aria-checked` false → **true**; a second tap → **false**. **1280:** label 658×20 at x 581, box 16×16 flush at x 581 (the field edge, no indent); tap at (721, 792) → false → **true** → **false**. | `p7-03-threaded-390.png`, `p7-03-threaded-1280.png` (build A) |
-| 4a | P2-5 dialog semantics at 390 | `role="dialog"`, **`aria-modal` was null** (see §Fixed), title `Edit step · Day 1`, box 390×844 at (0, 0), `aria-describedby` null, body `overflow: hidden`, `window.scrollTo(0, 400)` left `scrollY 0`, and 14 consecutive Tab presses from `Cancel` stayed inside the dialog (Cancel → Save → Apply template → subject → B → I → U → bullet → numbered → Link → Insert placeholder → Insert signature → body → `{{name}}` → `{{email}}`), every stop `inDialog: true`; the covered body siblings carry `aria-hidden="true"`. | `p7-04-editor-dialog-390.png` (build A, pre-fix) |
-| 4b | P2-5 inline pane at `lg` unchanged | No dialog in the DOM; root `display: grid` with `grid-template-columns: 300px 692px`; sequence list 300×775 at x 240, pane 692×775 at x 564, footer 690×57 visible, mobile head row `display: none`. | `p7-04-editor-inline-1280.png` (build A) |
-| 4c | Discard guard fires only on real edits | On build A, Escape and Cancel opened `Discard your changes?` **with no edits made** (see §Fixed). On build C, Escape and Cancel with no edits close the editor directly (`dialogs: 0`, `editorOpen: false`). On build A, editing the subject and pressing Escape opened `Discard your changes?` (title, `Cancel` / `Discard changes` buttons), kept the value (`Quixck idea for {{company}}`), and `Discard changes` then closed the editor; **that edited path was not re-measured on build C**. | `p7-04-editor-discard-guard-390.png` (build A — shows the bug, not the fix) |
+| 1 | P0-1 contacts grid scrolls at 1280 | Scroll container `scrollHeight 860 / clientHeight 735`; scrolled to `scrollTop 125`, its maximum. 25 rows. Last row `noah.novak21@example.com` is 33px tall at y 831–864; `Showing 1–25 of 1,284` at y 872–892 and `Previous` at y 868–896, below the last row and not painted over. The `All contacts / APAC founders 428 / …` strip is visible at y 872–892. | `p7-01-contacts-1280-scrolled.png` |
+| 2 | P1-1 template names left-aligned at the board's x | Icon 16×16 at x 257–273; name span at **x 285**, 171×20, link `285–1103`, `justify-content: flex-start`. The board's 12px icon-to-name gap. | `p7-02-templates-1280.png` |
+| 3 | P1-2 threaded checkbox toggles exactly once per label tap | **390:** label 358×44 at x 16, 16×16 box inside a 44×44 wrapper at x 16; one real tap at the text (156, 737) → `aria-checked` false → **true**; a second tap → **false**. **1280:** label 658×20 at x 581, box 16×16 flush at x 581 (the field edge, no indent); tap at (721, 792) → false → **true** → **false**. | `p7-03-threaded-390.png`, `p7-03-threaded-1280.png` |
+| 4a | P2-5 dialog semantics at 390 | `role="dialog"`, **`aria-modal="true"`**, title `Edit step · Day 1`, box 390×844 at (0, 0), body `overflow: hidden`, `window.scrollTo(0, 400)` left `scrollY 0`, 14 consecutive Tab presses from the initial `Cancel` stayed inside the dialog (Cancel → Save → Apply template → subject → B → I → U → bullet → numbered → Link → Insert placeholder → Insert signature → body → `{{name}}` → `{{email}}`), every stop `inDialog: true`; the covered body siblings carry `aria-hidden="true"`. | `p7-04-editor-dialog-390.png` |
+| 4b | P2-5 inline pane at `lg` unchanged | No dialog in the DOM; root `display: grid`, `grid-template-columns: 300px 692px`; list 300×775 at x 240, pane 692×775 at x 564, footer 690×57 at y 833, mobile head row `display: none`. | `p7-04-editor-inline-1280.png` |
+| 4c | Discard guard fires only on real edits | Escape and Cancel with no edits close the editor directly (`dialogs: 0`, `editorOpen: false`). Editing the subject and pressing Escape opened `Discard your changes?` with the value still `Quixck idea for {{company}}`; `Cancel` kept the editor open with the value intact. | `p7-04-editor-discard-guard-390.png` |
+| 5 | P2-1 390 sticky bars clear the pagination row | **Contacts:** at max scroll (`scrollY 1015`), `1–25 of 1,284` at y 681–697, `Previous` 667–711, bar top **723** (65px tall). **Recipients:** at max scroll (`1038`), `Showing 1–25 of 312` at 666–682, `Previous` 652–696, bar top **723**. Both bars sit above the page content with the pagination row fully visible. | `p7-05-contacts-selected-390.png`, `p7-05-recipients-selected-390.png` |
+| 6 | P2-6 signature aligned to its column header | Header cell x 831 with 16px padding → text starts **847**; trigger (cell `pl-4`, trigger `px-0`) starts **847**, 32px tall, text `Team default`; cell right edge 940. | `p7-06-connections-1280.png` |
+| 7 | P2-2 `/settings/security` marks Settings and More current at 390 | More trigger colour `rgb(50, 34, 177)` (primary) against a first-tab `rgb(113, 113, 122)`; the More sheet's `Settings` row has `aria-current="page"`, `bg-accent`, `text-primary`, 44px tall. | `p7-07-settings-security-390.png` |
+| 8 | P2-3 emulated safe-area inset | `Emulation.setSafeAreaInsetsOverride` bottom 34 → `env(safe-area-inset-bottom)` = **34px**; tab bar `padding-bottom 34px`, total 91px (1px border + 56 + 34), tab list 754–810; the selection bar bottom is 754, gap to the tab list 0. | `p7-08-safe-area-390.png`, `p7-08-safe-area-selection-390.png` |
+| 9 | One dark render of a changed screen | `<html class="dark">`, body `oklch(0.145 0 0)` = `#0a0a0a`, 25 contact rows, status pills and the tab bar legible. | `p7-09-contacts-390-dark.png` |
 
-Two corrections to the phase-6 report that the renders forced:
-
-- The phase-6 claim that the 390 editor "gains role=dialog, aria-modal, …" was **false**:
-  Radix/shadcn never set `aria-modal`, and it measured `null`. Fixed in the primitives.
-- The phase-6 claim that Escape/Cancel are guarded by the discard dialog hid the opposite
-  bug: the guard fired even when nothing had been edited.
-
-## Fixed in this phase (six files, type-checked and linted, **not re-rendered**)
-
-| File | Change | Why |
-| --- | --- | --- |
-| `resources/js/components/ui/dialog.tsx`, `ui/sheet.tsx` | `aria-modal="true"` on `DialogPrimitive.Content` / `SheetPrimitive.Content` | Measured null; an attribute on the stock primitive, no public API change. Applies to every dialog and sheet, which are all modal. |
-| `resources/js/components/templates/rich-text-editor.tsx` | New optional `onCanonical(html)` prop; fires once per editor instance with `editor.getHTML()` | TipTap rewrites the stored markup it is given (`<br />` → `<br>`), so a form comparing raw strings reads a freshly opened document as edited. |
-| `resources/js/components/campaigns/step-form.tsx`, `pages/templates/show.tsx` | A `savedBody`/`saved` body baseline set from `onCanonical`, used by `isDirty` instead of the raw prop | Root cause of the false "Discard your changes?" prompt: measured body 351 chars after mount against the stored 353 (`<br />` vs `<br>`). |
-| `resources/js/pages/templates/index.tsx` | `lg:gap-3` on the template row | Name x 281 → 285, matching the board's 12px icon-to-name gap. |
-
-Nothing else was changed. `git status` was clean before these edits.
-
-## Decisions recorded
-
-1. **The 390 editor remounts when the inline pane opens across the 1024px line; unsaved
-   edits are lost.** This is a trade-off, deliberately not guarded in this run. The cause
-   is `isMobile ? <Dialog>…</Dialog> : editorPane` in `sequence-editor.tsx`: the two
-   branches are different parents, so `StepForm` (keyed by step id) remounts and its
-   field state is re-seeded from the saved step. Reaching it needs a window resize across
-   1024 or a rotation that crosses it (a phone's 390→844 does not). Guarding it means
-   lifting the form state above the breakpoint branch, which is a refactor of
-   `step-form.tsx`, not a one-liner; it is recorded as a gap rather than rushed.
-   *Unmeasured:* the loss was not re-rendered after the six fixes.
-2. **The shared Sheet/Dialog close stays a bare 16px ✕.** Measured target 16×16 in an
-   unpadded `Primitive.Close` (`ui/sheet.tsx`, `ui/dialog.tsx`), below the 24×24 WCAG 2.5.8
-   minimum. Left as-is per the brief and recorded as a waiver: it is a secondary
-   affordance (Escape and Cancel/Close are present, and the step editor hides it), but it
-   is the only pointer route out of a sheet for a user who cannot see the small target.
+Two corrections to the phase-6 report survive from the first run: the claim that the 390
+editor already had `aria-modal` was **false** (measured `null`; now fixed in the primitives),
+and the claim that Escape/Cancel were guarded hid the opposite bug (the guard fired with no
+edits; now fixed with a canonical-body baseline).
 
 ## Checks
 
-```
-# build A, phase-6 HEAD tree (before the six fix files)
-$ npm run build            BUILD_EXIT=0    ✓ built in 3.27s
+Six checks, one at a time, on the committed tree `086fc59` extracted into the Space:
 
-# build C, with the six fix files — run in the Space /home/cua/work/campaigns-p7
-$ npm run check            CHECK_EXIT=0    All 158 files are correctly formatted
-                                           Found no warnings or lint errors in 143 files
-$ npm run types:check      TSC_EXIT=0      tsc --noEmit
-```
+| Check | Result |
+| --- | --- |
+| `npm run build` | `BUILD_EXIT=0`, `✓ built in 3.63s` |
+| `npm run types:check` | `TSC_EXIT=0`, `tsc --noEmit` clean |
+| `npm run check` | `CHECK_EXIT=0`, **158 files** formatted, no warnings in **143** lint files |
+| `php artisan test` | `TEST_EXIT=0`, **577 passed** (2,568 assertions) in 8.65s |
+| `pint --test` | `PINT_EXIT=0`, **367 files** PASS |
+| `phpstan analyse` (level 7) | `PHPSTAN_EXIT=0`, `[OK] No errors` |
 
-`npm run check` and `types:check` ran on bytes identical to the host tree (md5 of all six
-files compared both ways). **Build C** was run for the renders and reports `BUILD_EXIT=0`;
-its timing was not captured.
+After the sweep removals the checks were repeated on the final bytes: build `✓ built in
+2.86s`, `types:check` exit 0, `check` exit 0 with **151 files** formatted and no warnings in
+**136** lint files (twelve source files gone). PHP is untouched by the sweep, so `artisan
+test`, `pint` and `phpstan` results carry over unchanged.
 
-**Not run this phase:** `php artisan test`, `pint --test`, `phpstan analyse`. No PHP class
-changed (the only PHP change in the Space was the temporary preview route, never in the
-host tree).
+The Space's PHP is 8.4.27; the suite ran against the `:memory:` SQLite the repo's
+`phpunit.xml` forces. The database checks are not a MySQL run.
 
-## Not done — the outstanding proof list
+## Dead code removed
 
-These are the phase-6 items and sweep tasks with **no** render or measurement behind them.
-Nothing here may be reported as fixed until it is.
+Each was grepped for importers before removal (zero in `resources/js`, `tests` and the PHP
+views). This branch added `step-form-modal`, dead once the editor moved into
+`sequence-editor`; the rest is starter scaffolding the redesign superseded.
 
-1. **Item 5 — 390 sticky selection bars.** Contacts and recipients with one row selected:
-   the `Showing … / Previous / Next` row must sit above the bar. Phase-6 measured the bar
-   at 65px with 68px reserved; not verified now.
-2. **Item 6 — connections signature at 1280.** Needs `Signature` header x and trigger/value
-   x to both read 847. Not rendered.
-3. **Item 7 — `/settings/security` at 390.** `More` tab active and the sheet's `Settings`
-   row current. Not rendered.
-4. **Item 8 — emulated safe-area inset.** Chromium 156 exposes
-   `Emulation.setSafeAreaInsetsOverride`, so this is testable: assert the tab bar's
-   resolved bottom padding is non-zero with `viewport-fit=cover`. Not done.
-5. **Item 9 — one dark render** of a screen phase 6 changed. Not done.
-6. **Item 4 re-prove:** the `aria-modal` fix and the dirty-baseline fix were not re-rendered.
-   Re-run: the dialog's `aria-modal` must be `"true"`; Escape and Cancel with no edits must
-   close; an edited form must still be guarded. (Escape/Cancel-close with no edits **was**
-   re-measured on build C through the probe; the `aria-modal` attribute and the
-   edited-form guard were not.)
-7. **Item 1 re-render on the final tree**, plus the 390 contacts scroll equivalent.
-8. **Sweep, entirely undone:** dead-code usage greps and removal, the final 1280/390 board
-   re-render comparison, `git log` message/repo-hygiene review (temp scripts, tarballs,
-   fixture databases, Space artefacts), the hex-outside-`app.css` grep, the hardcoded-demo
-   number grep, the `TODO` audit and the `.dark`-covers-`:root` token audit.
-9. **`docs/design/campaigns-os/pr.md`** — not written. The brief for it stands: what the
-   branch does, board → files table for all 20+ screens, deviations and accessibility
-   waivers with numbers, the backend/data changes (dashboard aggregates, connections cap
-   counter, per-step aggregates, shared status mapping, payload additions) with costs, what
-   was verified and how, and the remaining gaps.
+| File | Why |
+| --- | --- |
+| `components/campaigns/step-form-modal.tsx` | The 390 editor is now a `Dialog` inside `sequence-editor.tsx`; the old wrapper has no importer. |
+| `components/app-header.tsx`, `layouts/app/app-header-layout.tsx` | The static sidebar replaced the header layout; the layout was its only consumer. |
+| `components/ui/navigation-menu.tsx` | Only `app-header` imported it. |
+| `components/pagination.tsx` | Every list renders its own pagination; no importer. |
+| `components/nav-footer.tsx` | Old sidebar footer; no importer. |
+| `components/ui/collapsible.tsx`, `ui/icon.tsx`, `ui/placeholder-pattern.tsx`, `ui/toggle-group.tsx` | Unused shadcn primitives, no importer. |
+| `layouts/auth/auth-card-layout.tsx`, `auth-split-layout.tsx` | Auth pages use `auth-simple-layout`; no importer. |
+| Tokens `--chart-1…5`, `--ring-halo` (+ their `@theme` mappings) | Zero references in `resources/js`, `views` or `app`; no charts on any board. |
 
-## Space state for the next run
+Kept on purpose: `--type-body` and `--radius` are theme-invariant and live only in `:root`;
+`.dark` still defines **44 of the 46** remaining tokens and the two absent ones resolve by
+inheritance on the same element. All other exported types with no external consumer
+(`StatDelta`, `StepFormState`, `resolveContactColumns`) are used inside their own module.
 
-- Tree: `/home/cua/work/campaigns-p7` (HEAD archive, deps and fixture DB), Space only.
-- A `/__preview-login` route is appended to that tree's `routes/web.php` and **not** in the
-  host tree; remove it before any `pint`/`phpstan`/`artisan test` run so those checks see
-  the committed bytes.
-- `php artisan serve` on `127.0.0.1:8000` and headless Chromium with
-  `--remote-debugging-port=9222` were used for the renders and were then stopped to free
-  the Space (ports 8000 and 9222 verified free). Start both again before rendering:
-  `setsid nohup php artisan serve --host=127.0.0.1 --port=8000 > /tmp/p7-serve.log 2>&1 &`
-  and
-  `setsid nohup chromium --headless=new --remote-debugging-port=9222 --no-sandbox --disable-dev-shm-usage --disable-gpu --hide-scrollbars --user-data-dir=/tmp/p7-chrome --window-size=1280,900 about:blank &`.
-- Harness: `/tmp/p7/cdp.mjs` (connect, viewport, goto, waitFor, shot, clickAt, key) and
-  `proof1..4.mjs`, `probe-dirty.mjs`, `probe-state.mjs`. Screenshots in `/tmp/p7/shots/`,
-  already copied into this report directory.
-- Fixture note: the 25th contacts row is `noah.novak21@example.com`, not the
-  `mei.patel18@example.com` the phase-6 report expected; `mei.patel18` is on the same page,
-  mid-list. Data ordering, not a layout difference.
+## Sweep audits
 
-## Remaining gaps carried from phase 6
+- **Hex outside `resources/css/app.css`:** 0. `resources/views` and `resources/js` contain no
+  hex colours.
+- **Hardcoded demo numbers/names:** none. The only literal addresses are form placeholders
+  (`ada@example.com`, `smtp.example.com`) and none of the boards' figures are in code.
+- **`TODO`/`FIXME`/`XXX`/`HACK`:** 0 across `resources/js`, `resources/views`, `app`, `routes`,
+  `database`.
+- **Repo hygiene:** 0 tracked tarballs, fixture databases, logs, `.bak`/`.orig`, temp
+  directories, `__preview` files or Space artefacts. `docs/design/**` contains only the spec,
+  `phases.md`, the prompts and the reports (including their PNG evidence).
+- **Git log:** every commit is `type(scope): subject`, one concern per commit, nothing
+  squashed or rewritten. The branch was 54 commits ahead of `origin/design/campaigns-os` at the start of the
+  sweep and was not pushed.
 
-Unchanged by this run; see `reports/phase-6.md`: the sheet trigger and the shifted 390
-title, 44px controls against the boards' 28–32, the 16px checkbox box, `Sent today` as
-text without a meter, the connection-card height, the recipients bar wording, `+ Recipients`
-on a Draft head, no recipients filter, the template editor having no signature action,
-placeholder fallbacks at 390, `Created …` in the campaign subline, data-driven ordering,
-the contacts pagination/select-all rows at 390, the step-editor body scroll, per-breakpoint
-stat labels, the 57px bottom bar, the contacts flowing page, and the two remaining
-empty-state labels. New in this phase: the 1024 remount trade-off and the 16×16 close.
+## Final board comparison
+
+All 11 screens (12 boards, `02` and `03` have a/b variants) were re-rendered at 1280×900 and
+390×844 from the final code: `p7-final-<screen>-1280.png` and `-390.png` in this directory.
+Pitches below were read from the DOM on the fresh render, not from the boards' screenshots.
+
+| Board | Screen | Board | Render | Verdict |
+| --- | --- | --- | --- | --- |
+| 00 | Sidebar / tab bar | 5 slots; 240px sidebar; 56px + 1px bar | 5 slots; 240px; 56px + 1px | matches |
+| 01 | Dashboard | 4 stat cards, checklist, jump rows | same, 2×2 at 390 | matches (figures are fixture data) |
+| 02 | Campaigns list, 1280 | row pitch 44 | **44** (6 rows) | matches |
+| 02 | Campaigns list, 390 | row pitch 68 | **69** (68 + 1px divider) | 1px over, recorded |
+| 03 | Campaign detail · Steps, 1280 | step rows 44 | 44 | matches |
+| 03 | Campaign detail · Steps, 390 | 44px tabs/rows | 44 | matches |
+| 04 | Recipients, 1280 | 33px table rows | 33 (phase-3 measurement, code unchanged) | matches |
+| 04 | Recipients, 390 | row pitch 56 | **57** | 1px over, recorded |
+| 05 | Step editor, 1280 | card 700×761, footer 56 | pane 692×775, footer 690×57 | matches within the 24px padding |
+| 05 | Step editor, 390 | full-bleed sheet | 390×844 dialog, Cancel at top 6 | matches (now modal) |
+| 06 | Contacts grid, 1280 | 33px rows, 25 per page | **33**, 25 | matches |
+| 06 | Contacts grid, 390 | row pitch 56 | **57** | 1px over, recorded |
+| 07 | Templates list, 1280 | icon→name 12px, pitch 39 | name x 285, pitch **39** | matches |
+| 07 | Templates list, 390 | row pitch 55–56 | **55** | matches |
+| 08 | Template editor, 1280 | 2-pane, 39px chips | matches phase-5 geometry | matches |
+| 08 | Template editor, 390 | 44px chips beside fallbacks | 44px, fallback visible | deviation 5 |
+| 09 | Connections, 1280 | signature text x 847 | **847** | matches |
+| 09 | Connections, 390 | card ≈130px | 174px | 44px targets, deviation 1 |
+| 10 | Empty campaigns, 1280/390 | centred empty card + 2 CTAs | same | matches |
+| 11 | Start blocked, 1280/390 | red panel + reasons + disabled Start | 3 reasons, Start disabled, step 2 outlined | matches |
+
+No drift was found that is not already in the deviations or phase-6 gaps below. The only
+visual difference between the old phase-6 renders and these is the phase-7 fix set itself.
+
+## Decisions recorded
+
+1. **The 390 editor remounts across the 1024px line; unsaved edits are lost.** `isMobile ?
+   <Dialog>…</Dialog> : editorPane` are different parents, so `StepForm` (keyed by step id)
+   remounts and re-seeds from the saved step. Reaching it needs a resize across 1024 or a
+   rotation that crosses it. Guarding it means lifting the form state above the breakpoint
+   branch — a `step-form.tsx` refactor, not a one-liner — so it is a recorded gap. The dirty
+   baseline fix removed the false prompt; it does not survive a remount.
+2. **The shared Sheet/Dialog close stays a bare 16×16 ✕** (measured in the unpadded
+   `Primitive.Close`), below the 24×24 WCAG 2.5.8 minimum. Waived per the brief: it is a
+   secondary affordance (Escape and Cancel/Close are present, the step editor hides it), but
+   it is the only pointer route out of a sheet for a user who cannot see the small target.
+
+## Remaining gaps
+
+Carried from phase 6, unchanged by this run: the sheet trigger and the shifted 390 title,
+44px controls against the boards' 28–32, the 16px checkbox box, `Sent today` as text without
+a meter at 390, the connection-card height, the recipients bar wording, `+ Recipients` on a
+Draft head, no recipients filter, the template editor having no signature action, placeholder
+fallbacks at 390, `Created …` in the campaign subline, data-driven ordering, the contacts
+pagination/select-all rows at 390, the step-editor body scroll, per-breakpoint stat labels,
+the 57px bottom bar, the contacts flowing page, and the two remaining empty-state labels.
+
+New or still open in this phase:
+
+- **The 1024 remount trade-off** and the **16×16 close** above.
+- **Start blockers are UI-only:** `CampaignController::start` and `StartCampaign` do not check
+  the rules the disabled Start and the panel enforce.
+- **No index for the new aggregates.** The dashboard's 30-day email statement, the per-step
+  metrics and the connections cap query all scan by `campaign_id`/table; the measured costs are
+  in `reports/phase-2.md`, `phase-3.md` and `phase-5.md`, and the phase-5 covering index
+  (`mailer_connection_id, dispatched_at`, 8.81 ms → 1.53 ms at 50k rows) is not migrated.
+- **Not rendered:** the MySQL plans (SQLite only) and the 1024-cross remount itself.
+
+## Space state after this run
+
+- `/home/cua/work/campaigns-final` holds `086fc59` + the Space-only preview route, with
+  `node_modules/`, `vendor/` and the phase-6 fixture database. `/home/cua/work/campaigns-p7`
+  remains from the first run.
+- `php artisan serve` on `127.0.0.1:8000` and headless Chromium on `127.0.0.1:9222` were
+  stopped after the renders (ports verified free).
+- The `__preview-login` route is Space-only; the host tree and every commit are clean of it.
