@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import StepForm from '@/components/campaigns/step-form';
 import ConfirmDialog from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { destroy as destroyStep } from '@/routes/campaigns/steps';
 import type {
@@ -50,6 +52,7 @@ export default function SequenceEditor({
     const slug = currentTeam?.slug ?? '';
     const activeStep = steps.find((step) => step.id === activeStepId) ?? null;
 
+    const isMobile = useIsMobile();
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const mobileHeadingRef = useRef<HTMLHeadingElement | null>(null);
     const dirtyRef = useRef(false);
@@ -126,6 +129,162 @@ export default function SequenceEditor({
         });
     };
 
+    const editorTitle = activeStep
+        ? `Edit step · Day ${activeStep.day ?? 0}`
+        : 'New step';
+
+    /**
+     * The editor pane: the right-hand half of the 1280 two-pane editor, and the
+     * whole screen below lg.
+     *
+     * At 390 it used to be a plain `fixed inset-0` div, which left the page under
+     * it focusable (Tab reached the tab bar and the head buttons) and readable to
+     * a screen reader, with the body still scrolling behind it. It is the content
+     * of a Radix `Dialog` there, so the primitive supplies role="dialog",
+     * aria-modal, focus containment, the body scroll lock and Escape, and the
+     * covered page is inert.
+     */
+    const editorPane = (
+        <div
+            data-test="campaign-step-editor-pane"
+            className={cn(
+                'flex min-w-0 flex-col bg-background',
+                isMobile
+                    ? 'min-h-0 flex-1 overflow-hidden'
+                    : 'self-start overflow-visible rounded-lg border bg-card',
+            )}
+        >
+            <div className="hidden items-start justify-between gap-4 px-4 pt-4 pb-3 lg:flex">
+                <div className="min-w-0">
+                    <h2
+                        ref={headingRef}
+                        tabIndex={-1}
+                        className="text-h3 leading-6 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
+                    >
+                        {activeStep
+                            ? `Edit step · Day ${activeStep.day ?? 0}`
+                            : 'New step'}
+                    </h2>
+                    <p className="text-body leading-5 text-muted-foreground">
+                        {campaignName}
+                    </p>
+                </div>
+                <kbd className="text-label leading-4 font-medium text-muted-foreground">
+                    Esc
+                </kbd>
+            </div>
+
+            <StepForm
+                key={activeStep?.id ?? 'new'}
+                campaignId={campaignId}
+                step={activeStep}
+                templates={templates}
+                signatures={signatures}
+                placeholders={placeholders}
+                onSuccess={onClose}
+                formClassName="flex min-h-0 flex-1 flex-col"
+                onDirtyChange={(isDirty) => {
+                    dirtyRef.current = isDirty;
+                    onDirtyChange?.(isDirty);
+                }}
+            >
+                {({ processing, fields }) => (
+                    <>
+                        {/* 390: the editor is the whole screen, with Cancel, the title and
+                Save in one head row and a full-width Delete step at the end. */}
+                        <div className="flex items-center gap-2 border-b px-2 py-1.5 lg:hidden">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                className="px-2 text-muted-foreground"
+                                onClick={() => requestAction(onClose)}
+                            >
+                                Cancel
+                            </Button>
+                            <div className="min-w-0 flex-1 text-center">
+                                <h2
+                                    ref={mobileHeadingRef}
+                                    tabIndex={-1}
+                                    className="truncate text-body leading-5 font-semibold outline-none"
+                                >
+                                    {activeStep
+                                        ? `Edit step · Day ${activeStep.day ?? 0}`
+                                        : 'New step'}
+                                </h2>
+                                <p className="truncate text-label leading-4 text-muted-foreground">
+                                    {campaignName}
+                                </p>
+                            </div>
+                            <Button
+                                type="submit"
+                                variant="ghost"
+                                disabled={processing}
+                                data-test="campaign-save-step-button-mobile"
+                                className="px-2 text-primary"
+                            >
+                                Save
+                            </Button>
+                        </div>
+
+                        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:flex-none lg:overflow-visible lg:border-t">
+                            {fields}
+                        </div>
+
+                        {activeStep && canUpdate ? (
+                            <div className="mt-auto border-t px-4 py-3 lg:hidden">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full justify-start text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                    onClick={deleteStep}
+                                    data-test="campaign-delete-step-button-mobile"
+                                >
+                                    <Trash2 /> Delete step
+                                </Button>
+                            </div>
+                        ) : null}
+
+                        <div
+                            data-test="campaign-step-editor-footer"
+                            className="hidden items-center justify-between gap-2 border-t px-4 py-3 lg:flex"
+                        >
+                            {activeStep && canUpdate ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                    onClick={deleteStep}
+                                    data-test="campaign-delete-step-button"
+                                >
+                                    <Trash2 /> Delete step
+                                </Button>
+                            ) : (
+                                <span />
+                            )}
+
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => requestAction(onClose)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={processing}
+                                    data-test="campaign-save-step-button"
+                                >
+                                    {activeStep ? 'Save step' : 'Add step'}
+                                </Button>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </StepForm>
+        </div>
+    );
+
     return (
         <div
             data-test="campaign-sequence-editor"
@@ -197,139 +356,30 @@ export default function SequenceEditor({
                 ) : null}
             </div>
 
-            <div
-                data-test="campaign-step-editor-pane"
-                className="fixed inset-0 z-50 flex min-w-0 flex-col overflow-y-auto bg-background lg:static lg:z-auto lg:self-start lg:overflow-visible lg:rounded-lg lg:border lg:bg-card"
-            >
-                <div className="hidden items-start justify-between gap-4 px-4 pt-4 pb-3 lg:flex">
-                    <div className="min-w-0">
-                        <h2
-                            ref={headingRef}
-                            tabIndex={-1}
-                            className="text-h3 leading-6 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
-                        >
-                            {activeStep
-                                ? `Edit step · Day ${activeStep.day ?? 0}`
-                                : 'New step'}
-                        </h2>
-                        <p className="text-body leading-5 text-muted-foreground">
-                            {campaignName}
-                        </p>
-                    </div>
-                    <kbd className="text-label leading-4 font-medium text-muted-foreground">
-                        Esc
-                    </kbd>
-                </div>
-
-                <StepForm
-                    key={activeStep?.id ?? 'new'}
-                    campaignId={campaignId}
-                    step={activeStep}
-                    templates={templates}
-                    signatures={signatures}
-                    placeholders={placeholders}
-                    onSuccess={onClose}
-                    formClassName="flex min-h-0 flex-1 flex-col"
-                    onDirtyChange={(isDirty) => {
-                        dirtyRef.current = isDirty;
-                        onDirtyChange?.(isDirty);
+            {isMobile ? (
+                <Dialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            requestAction(onClose);
+                        }
                     }}
                 >
-                    {({ processing, fields }) => (
-                        <>
-                            {/* 390: the editor is the whole screen, with Cancel, the title and
-                    Save in one head row and a full-width Delete step at the end. */}
-                            <div className="flex items-center gap-2 border-b px-2 py-1.5 lg:hidden">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="px-2 text-muted-foreground"
-                                    onClick={() => requestAction(onClose)}
-                                >
-                                    Cancel
-                                </Button>
-                                <div className="min-w-0 flex-1 text-center">
-                                    <h2
-                                        ref={mobileHeadingRef}
-                                        tabIndex={-1}
-                                        className="truncate text-body leading-5 font-semibold outline-none"
-                                    >
-                                        {activeStep
-                                            ? `Edit step · Day ${activeStep.day ?? 0}`
-                                            : 'New step'}
-                                    </h2>
-                                    <p className="truncate text-label leading-4 text-muted-foreground">
-                                        {campaignName}
-                                    </p>
-                                </div>
-                                <Button
-                                    type="submit"
-                                    variant="ghost"
-                                    disabled={processing}
-                                    data-test="campaign-save-step-button-mobile"
-                                    className="px-2 text-primary"
-                                >
-                                    Save
-                                </Button>
-                            </div>
-
-                            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:flex-none lg:overflow-visible lg:border-t">
-                                {fields}
-                            </div>
-
-                            {activeStep && canUpdate ? (
-                                <div className="mt-auto border-t px-4 py-3 lg:hidden">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="w-full justify-start text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
-                                        onClick={deleteStep}
-                                        data-test="campaign-delete-step-button-mobile"
-                                    >
-                                        <Trash2 /> Delete step
-                                    </Button>
-                                </div>
-                            ) : null}
-
-                            <div
-                                data-test="campaign-step-editor-footer"
-                                className="hidden items-center justify-between gap-2 border-t px-4 py-3 lg:flex"
-                            >
-                                {activeStep && canUpdate ? (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
-                                        onClick={deleteStep}
-                                        data-test="campaign-delete-step-button"
-                                    >
-                                        <Trash2 /> Delete step
-                                    </Button>
-                                ) : (
-                                    <span />
-                                )}
-
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => requestAction(onClose)}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        disabled={processing}
-                                        data-test="campaign-save-step-button"
-                                    >
-                                        {activeStep ? 'Save step' : 'Add step'}
-                                    </Button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </StepForm>
-            </div>
+                    <DialogContent
+                        aria-describedby={undefined}
+                        // Full-screen sheet, not the centred card: the pane is the
+                        // whole viewport at 390, and its own head row carries Cancel.
+                        className="top-0 left-0 flex h-svh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-0 p-0 shadow-none sm:max-w-none [&>button]:hidden"
+                    >
+                        <DialogTitle className="sr-only">
+                            {editorTitle}
+                        </DialogTitle>
+                        {editorPane}
+                    </DialogContent>
+                </Dialog>
+            ) : (
+                editorPane
+            )}
 
             <ConfirmDialog
                 open={pendingAction !== null}

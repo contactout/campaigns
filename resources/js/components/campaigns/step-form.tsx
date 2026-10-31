@@ -163,11 +163,11 @@ export default function StepForm({
                                             Apply template
                                         </FormLabel>
                                         <Select
-                                            value={
-                                                templateId === ''
-                                                    ? undefined
-                                                    : templateId
-                                            }
+                                            // Controlled with the reset value: an
+                                            // uncontrolled Select keeps its last pick and
+                                            // cannot re-apply the same template. Radix
+                                            // shows the placeholder for an empty value.
+                                            value={templateId}
                                             onValueChange={applyTemplate}
                                         >
                                             <SelectTrigger
@@ -305,18 +305,10 @@ export default function StepForm({
                                     </div>
                                 </div>
 
-                                <label
-                                    className="flex min-h-11 cursor-pointer items-center gap-2 text-body leading-5"
-                                    onClick={() =>
-                                        setIsThreaded((current) => !current)
-                                    }
-                                >
-                                    <span
-                                        className="flex size-11 shrink-0 items-center justify-center"
-                                        onClick={(event) =>
-                                            event.stopPropagation()
-                                        }
-                                    >
+                                {/* Native label activation forwards the click to the
+                                    checkbox, so the label must not toggle it as well. */}
+                                <label className="flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11">
+                                    <span className="flex shrink-0 items-center justify-center max-lg:size-11">
                                         <Checkbox
                                             name="is_threaded"
                                             value="1"
