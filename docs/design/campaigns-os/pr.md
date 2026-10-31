@@ -37,6 +37,8 @@ a reviewer who has not seen either.
 - **Templates.** Folder groups, 39px rows at 1280 and 55px rows with an `Updated …` subline at
   390, and a template editor with a rich-text body, placeholder chips that keep their stored
   fallback visible, and a discard guard that clears once a save or a discard has been confirmed.
+  The guard is shared with the step editor and covers every Inertia visit, not only the
+  editor's own Cancel and back link: see "Unsaved drafts" below.
 - **Connections.** Cards at 390 and a table at 1280, derived status pills, a `Sent today /
   limit` counter, the signature clamp and a signature select aligned to its column.
 
@@ -61,13 +63,41 @@ a reviewer who has not seen either.
 Every board exists at both breakpoints; `02` and `03` have two desktop variants, and the
 branch follows variant `a`, the variant every phase report measures against.
 
+## Unsaved drafts
+
+Two editors hold work no server has seen: the template body and a campaign step. Three paths
+can take that work away, and one shared hook
+(`resources/js/hooks/use-unsaved-changes-guard.ts`, used by `pages/templates/show.tsx` and
+`components/campaigns/sequence-editor.tsx`) guards all three:
+
+- **Any Inertia visit** — a tab-bar item, a sidebar or More-sheet link, a head action that
+  redirects (`Duplicate`, `Archive`, `Stop`), the back chevron, the editor's own Cancel and Esc —
+  is cancelled at `inertia:before` and replayed once the user confirms. That includes visits the
+  editor did not start, which is what earlier rounds left unguarded.
+- **Browser Back** cannot be cancelled: Inertia's `popstate` handler restores the previous entry
+  with `preserveState: false` (a remount), and a capture-phase listener runs after it. Instead
+  the hook empties the current history entry and pushes a copy above it while the draft is dirty.
+  Back lands on the emptied entry, the one shape Inertia restores by URL alone, so the page stays
+  mounted and the draft survives the confirm.
+- **A closed tab or a hard reload** keeps the browser's own `beforeunload` prompt, which no dialog
+  can replace.
+
+Three things are deliberately let through, because they reload the same page and keep the draft:
+`<Form>` submits to the step endpoints (`/campaigns/{id}/steps…`, including reorder and delete),
+the placeholder rail's add/remove forms, and the editors' own saves. Proved by click-through at
+1280 and 390 (`reports/deep-review/`): a dirty edit followed by a tab-bar tap or Back raises the
+dialog, Cancel keeps the draft and stays put, Confirm leaves and the draft is gone, and hovering
+a nav link raises nothing.
+
 ## Deviations and accessibility waivers
 
 Each has a number behind it in the phase reports. The short list:
 
-1. **44px controls at 390, not the boards' 28–32px.** Buttons, inputs, select triggers,
-   campaign tabs and list chips get `max-lg:min-h-11`; the brief's touch-target rule outranks
-   the board. Cost: taller heads and cards (connection card 174 vs ≈130; head rows 44 vs 28).
+1. **44px controls at 390, not the boards' 28–32px.** Buttons, inputs, select triggers, the
+   six native `<select>`s (`components/native-select.tsx`, 44px and 16px text below `lg`, so iOS
+   does not zoom on focus), campaign tabs and list chips get `max-lg:min-h-11`; the brief's
+   touch-target rule outranks the board. Cost: taller heads and cards (connection card 174 vs
+   ≈130; head rows 44 vs 28).
 2. **The page-head sheet trigger shifts the 390 title to x 44.** It is the only route to the
    team switcher, user menu and sign-out. Accepted for this branch and recorded as a gap: the
    next pass should move those into the More sheet or give the trigger an avatar glyph.
@@ -102,8 +132,9 @@ Each has a number behind it in the phase reports. The short list:
 All plans are SQLite `EXPLAIN QUERY PLAN` from the Space; MySQL may choose differently. No
 migration is included, so nothing here adds an index.
 
-- **Dashboard aggregates** (`DashboardController`, 8 extra queries on top of the invitation
-  query and three `exists()` setup queries): one statement computes both 30-day windows for
+- **Dashboard aggregates** (`DashboardController`, 9 extra queries on top of the invitation
+  query and three `exists()` setup queries, not 8: `can.create` is `CampaignPolicy::create` →
+  `belongsToTeam`, a query of its own): one statement computes both 30-day windows for
   sent/open/reply and their deltas, so the three delta chips add zero queries; two campaign
   counts by status; four covering counts (contacts, lists, templates, folders); one connections
   read that also supplies the row and "needs attention" counts. The email statement is the
@@ -111,8 +142,10 @@ migration is included, so nothing here adds an index.
   applied per row and cost scales with the team's total sent mail. Nothing is cached.
 - **Campaign detail adds four queries** to `show()`: per-step metrics (grouped over the
   campaign's emails; no `(campaign_id, campaign_step_id)` index, so a temp B-tree), recipient
-  engagement for the 25 rows on the page, a do-not-contact recipient count, and the recipients
-  search only when `recipients_q` is set. Measured total: **39 queries** with a connection and
+  engagement for the 25 rows on the page, a do-not-contact recipient count, and the eager load
+  of the campaign's mailer connection. A recipients search adds **no** query of its own: it
+  narrows the message paginator's query, and runs the whole `show()` again as a new visit.
+  Measured total: **39 queries** with a connection and
   one page of three recipients, **34** with neither a connection nor recipients.
 - **Connections cap counter** reads `sent_count` inside the same UTC-day window that
   `SendEmail` resets it in, rather than the old `sentTodayByConnection()` aggregate. The
@@ -121,7 +154,12 @@ migration is included, so nothing here adds an index.
   no connections the query is skipped.
 - **One status derivation** (`app/Enums/MailerConnectionDisplayStatus.php`, new): the
   connection pill, the campaign start-block rule and `needsAttention()` all read
-  `displayStatus()`. `has_exception` left the payload, its type and the test.
+  `displayStatus()`. `has_exception` left the payload, its type and the test. Two payload
+  builders still ship the *stored* `status`/`status_label` alongside it —
+  `CampaignController::connectionSummary()` (the campaign detail's `connection`) and
+  `optionPayload()` (the campaign dialogs' connection list). Nothing renders either today, so
+  the screen has one derivation, but the payload carries two: dropping the stored fields is
+  recorded as a follow-up below rather than done here.
 - **Payload additions** (read-only, no write path changed): contacts index gains a `campaigns`
   array of the team's Draft/Stopped campaigns for "Add to campaign" (archived and running
   campaigns are excluded because adding to an Active campaign queues its first step
@@ -134,7 +172,16 @@ migration is included, so nothing here adds an index.
   current status, and the Add-to-campaign modal sends it. This closes the "add to a campaign
   that started while the dialog was open" race to the validation window; a few milliseconds
   between validation and insert remain (a `lockForUpdate` would close them and is not worth
-  it here).
+  it here). The request also authorises the bound campaign against the current team and answers
+  `404` for a foreign one, so the flag can no longer be used to read another team's campaign
+  *state* (a running campaign used to answer `302` with an error, a stopped one `404`).
+- **Tenancy hardening on the read paths:** the campaign detail's per-page contact lookup is now
+  scoped to the team (`forTeam()`), so a recipient row pointing at another team's contact
+  renders as a deleted contact instead of leaking its name and address; and the stored
+  `last_error_message` on a connection is capped at 300 characters and cut at the provider
+  echo (`… response: {json}`) before it reaches every team member. Every member seeing it is the
+  policy's intent (`MailerConnectionPolicy::update` is `belongsToTeam`), so the field is trimmed
+  rather than gated.
 - **Not done server-side:** `CampaignController::start`/`StartCampaign` still do not check the
   start-block rules themselves. The disabled Start and the panel are UI-only. Recorded as a
   gap.
@@ -152,14 +199,15 @@ and a clean `npm ci` installs 321 packages.
 ## What was verified, and how
 
 In an isolated cua Space (`local:devtest`), one command at a time. The six checks ran on
-`dc6dfbf` (pre-review); after the review fixes the affected checks ran again on `858a9e0`:
+`dc6dfbf` (pre-review); after the review fixes the affected checks ran again on `858a9e0`, and
+the whole set again after the deep-review round:
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | exit 0, `✓ built in 2.95s` |
+| `npm run build` | exit 0, `✓ built in 3.2s` |
 | `npm run types:check` | exit 0, `tsc --noEmit` clean |
-| `npm run check` | exit 0, **151 files** formatted, 136 lint files, no warnings |
-| `php artisan test` | exit 0, **577 passed** (2,568 assertions) in 8.84s |
+| `npm run check` | exit 0, **162 files** formatted, 145 lint files, no warnings |
+| `php artisan test` | exit 0, **603 passed** (2,927 assertions) in 8.3s |
 | `pint --test` | exit 0, **367 files** PASS |
 | `phpstan analyse` (level 7) | exit 0, `[OK] No errors` |
 
@@ -183,29 +231,81 @@ the contacts screen renders in dark at 390.
 
 ## Remaining gaps
 
-The full list with numbers is in `reports/phase-6.md` and `reports/phase-7.md`. The ones a
-reviewer should weigh:
+The full list with numbers is in `reports/phase-6.md`, `reports/phase-7.md` and the
+deep-review round there. The ones a reviewer should weigh:
 
 - **Start blockers are UI-only** (server-side check missing).
 - **The 390 step editor remounts across the 1024px line**, so an unsaved step edit is lost
   silently when the window is resized — and every common tablet rotation crosses it
-  (820↔1180, 834↔1194), so this is a real path, not an edge case. Guarding it means lifting the
-  form state above the breakpoint branch; recorded as a trade-off, not fixed.
+  (820↔1180, 834↔1194), so this is a real path, not an edge case. The navigation guard does not
+  help: a resize is not a visit, and the remounted form has no draft to restore. Fixing it means
+  lifting the form state above the breakpoint branch (follow-up R1).
+- **A confirmed discard mid-Back leaves one extra history entry** behind when the visit is
+  replayed (the hook pops its own entry first, so the stack is clean in the paths proved below;
+  a Forward after a cancelled Back reaches the emptied entry and needs one more press).
+- **No JS tests.** The branch ships no runner, so the guard, the bulk loop and the selection
+  pruning rest on click-throughs. `vitest` + React Testing Library is a follow-up, not a
+  dependency this branch adds.
+
+### Deferred, with the review's numbers
+
+- **A contacts bulk delete keeps running after you navigate away (P2-5).** Each step is
+  `async: true` so it cannot be cancelled, and each answers with a redirect to the contacts
+  index, so a user who starts a 25-row delete and opens Templates can be swapped back by the
+  next completed step. While the loop runs the page is not "dirty", so the draft guard does not
+  cover it; the fix is the server-side endpoint in R2.
+- **The bulk loop sends no partial headers (P2-6).** `only: []` is treated as a full visit, so
+  each of the N steps re-runs the whole contacts `index()`, including the `latest()` filesort
+  over the team's contacts. `only: ['flash']` would make them partial; R2 removes the loop.
+- **The Recipients tab reloads the whole campaign payload (P2-7), its search is two correlated
+  scans (P2-8), and the do-not-contact count re-joins every recipient (P2-10).** A search or a
+  page change re-runs all 39 queries of `show()`, five of them full scans of `campaign_emails`
+  and one a 50k-row join for 50k-recipient campaigns. The search is also not escaped, so `_`
+  matches every recipient. `only: ['recipients', 'recipientsSearch']`, `Inertia::optional()` for
+  the dialog payloads, an escaped `LIKE`, a join instead of a correlated `EXISTS`, and computing
+  the count only for Draft/Stopped campaigns are the fixes; all are deferred.
+- **No index for the new aggregates** (P2-9): `(campaign_id, dispatched_at, opened_at,
+  replied_at)` turns the dashboard's 30-day statement into an index-only range scan — measured
+  **8.81 ms at 50k `campaign_emails` rows without it, 1.53 ms with it**, and it also runs on
+  hover because the nav and tab bar prefetch Dashboard. A follow-up migration; this branch
+  ships none.
+- **A pre-existing recipients existence oracle survives** (P2-1's older sibling):
+  `BulkDestroyCampaignRecipientsRequest` validates `recipients.*` against the unscoped route
+  binding, so a member can learn whether a given recipient id belongs to another team's
+  campaign. It writes nothing and 404s at the controller, and the `idle_only` oracle that did
+  leak campaign *state* is closed on this branch.
 - **The 16×16 sheet close** (waiver above).
 - **The page-head sheet trigger on mobile** (deviation 2).
 - **The contacts column manager is desktop-only**, so adding a field at 390 has no route.
 - **No recipients status filter:** board 04's funnel has no payload or route behind it.
 - **No signature action in the template editor** (the template payload carries no signatures).
-- **Dark mode has been rendered on a subset of screens** (dashboard, campaigns, contacts), not
-  all eleven; the token set and the phase-2 dark pairs are shared.
-- **No index for the new aggregates** (`dispatched_at`, `(mailer_connection_id,
-  dispatched_at)`, `(campaign_id, campaign_step_id)`); costs above, a follow-up migration.
+- **Dark mode has been rendered on a subset of screens** (dashboard, campaigns, contacts,
+  templates), not all eleven; the token set and the phase-2 dark pairs are shared.
 - **Board-level differences kept on purpose:** 390 row pitches are 1px over the boards
   (contacts/recipients 57 vs 56, campaign 69 vs 68), the step editor body scrolls at 390, and
   the bottom bar is 57px rather than the board's 64px (which includes an 8px home indicator).
+  Campaign detail (board 11) keeps its stat cards and `Sends from …` row between the blocked
+  panel and Day 1 (**+167px** against the board), its head carries `+ Add recipients` beside
+  `⋯` (≈200px wider than the board's four buttons), Start is faded while blocked, and the
+  step-row mail tile is 22×22 against the board's 30×30.
 - **Data states:** the fixture's numbers differ from the boards' (1,105 sent vs 2,418, five
   do-not-contact contacts on the first page), so shapes match but figures do not. The empty
   (10) board is rendered from Quiet Studio's team, which has no campaigns; the blocked (11)
   board is a Draft campaign with an empty subject and a connection that failed verification.
+
+## Follow-ups this branch deliberately does not do
+
+- **R1 — one editor-state and guard layer.** Lift `StepForm`'s state into a `useStepDraft(step)`
+  hook above the `isMobile` branch, so the 390 dialog and the 1280 pane share one draft; it fixes
+  the 1024 remount (and would let the guard cover a resize).
+- **R2 — server-side bulk endpoints and partial reloads.** `contacts/bulk-destroy` and
+  `contacts/bulk-status` (one validated id array, one transaction, one flash) delete 150 lines of
+  client orchestration and remove P2-5 and P2-6; `only` + `Inertia::optional()` on the campaign
+  detail removes P2-7 and P2-10.
+- **R3 — stop editing shadcn in place.** Move the product variants out of `components/ui/*` into
+  wrappers (as `NativeSelect` already does), and make the row pitches, column widths and the 1024
+  line `@theme` tokens so the next shadcn upgrade is a no-op.
+- **Drop the stored status from the two connection payloads** (`connectionSummary()`,
+  `optionPayload()`), leaving `display_status` as the only status a client can read.
 
 The PR is not opened, pushed or created — this file is the description only.

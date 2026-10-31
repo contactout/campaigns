@@ -227,7 +227,7 @@ quoted from them.
 | 09 | Connections, 1280 | signature text x 847 | **847** | DOM | matches |
 | 09 | Connections, 390 | card ≈130px | 174px | visual + phase-6 measurement | 44px targets, deviation 1 |
 | 10 | Empty campaigns, 1280/390 | centred empty card + 2 CTAs | same | visual, real Quiet Studio state | matches |
-| 11 | Start blocked, 1280/390 | red panel + reasons + disabled Start | 3 reasons, Start faded at 1280, step 2 outlined | visual | matches |
+| 11 | Start blocked, 1280/390 | red panel + reasons + disabled Start | 3 reasons, Start faded at 1280, step 2 outlined | visual | matches the panel; the stat cards + `Sends from …` row are **+167px** below the board's Day 1, and the head carries `+ Add recipients` (≈200px wider). Both are listed as deviations in the PR body; Start faded is the intended affordance |
 
 No drift was found in the 22 renders that is not already in the deviations or the phase-6
 gaps below. The contacts 1280 render in that set is unscrolled and so cannot show the header
@@ -287,3 +287,93 @@ New or still open in this phase:
   edit in its body. It was restored afterwards — the placeholder is `{{first_name}}` again and
   the `<br />` is back — but TipTap re-serialised the paragraph, so the stored body is 355
   characters against the pre-test 353. Future renders show the correct text.
+
+## Deep-review round
+
+The whole branch was re-reviewed against `main` (`review/deep.md`: 0 P0, 1 P1, 17 P2). This
+round fixed the P1, eight of the P2s, and recorded the rest instead of fixing them. Renders
+below are Chromium 156 headless over CDP, 1280×900 and 390×844, real mouse and key events, from
+a tree extracted over `/home/cua/work/campaigns-design`; screenshots in `reports/deep-review/`.
+
+### P1-1 — unsaved drafts died on any Inertia visit (fixed)
+
+`resources/js/hooks/use-unsaved-changes-guard.ts` is now the only discard guard, used by
+`pages/templates/show.tsx` and `components/campaigns/sequence-editor.tsx`. It covers three
+paths, and one of them needed a mechanism the review did not have:
+
+1. **In-app visits** (`<Link>`, `router.visit`, `useForm`/`<Form>` submits, so the tab bar, the
+   sidebar, the More sheet, the back chevron and the head actions that redirect) are cancelled at
+   `inertia:before` and replayed on confirm.
+2. **Browser Back.** Inertia 3.7.1's `handlePopstateEvent` calls
+   `page.setQuietly(data, { preserveState: false })` and never fires `before`, so the page
+   remounts and the draft is gone before any listener of ours can react. A capture-phase
+   `popstate` listener was tried first and **does not work**: measured, the visit still ran and
+   the draft died, because Inertia's own listener runs first for an event fired at `window`.
+   What does work is the one branch it does not swap on, `state === null`, which only restores
+   the URL. So while the draft is dirty the current entry is emptied and a copy is pushed above
+   it; Back lands on the emptied entry, the page stays mounted, and the dialog asks.
+3. **A closed tab or hard reload** keeps the `beforeunload` prompt.
+
+Three paths are deliberately allowed through, because they reload the same page and keep the
+draft: the editors' own saves, the placeholder rail's forms, and the step endpoints. Visits
+that *are* guarded: the 390 tab bar, the sidebar and More sheet, `Duplicate`/`Archive`/`Stop`,
+and Back.
+
+Measured (all `true` below means asserted from a DOM read, not from a screenshot alone):
+
+| Proof | 1280 | 390 |
+| --- | --- | --- |
+| Sidebar/tab-bar tap on a dirty step draft shows `Discard your changes?`, URL unchanged, draft kept | `link_dialog` = dialog text, `link_url` `/northwind/campaigns/1`, `link_draft` `Draft A` | tab bar on the **template** editor (the 390 step editor is a full-screen dialog that covers the bar by design): `m_dialog` = dialog text, `m_url` `/northwind/templates/1`, `m_draft` `Cold intro (390)` |
+| Cancel keeps the draft and stays | `after_cancel_draft` `Draft A`, `after_cancel_url` unchanged | `m_after_cancel_draft` `Cold intro (390)` |
+| Confirm leaves and the draft is gone | `confirm_url` `/northwind/templates`, `confirm_draft` null | — |
+| Browser Back on a dirty draft | `back_dialog` = dialog text, `back_url` unchanged, `back_draft` `Draft B`, cancel keeps it | `m_back_*` on the template editor and `m_step_back_*` on the step editor: dialog, URL unchanged, draft `Cold intro (390)` / `Draft C` |
+| A hover prefetch raises nothing | `hover_dialog` null (sidebar is all `<Link prefetch>`) | — |
+| The editor's own save raises nothing | `save_dialog` null, stayed; template: `tpl_save_dialog` null, `tpl_save_saved` true | — |
+
+Screenshots: `deep-01-guard-link-1280.png`, `deep-02-guard-back-1280.png`,
+`deep-03-guard-template-1280.png`, `deep-05-guard-tabbar-390.png`,
+`deep-06-guard-back-390.png`, `deep-06b-step-back-390.png`.
+
+Not covered, and named in `pr.md`: a hard reload mid-edit only gets the browser's own prompt, and
+a resize across the 1024 line still remounts the step form (the draft is lost and the guard,
+being navigation-only, cannot see it).
+
+### P2 — what changed
+
+| Item | Change | Proof |
+| --- | --- | --- |
+| P2-1 `idle_only` tenancy oracle | `StoreCampaignRecipientsRequest::authorize()` rejects a campaign from another team with **404**, so it answers exactly like a nonexistent id | `Tests\Feature\Campaigns\CampaignRecipientControllerTest > another teams campaign answers exactly like a missing one` (new): foreign Active, foreign Draft and id `987654` all `404`, no recipients written |
+| P2-2 recipients contact lookup | `CampaignController::show()` resolves the page's contacts with `forTeam()` | new test `the recipients search never reaches another teams contact`: a planted foreign recipient row renders as `Deleted contact` with `email: null` while the team's own row keeps its name and address |
+| P2-3 `last_error_message` | capped at 300 characters and cut at `… response: {json}`; kept visible to every member because `MailerConnectionPolicy::update` is `belongsToTeam` | new test `the stored failure message is trimmed and capped before it leaves the server` (provider echo, 900-char message, whitespace-only, array) |
+| P2-4 false "No recipients yet" | a page past the end with recipients elsewhere shows **“This page is empty”** + `Back to page 1`, as the contacts grid does | 1280: page 2 of 30 emptied → `p2_text` true, `p2_back_link` true, `deep-04-empty-page-1280.png`; the link restores `recipients_page`-less URL and 25 rows. 390: page 2 of 26 with one row → `m_p2_text` true, `deep-08-empty-page-390.png` |
+| P2-11 dark focus ring | `.dark { --ring: #8b7dff }` | computed `--ring` `#8b7dff`; focused grid cell's box-shadow is `rgb(139, 125, 255) 0 0 0 2px inset`, `:focus-visible` true; `deep-11-dark-ring-1280.png` |
+| P2-12 contrast pairs | `--muted-foreground` `#71717a` → `#6b6b74`; active list-tab count `text-primary/70` → `text-primary`; unchecked checkbox `border-input` → `border-muted-foreground`; `.dark { --sidebar-primary: #3222b1 }`; the two blocked-panel icons to `text-badge-danger-foreground` | numbers below |
+| P2-13 native selects | new `components/native-select.tsx` (h-10, `max-lg:min-h-11`, `text-base lg:text-body`, shared 2px ring), used by all nine `<select>`s in seven files | 390 DOM: template Folder `44px` / `16px`, edit-campaign Connection `44px` / `16px`; `deep-07-selects-390.png` |
+| P2-14 320px reflow | the page-head action group wraps (`flex flex-wrap lg:justify-end`, no `shrink-0`) | 320px viewport: `scrollWidth 305 ≤ 320`, no overflow, `⋯` fully inside at x 140–172 (44×32); `deep-09-head-320.png`. At 390 the `⋯` sits at x 305–337 and `scrollWidth 375` |
+| P2-15 tests | +26 test cases, all new branches the review named | `php artisan test`: **603 passed** (2,927 assertions), up from 577. New: the ten `recipientRow` arms plus two precedence rows as a dataset, Stopped `startState`, `Pending`/`Deactivated`/`Disconnected` connection reasons, foreign-team search, `sentToday` with a null window, the trimmed failure message, a team with no connections, bulk failure paths, and the tenancy cases above. **No JS tests:** the branch has no runner and adding `vitest` is a dependency, so the guard and the bulk loop still rest on the click-throughs |
+| P2-17 PR body | the claims the code contradicted are corrected (selects, the campaign-detail query list, the dashboard's 9 queries, the two payloads that still carry the stored status), the P1-1 gap is replaced by what the guard does and does not cover, and the deferrals and follow-ups are listed | `docs/design/campaigns-os/pr.md` |
+
+### Contrast, measured before and after
+
+WCAG 2.x relative luminance over sRGB; “before” values match the review's own table.
+
+| Pair | Before | After |
+| --- | --- | --- |
+| dark `--ring` on the page `#0a0a0a` | 2.53 (`#525252`) | **6.10** (`#8b7dff`) |
+| dark `--ring` on the primary/5 focused cell fill `#161616` | 2.32 | **5.58** |
+| dark `--ring` on a selected row `#262626` | 1.94 | **4.67** |
+| `muted-foreground` on the selected-row `accent` `#f0eeff` | 4.23 (`#71717a`) | **4.62** (`#6b6b74`) |
+| `muted-foreground` on `muted` `#f4f4f5` | 4.40 | **4.80** |
+| `muted-foreground` on white | 4.83 | **5.28** |
+| active list-tab count on `accent` | 4.47 (`primary/70`) | **9.19** (`primary`) |
+| unchecked checkbox border on white | 1.27 (`#e4e4e7`) | **5.28** (`#6b6b74`) |
+| dark sidebar logo tile (white on `sidebar-primary`) | 1.00 | **10.50** (`#3222b1`) |
+| dark badge-danger body text (`badge-danger-foreground` on `#3b1518`) | 4.21 when it was `destructive-foreground`; the panel text already used the badge token at `HEAD` | 8.47 unchanged; its two icons moved to the same token |
+
+### Deferred
+
+P2-5 (`async` bulk delete keeps running and can pull the user back), P2-6 (`only: []` sends N full
+index payloads), P2-7/P2-8/P2-10 (the Recipients tab reloads `show()`; two correlated scans per
+search, unescaped `LIKE`; the do-not-contact re-join), and P2-9 (indexes, 8.81 → 1.53 ms) are
+recorded in `pr.md` with the reviewer's numbers, together with the three refactors (R1, R2, R3)
+and the two payload builders that still ship the stored connection status.
