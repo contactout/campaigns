@@ -148,7 +148,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
         const matches = (template: EmailTemplateSummary) =>
             query === '' ||
             template.name.toLowerCase().includes(query) ||
-            template.subject.toLowerCase().includes(query);
+            (template.subject ?? '').toLowerCase().includes(query);
 
         const byFolder: Group[] = folders.map((folder) => ({
             key: `folder-${folder.id}`,
@@ -163,7 +163,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
             (template) => template.folder_id === null && matches(template),
         );
 
-        if (unfiled.length > 0 || !hasQuery) {
+        if (unfiled.length > 0) {
             byFolder.push({ key: 'unfiled', folder: null, templates: unfiled });
         }
 
@@ -179,9 +179,13 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
         (total, group) => total + group.templates.length,
         0,
     );
-    const visibleFolders = groups.filter(
-        (group) => group.folder !== null && group.templates.length > 0,
-    ).length;
+    // Without a search the count is every folder, including empty ones (07 A's
+    // `14 templates · 3 folders`); with a search it is the folders that match.
+    const visibleFolders = hasQuery
+        ? groups.filter(
+              (group) => group.folder !== null && group.templates.length > 0,
+          ).length
+        : folders.length;
 
     const openNewFolder = () => {
         setEditingFolder(null);

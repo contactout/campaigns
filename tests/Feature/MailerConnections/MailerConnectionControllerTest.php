@@ -3,11 +3,13 @@
 use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
 use App\Enums\TeamRole;
+use App\Models\CampaignEmail;
 use App\Models\MailerConnection;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Mail\SmtpConnectionVerifier;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery\MockInterface;
@@ -406,4 +408,107 @@ test('verifying an unreachable mailer connection deactivates it and stores the e
         ->and($connection->exception_type)->toBe(RuntimeException::class)
         ->and($connection->exception_data)->toBe(['message' => 'Connection refused'])
         ->and($connection->threw_at)->not->toBeNull();
+});
+
+test('sent today counts only the teams own dispatches since midnight utc', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $sending = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A sending',
+        'status' => MailerConnectionStatus::Active,
+    ]);
+
+    $quiet = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'B quiet',
+        'status' => MailerConnectionStatus::Active,
+    ]);
+
+    $foreign = MailerConnection::factory()->create(['name' => 'C foreign']);
+
+    $today = CarbonImmutable::now('UTC')->startOfDay()->addMinutes(30);
+
+    CampaignEmail::factory()->count(3)->create([
+        'mailer_connection_id' => $sending->id,
+        'dispatched_at' => $today,
+    ]);
+
+    // Yesterday, before 00:00 UTC: neither the counter nor the meter may see it.
+    CampaignEmail::factory()->create([
+        'mailer_connection_id' => $sending->id,
+        'dispatched_at' => CarbonImmutable::now('UTC')->subDay(),
+    ]);
+
+    // Another team's traffic on the same day.
+    CampaignEmail::factory()->count(2)->create([
+        'mailer_connection_id' => $foreign->id,
+        'dispatched_at' => $today,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->has('connections', 2)
+            ->where('connections.0.id', $sending->id)
+            ->where('connections.0.sent_today', 3)
+            ->where('connections.1.id', $quiet->id)
+            ->where('connections.1.sent_today', 0));
+});
+
+test('each connection exposes the derived display status and needs attention flag', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $verified = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A verified',
+        'status' => MailerConnectionStatus::Active,
+    ]);
+
+    $failed = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'B failed',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => '535 Authentication failed.'],
+        'threw_at' => now(),
+    ]);
+
+    $pending = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'C pending',
+        'status' => MailerConnectionStatus::Pending,
+    ]);
+
+    $deactivated = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'D deactivated',
+        'status' => MailerConnectionStatus::Deactivated,
+    ]);
+
+    $disconnected = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'E disconnected',
+        'status' => MailerConnectionStatus::Disconnected,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->has('connections', 5)
+            ->where('connections.0.id', $verified->id)
+            ->where('connections.0.display_status', 'Verified')
+            ->where('connections.0.display_status_label', 'Verified')
+            ->where('connections.0.needs_attention', false)
+            ->where('connections.0.last_error_message', null)
+            ->where('connections.1.id', $failed->id)
+            ->where('connections.1.display_status', 'Failed')
+            ->where('connections.1.needs_attention', true)
+            ->where('connections.1.last_error_message', '535 Authentication failed.')
+            ->where('connections.2.id', $pending->id)
+            ->where('connections.2.display_status', 'Pending')
+            ->where('connections.2.needs_attention', true)
+            ->where('connections.3.id', $deactivated->id)
+            ->where('connections.3.display_status', 'Deactivated')
+            ->where('connections.3.needs_attention', true)
+            ->where('connections.4.id', $disconnected->id)
+            ->where('connections.4.display_status', 'Disconnected')
+            ->where('connections.4.needs_attention', true));
 });

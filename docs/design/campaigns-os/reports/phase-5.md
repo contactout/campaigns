@@ -41,6 +41,10 @@ Frontend:
 - `resources/js/pages/contacts/index.tsx` — R2-1.
 - `resources/js/components/contacts/add-to-campaign-modal.tsx` — R2-2.
 - `resources/js/types/mailer-connections.ts` — the new fields and display status type.
+- `tests/Feature/MailerConnections/MailerConnectionControllerTest.php` — two tests: the
+  aggregate (today vs yesterday vs another team's connection vs a quiet connection) and one
+  row per display-status case with `needs_attention` and `last_error_message`.
+- `tests/Unit/Enums/MailerConnectionDisplayStatusTest.php` — the derivation table.
 
 ## The new aggregate
 
@@ -144,7 +148,7 @@ x 240–1256.
 | `New folder` | x 1011–1119, 109×32 | x 1002–1116, 114×32 |
 | `New template` | x 1128–1256, 129×32 | x 1124–1256, 132×32 |
 | Search | x 240–500, y 81–113, 260×32 | x 240–500, y 84–116, 260×32 |
-| Count text | x 1123–1254, 12px | x 1130–1256, 12px |
+| Count text | x 1123–1254, 12px (`14 templates · 3 folders`) | x 1130–1256, 12px (`7 templates · 4 folders`) |
 | Group 1 | y 125, h 159 | y 128, h 158 |
 | Group header row | 38–39px, tint `#fafafa` | 39px, `bg-muted/50` = `#fafafa` |
 | Header folder icon x | 257–271 | 257–272 |
@@ -247,11 +251,11 @@ Final checks on the tree that matches the commit (no preview route, no seeder, n
 scripts):
 
 ```
-$ npm run build            BUILD_EXIT=0    ✓ built in 3.3s
+$ npm run build            BUILD_EXIT=0    ✓ built in 6.70s
 $ npm run types:check      TYPES_EXIT=0    tsc --noEmit
 $ npm run check            CHECK_EXIT=0    All 157 files are correctly formatted
                                            Found no warnings or lint errors in 140 files
-$ php artisan test         TEST_EXIT=0     Tests: 571 passed (2485 assertions), 9.07s
+$ php artisan test         TEST_EXIT=0     Tests: 576 passed (2557 assertions), 14.05s
 $ php vendor/bin/pint --test  PINT_EXIT=0  PASS 366 files
 $ php vendor/bin/phpstan analyse … PHPSTAN_EXIT=0  [OK] No errors
 ```
@@ -260,6 +264,9 @@ Interactions driven over CDP on that build:
 
 - Search `series` → count `1 template · 1 folder`, one group with one row; clearing
   restores all groups.
+- The list counts every folder (`7 templates · 4 folders`, `Q1 experiments` at 0) and drops
+  the `No folder` group once the only unfiled template is gone (`6 templates · 4 folders`,
+  four groups).
 - Folder kebab → `Rename` / `Delete`; `Rename` opens "Rename folder" with the current
   name. Template kebab → `Open` / `Delete`; the delete dialog is the existing modal.
 - Editor: changing `Name` makes `Discard` act as a guard — "Discard your changes?" with
@@ -291,9 +298,13 @@ Interactions driven over CDP on that build:
    Follow-ups, Q1 experiments, No folder); the board lists Cold outreach, Follow-ups,
    Events. Left data-driven.
 4. **Empty folders** render a muted "No templates in this folder yet." row under the
-   header, and **unfiled templates** get a trailing "No folder" group. The board has
-   neither (its "14 templates · 3 folders" does not reconcile with the six rows it shows);
-   both cases exist in the data and the phase brief requires a 0-template folder to render.
+   header, and **unfiled templates** get a trailing "No folder" group — only when at least
+   one template has no folder, otherwise the group is absent
+   (`07-templates-no-unfiled-1280.png`). The folder count includes empty folders when no
+   search is active (`7 templates · 4 folders` in the fixture, one of them at 0), and counts
+   matching folders while searching. The board has no empty folder and no unfiled group
+   (its "14 templates · 3 folders" does not reconcile with the six rows it shows); both
+   cases exist in the data and the brief requires a 0-template folder to render.
 5. **Draft pill:** spec neutral (`--muted` fill, 4px radius) rather than the board's white
    fill with a 1px `#e4e4e7` border. The spec's status table wins; 46×22 against 45×21.
 6. **No `Signature` action in the editor toolbar.** The board shows `+ Placeholder` and
@@ -354,7 +365,11 @@ Interactions driven over CDP on that build:
    after a success inside a filtered view; the changed path is the failure branch only.
 6. **R2-2's last window** (start between the partial reload and the POST) stays open until
    the recipients endpoint accepts an idle-only flag.
-7. **The Space keeps `campaigns-phase5`** with `vendor/`, `node_modules/`, the fixture
+7. **The first-run templates empty state was not rendered.** The fixture always had
+   folders, so the "No templates yet" panel (no folders, no unfiled templates) is covered by
+   code review only; the "No folder" group's disappearance was rendered
+   (`07-templates-no-unfiled-1280.png`: 4 groups, `6 templates · 4 folders`).
+8. **The Space keeps `campaigns-phase5`** with `vendor/`, `node_modules/`, the fixture
    database and `storage/render/`. The preview route, the seeder and the render scripts were
    removed from the tree after the final render and before the final checks; none of them
    were ever in the host worktree or the commits.
