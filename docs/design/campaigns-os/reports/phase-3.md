@@ -39,7 +39,8 @@ Frontend:
   onto the spec's badge table.
 - `resources/js/components/templates/rich-text-editor.tsx` — adds an opt-in `toolbar="board"`
   (`B I U • 1. Link` + an `actions` slot), an inline link input and a `minHeightClass` prop. The
-  icon toolbar stays the default, so the template screens render exactly as before.
+  icon toolbar stays the default and its markup is unchanged, so the template screens take the
+  same code path; the template editor was not re-rendered in this phase.
 - `resources/js/components/page-head.tsx` — optional `back` (chevron) and `titleAddon` (status
   pill). Additive; every existing caller is unchanged.
 - `resources/js/lib/timezone.ts` (new) — `(UTC+08:00) Kuala Lumpur` formatting via `Intl`.
