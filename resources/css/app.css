@@ -132,7 +132,9 @@
     --sidebar-accent: #f0eeff;
     --sidebar-accent-foreground: #3222b1;
     --sidebar-border: #e4e4e7;
-    --sidebar-ring: #b8afff;
+    /* 4.99:1 on white. The board pair was 1.98:1 and the sidebar group label,
+       group action, menu action and sub-button rings all read it. */
+    --sidebar-ring: #6552ff;
 }
 
 .dark {
@@ -167,7 +169,7 @@
     --sidebar-accent: oklch(0.269 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(0.269 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    --sidebar-ring: #8b7dff; /* 6.10:1 on the dark page */
 
     /* Additive only: dark counterparts for the tokens phases 1-2 introduced.
        Measured against oklch(0.145 0 0) = #0a0a0a unless noted. */
