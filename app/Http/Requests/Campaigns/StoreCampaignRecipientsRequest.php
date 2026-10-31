@@ -16,6 +16,28 @@ class StoreCampaignRecipientsRequest extends FormRequest
     use ResolvesCurrentTeam;
 
     /**
+     * Reject another team's campaign as missing, not as forbidden.
+     *
+     * `{campaign}` is an implicit route binding, so it resolves any campaign id.
+     * Without this check the `idle_only` rule below would answer for another
+     * team's campaign: 302 back with an error when it is running, 404 when the
+     * campaign is not started. That difference is a tenancy oracle over another
+     * team's state, so a foreign id has to fail exactly like a nonexistent one.
+     */
+    public function authorize(): bool
+    {
+        $campaign = $this->route('campaign');
+
+        abort_unless(
+            $campaign instanceof Campaign
+                && $campaign->team_id === $this->resolveCurrentTeam($this)->id,
+            404,
+        );
+
+        return true;
+    }
+
+    /**
      * Get the validation rules that apply to the request.
      *
      * @return array<string, ValidationRule|array<mixed>|string>

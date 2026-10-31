@@ -143,7 +143,11 @@ class CampaignController extends Controller
         // Deleting a contact leaves its recipient rows behind, so the page
         // resolves the contacts itself, soft-deleted ones included, instead of
         // letting the relation return null and take the page down with it.
+        // Scoped to the team: every other read on this page is, and a recipient
+        // row for a foreign contact (an import, a copy across teams) would
+        // otherwise leak its name and email here.
         $contacts = Contact::query()
+            ->forTeam($currentTeam->id)
             ->withTrashed()
             ->with('emailIdentity')
             ->whereIn('id', array_map(intval(...), $recipients->getCollection()->pluck('contact_id')->all()))

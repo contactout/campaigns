@@ -20,6 +20,7 @@ use App\Services\OAuth\MicrosoftOAuthClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -240,12 +241,27 @@ class MailerConnectionController extends Controller
      * Get the stored verification/runtime failure message, if any.
      *
      * The exception class alone ("TransportException") tells an operator nothing,
-     * so the banner shows the message the job or the probe recorded.
+     * so the banner shows the message the job or the probe recorded. Every member
+     * of the team sees it, which the policy intends: `MailerConnectionPolicy`
+     * gives every member `update`, so every member is expected to fix the
+     * connection. What is trimmed is the provider echo: Symfony and Guzzle append
+     * the raw SMTP reply or the HTTP response body after `response:`, which is
+     * longer than the banner can use and wider than the fault needs.
      */
     protected function exceptionMessage(MailerConnection $connection): ?string
     {
         $message = $connection->exception_data['message'] ?? null;
 
-        return is_string($message) && $message !== '' ? $message : null;
+        if (! is_string($message) || trim($message) === '') {
+            return null;
+        }
+
+        $echo = stripos($message, 'response:');
+
+        if ($echo !== false) {
+            $message = substr($message, 0, $echo);
+        }
+
+        return Str::limit(trim($message), 300);
     }
 }
