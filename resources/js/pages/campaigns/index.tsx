@@ -1,6 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { FileText, MoreVertical, Plus, Search, Send } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
 import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
 import PageHead from '@/components/page-head';
@@ -60,6 +60,11 @@ export default function CampaignsIndex({
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const [search, setSearch] = useState(filters.q ?? '');
+
+    // The server owns `q`; keep the input in step when a filter change reloads it.
+    useEffect(() => {
+        setSearch(filters.q ?? '');
+    }, [filters.q]);
 
     const navigate = (params: { q?: string; status?: string }) => {
         router.get(

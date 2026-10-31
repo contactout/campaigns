@@ -47,6 +47,32 @@ export type DashboardSetup = {
     has_campaign: boolean;
 };
 
+/**
+ * The dashboard cards. Rates are null when the 30-day window has no dispatched
+ * email to divide by; deltas are null when there is no comparable window.
+ */
+export type DashboardMetrics = {
+    emails_sent: number;
+    open_rate: number | null;
+    reply_rate: number | null;
+    active_campaigns: number;
+    emails_sent_delta: number | null;
+    open_rate_delta: number | null;
+    reply_rate_delta: number | null;
+};
+
+/** The counts behind the "Jump back in" qualifier lines. */
+export type DashboardJumpBackIn = {
+    contacts: number;
+    lists: number;
+    active_campaigns: number;
+    draft_campaigns: number;
+    templates: number;
+    template_folders: number;
+    connections: number;
+    connections_needing_attention: number;
+};
+
 export type TeamPermissions = {
     canUpdateTeam: boolean;
     canDeleteTeam: boolean;
