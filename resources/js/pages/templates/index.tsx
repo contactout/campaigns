@@ -333,7 +333,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                         group.templates.map((template) => (
                                             <div
                                                 key={template.id}
-                                                className="group flex min-h-[55px] min-w-0 items-center gap-2 border-b px-4 py-0.5 last:border-b-0 hover:bg-accent/40 lg:min-h-[39px] lg:py-0"
+                                                className="group flex min-h-[55px] min-w-0 items-center gap-2 border-b px-4 py-0.5 last:border-b-0 hover:bg-accent/40 lg:min-h-[39px] lg:gap-3 lg:py-0"
                                                 data-test="template-row"
                                             >
                                                 <FileText
