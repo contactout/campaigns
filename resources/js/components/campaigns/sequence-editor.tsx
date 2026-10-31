@@ -51,6 +51,7 @@ export default function SequenceEditor({
     const activeStep = steps.find((step) => step.id === activeStepId) ?? null;
 
     const headingRef = useRef<HTMLHeadingElement | null>(null);
+    const mobileHeadingRef = useRef<HTMLHeadingElement | null>(null);
     const dirtyRef = useRef(false);
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(
         null,
@@ -59,6 +60,16 @@ export default function SequenceEditor({
     // The row menu that opened the editor is unmounted with it, so focus has to
     // land somewhere useful inside the pane instead of falling to <body>.
     useEffect(() => {
+        // The 390 editor is a full-screen form with its own title; focus whichever
+        // heading is actually displayed.
+        const mobile = mobileHeadingRef.current;
+
+        if (mobile && mobile.offsetParent !== null) {
+            mobile.focus();
+
+            return;
+        }
+
         headingRef.current?.focus();
     }, [activeStepId]);
 
@@ -118,11 +129,11 @@ export default function SequenceEditor({
     return (
         <div
             data-test="campaign-sequence-editor"
-            className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]"
+            className="lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-6"
         >
             <div
                 data-test="campaign-sequence-list"
-                className="flex min-w-0 flex-col gap-3"
+                className="hidden min-w-0 flex-col gap-3 lg:flex"
             >
                 <p className="text-label leading-4 font-medium tracking-wide text-muted-foreground uppercase">
                     Sequence
@@ -188,9 +199,9 @@ export default function SequenceEditor({
 
             <div
                 data-test="campaign-step-editor-pane"
-                className="flex min-w-0 flex-col self-start rounded-lg border bg-card"
+                className="fixed inset-0 z-50 flex min-w-0 flex-col overflow-y-auto bg-background lg:static lg:z-auto lg:self-start lg:overflow-visible lg:rounded-lg lg:border lg:bg-card"
             >
-                <div className="flex items-start justify-between gap-4 px-4 pt-4 pb-3">
+                <div className="hidden items-start justify-between gap-4 px-4 pt-4 pb-3 lg:flex">
                     <div className="min-w-0">
                         <h2
                             ref={headingRef}
@@ -218,7 +229,7 @@ export default function SequenceEditor({
                     signatures={signatures}
                     placeholders={placeholders}
                     onSuccess={onClose}
-                    formClassName="flex flex-col"
+                    formClassName="flex min-h-0 flex-1 flex-col"
                     onDirtyChange={(isDirty) => {
                         dirtyRef.current = isDirty;
                         onDirtyChange?.(isDirty);
@@ -226,11 +237,63 @@ export default function SequenceEditor({
                 >
                     {({ processing, fields }) => (
                         <>
-                            <div className="border-t px-4 py-4">{fields}</div>
+                            {/* 390: the editor is the whole screen, with Cancel, the title and
+                    Save in one head row and a full-width Delete step at the end. */}
+                            <div className="flex items-center gap-2 border-b px-2 py-1.5 lg:hidden">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="px-2 text-muted-foreground"
+                                    onClick={() => requestAction(onClose)}
+                                >
+                                    Cancel
+                                </Button>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <h2
+                                        ref={mobileHeadingRef}
+                                        tabIndex={-1}
+                                        className="truncate text-body leading-5 font-semibold outline-none"
+                                    >
+                                        {activeStep
+                                            ? `Edit step · Day ${activeStep.day ?? 0}`
+                                            : 'New step'}
+                                    </h2>
+                                    <p className="truncate text-label leading-4 text-muted-foreground">
+                                        {campaignName}
+                                    </p>
+                                </div>
+                                <Button
+                                    type="submit"
+                                    variant="ghost"
+                                    disabled={processing}
+                                    data-test="campaign-save-step-button-mobile"
+                                    className="px-2 text-primary"
+                                >
+                                    Save
+                                </Button>
+                            </div>
+
+                            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:flex-none lg:overflow-visible lg:border-t">
+                                {fields}
+                            </div>
+
+                            {activeStep && canUpdate ? (
+                                <div className="mt-auto border-t px-4 py-3 lg:hidden">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="w-full justify-start text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                        onClick={deleteStep}
+                                        data-test="campaign-delete-step-button-mobile"
+                                    >
+                                        <Trash2 /> Delete step
+                                    </Button>
+                                </div>
+                            ) : null}
 
                             <div
                                 data-test="campaign-step-editor-footer"
-                                className="flex items-center justify-between gap-2 border-t px-4 py-3"
+                                className="hidden items-center justify-between gap-2 border-t px-4 py-3 lg:flex"
                             >
                                 {activeStep && canUpdate ? (
                                     <Button

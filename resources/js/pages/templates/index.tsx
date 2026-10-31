@@ -199,8 +199,10 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
 
     const newTemplateButton = can.create ? (
         <CreateTemplateModal folders={folders}>
-            <Button data-test="templates-new-button">
-                <Plus /> New template
+            <Button data-test="templates-new-button" aria-label="New template">
+                <Plus />
+                <span className="hidden lg:inline">New template</span>
+                <span className="lg:hidden">New</span>
             </Button>
         </CreateTemplateModal>
     ) : null;
@@ -213,6 +215,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                 <PageHead
                     title="Templates"
                     description="Organize reusable emails for your campaigns"
+                    hideDescriptionOnMobile
                     mobileNav
                     actions={
                         can.create ? (
@@ -220,9 +223,14 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                 <Button
                                     variant="outline"
                                     onClick={openNewFolder}
+                                    aria-label="New folder"
                                     data-test="templates-new-folder-button"
+                                    className="max-lg:px-2.5"
                                 >
-                                    <FolderPlus /> New folder
+                                    <FolderPlus />
+                                    <span className="hidden lg:inline">
+                                        New folder
+                                    </span>
                                 </Button>
                                 {newTemplateButton}
                             </>
@@ -244,7 +252,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                             placeholder="Search templates…"
                             className="h-8 w-full sm:w-[260px]"
                         />
-                        <p className="ms-auto text-label leading-4 text-muted-foreground">
+                        <p className="ms-auto hidden text-label leading-4 text-muted-foreground lg:block">
                             {visibleTemplates}{' '}
                             {visibleTemplates === 1 ? 'template' : 'templates'}{' '}
                             · {visibleFolders}{' '}
@@ -325,7 +333,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                         group.templates.map((template) => (
                                             <div
                                                 key={template.id}
-                                                className="group flex h-[39px] min-w-0 items-center gap-2 border-b px-4 last:border-b-0 hover:bg-accent/40"
+                                                className="group flex min-h-[39px] min-w-0 items-center gap-2 border-b px-4 py-2 last:border-b-0 hover:bg-accent/40 lg:py-0"
                                                 data-test="template-row"
                                             >
                                                 <FileText
@@ -337,18 +345,27 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                                         slug,
                                                         template.id,
                                                     ])}
-                                                    className="flex h-full min-w-0 flex-1 items-center rounded-sm text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
+                                                    className="flex h-full min-w-0 flex-1 flex-col justify-center rounded-sm py-1 text-body leading-5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary-border lg:flex-row lg:items-center lg:py-0"
                                                     title={template.name}
                                                 >
                                                     <span className="truncate">
                                                         {template.name}
                                                     </span>
+                                                    {updatedLabel(
+                                                        template.updated_at,
+                                                    ) ? (
+                                                        <span className="text-label leading-4 text-muted-foreground lg:hidden">
+                                                            {updatedLabel(
+                                                                template.updated_at,
+                                                            )}
+                                                        </span>
+                                                    ) : null}
                                                 </Link>
                                                 <div className="flex shrink-0 items-center gap-3">
                                                     {template.is_draft ? (
                                                         <Badge
                                                             variant="neutral"
-                                                            className="mr-6"
+                                                            className="lg:mr-6"
                                                         >
                                                             Draft
                                                         </Badge>
@@ -356,7 +373,7 @@ export default function TemplatesIndex({ templates, folders, can }: Props) {
                                                     {updatedLabel(
                                                         template.updated_at,
                                                     ) ? (
-                                                        <span className="hidden text-label leading-4 text-muted-foreground sm:inline">
+                                                        <span className="hidden text-label leading-4 text-muted-foreground lg:inline">
                                                             {updatedLabel(
                                                                 template.updated_at,
                                                             )}

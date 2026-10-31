@@ -1,4 +1,4 @@
-import type { FocusEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -24,7 +24,7 @@ type Props = {
      * focuses a field itself has to prevent the default, or Radix puts focus
      * back on the button that opened the dialog after it has already moved.
      */
-    onCloseAutoFocus?: (event: FocusEvent<HTMLDivElement>) => void;
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 /**

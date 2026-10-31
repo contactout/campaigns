@@ -1,5 +1,7 @@
 import { Form, usePage } from '@inertiajs/react';
+import { PenLine, Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import FormLabel from '@/components/form-label';
 import InputError from '@/components/input-error';
 import RichTextEditor from '@/components/templates/rich-text-editor';
 import { Button } from '@/components/ui/button';
@@ -11,7 +13,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -158,11 +159,15 @@ export default function StepForm({
                             <div className={fieldsClassName}>
                                 {templates.length > 0 ? (
                                     <div className="grid gap-1.5">
-                                        <Label htmlFor="apply-template">
+                                        <FormLabel htmlFor="apply-template">
                                             Apply template
-                                        </Label>
+                                        </FormLabel>
                                         <Select
-                                            value={templateId}
+                                            value={
+                                                templateId === ''
+                                                    ? undefined
+                                                    : templateId
+                                            }
                                             onValueChange={applyTemplate}
                                         >
                                             <SelectTrigger
@@ -189,7 +194,9 @@ export default function StepForm({
                                 ) : null}
 
                                 <div className="grid gap-1.5">
-                                    <Label htmlFor="subject">Subject</Label>
+                                    <FormLabel htmlFor="subject">
+                                        Subject
+                                    </FormLabel>
                                     <Input
                                         id="subject"
                                         name="subject"
@@ -204,7 +211,9 @@ export default function StepForm({
                                 </div>
 
                                 <div className="grid gap-1.5">
-                                    <Label id="step-body-label">Body</Label>
+                                    <FormLabel id="step-body-label">
+                                        Body
+                                    </FormLabel>
                                     <RichTextEditor
                                         name="body"
                                         value={body}
@@ -261,9 +270,9 @@ export default function StepForm({
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="grid gap-1.5">
-                                        <Label htmlFor="day">
+                                        <FormLabel htmlFor="day">
                                             Day (from campaign start)
-                                        </Label>
+                                        </FormLabel>
                                         <Input
                                             id="day"
                                             name="day"
@@ -280,9 +289,9 @@ export default function StepForm({
                                     </div>
 
                                     <div className="grid gap-1.5">
-                                        <Label htmlFor="time">
+                                        <FormLabel htmlFor="time">
                                             Time (optional)
-                                        </Label>
+                                        </FormLabel>
                                         <Input
                                             id="time"
                                             name="time"
@@ -326,8 +335,15 @@ function PlaceholderMenu({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm">
-                    + Placeholder
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label="Insert placeholder"
+                >
+                    <Plus className="lg:hidden" />
+                    <span className="lg:hidden">Insert</span>
+                    <span className="hidden lg:inline">+ Placeholder</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -354,8 +370,14 @@ function SignatureMenu({
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm">
-                    Signature
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label="Insert signature"
+                >
+                    <PenLine className="lg:hidden" />
+                    <span className="hidden lg:inline">Signature</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

@@ -193,7 +193,7 @@ function Sidebar({
       <div
         data-slot="sidebar"
         className={cn(
-          "bg-sidebar text-sidebar-foreground sticky top-0 hidden h-svh w-(--sidebar-width) flex-col border-r border-sidebar-border md:flex",
+          "bg-sidebar text-sidebar-foreground sticky top-0 hidden h-svh w-(--sidebar-width) flex-col border-r border-sidebar-border lg:flex",
           className
         )}
         {...props}
@@ -205,7 +205,7 @@ function Sidebar({
 
   return (
     <div
-      className="group peer text-sidebar-foreground hidden md:block"
+      className="group peer text-sidebar-foreground hidden lg:block"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-variant={variant}

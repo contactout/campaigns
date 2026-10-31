@@ -18,7 +18,6 @@ import {
     SelectContent,
     SelectItem,
     SelectTrigger,
-    SelectValue,
 } from '@/components/ui/select';
 import {
     Table,
@@ -79,6 +78,9 @@ export default function CampaignsIndex({
         );
     };
 
+    const statusLabel =
+        statuses.find((status) => status.value === filters.status)?.label ??
+        null;
     const hasFilters = Boolean(filters.q || filters.status);
     const isEmpty = campaigns.data.length === 0;
     // Only a team with no campaigns at all is a first run; an out-of-range page
@@ -102,7 +104,22 @@ export default function CampaignsIndex({
 
     const newCampaignButton = can.create ? (
         <CreateCampaignModal mailerConnections={mailerConnections}>
-            <Button data-test="campaigns-new-button">
+            <Button data-test="campaigns-new-button" aria-label="New campaign">
+                <Plus />
+                <span className="hidden lg:inline">New campaign</span>
+                <span className="lg:hidden">New</span>
+            </Button>
+        </CreateCampaignModal>
+    ) : null;
+
+    // The 390 empty panel has room for the full label even though the head does
+    // not; the board shows `New campaign` there.
+    const newCampaignPanelButton = can.create ? (
+        <CreateCampaignModal mailerConnections={mailerConnections}>
+            <Button
+                data-test="campaigns-new-button-panel"
+                aria-label="New campaign"
+            >
                 <Plus /> New campaign
             </Button>
         </CreateCampaignModal>
@@ -121,6 +138,7 @@ export default function CampaignsIndex({
                 <PageHead
                     title="Campaigns"
                     description="Sequences you send from your connected inboxes"
+                    hideDescriptionOnMobile
                     mobileNav
                     actions={isFirstRun ? null : newCampaignButton}
                 />
@@ -134,7 +152,7 @@ export default function CampaignsIndex({
                             navigate({ q: search });
                         }}
                     >
-                        <div className="relative w-full sm:w-[260px]">
+                        <div className="relative min-w-0 flex-1 lg:w-[260px] lg:flex-none">
                             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 aria-label="Search campaigns"
@@ -159,9 +177,14 @@ export default function CampaignsIndex({
                             <SelectTrigger
                                 size="sm"
                                 aria-label="Filter campaigns by status"
-                                className="w-[150px]"
+                                className="w-[101px] shrink-0 lg:w-[150px]"
                             >
-                                <SelectValue placeholder="All statuses" />
+                                <span className="truncate lg:hidden">
+                                    {statusLabel ?? 'All'}
+                                </span>
+                                <span className="hidden truncate lg:block">
+                                    {statusLabel ?? 'All statuses'}
+                                </span>
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">
@@ -178,7 +201,7 @@ export default function CampaignsIndex({
                             </SelectContent>
                         </Select>
 
-                        <p className="ms-auto text-body leading-5 text-muted-foreground">
+                        <p className="ms-auto hidden text-body leading-5 text-muted-foreground lg:block">
                             {campaigns.total}{' '}
                             {campaigns.total === 1 ? 'campaign' : 'campaigns'}
                         </p>
@@ -197,12 +220,12 @@ export default function CampaignsIndex({
                                         <FileText /> Browse templates
                                     </Link>
                                 </Button>
-                                {newCampaignButton}
+                                {newCampaignPanelButton}
                             </>
                         }
                     />
                 ) : (
-                    <div className="overflow-hidden rounded-lg border bg-card">
+                    <div className="overflow-hidden border-y bg-card max-lg:-mx-4 lg:rounded-lg lg:border">
                         {isEmpty ? (
                             hasFilters ? (
                                 <EmptyState
@@ -234,110 +257,164 @@ export default function CampaignsIndex({
                             )
                         ) : (
                             <>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableHead>Name</TableHead>
-                                            <TableHead className="w-[120px]">
-                                                Status
-                                            </TableHead>
-                                            <TableHead className="w-[80px]">
-                                                Steps
-                                            </TableHead>
-                                            <TableHead className="w-[116px]">
-                                                Recipients
-                                            </TableHead>
-                                            <TableHead className="w-[64px]">
-                                                <span className="sr-only">
-                                                    Actions
-                                                </span>
-                                            </TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {campaigns.data.map((campaign) => {
-                                            const created = formatRelativeTime(
-                                                campaign.created_at,
-                                            );
+                                <ul
+                                    className="divide-y lg:hidden"
+                                    aria-label="Campaigns"
+                                    data-test="campaign-list-mobile"
+                                >
+                                    {campaigns.data.map((campaign) => {
+                                        const created = formatRelativeTime(
+                                            campaign.created_at,
+                                        );
+                                        const meta = [
+                                            `${campaign.steps_count} ${campaign.steps_count === 1 ? 'step' : 'steps'}`,
+                                            `${campaign.recipients_count} ${campaign.recipients_count === 1 ? 'recipient' : 'recipients'}`,
+                                            created
+                                                ? `Created ${created}`
+                                                : null,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' · ');
 
-                                            return (
-                                                <TableRow
-                                                    key={campaign.id}
-                                                    data-test="campaign-row"
+                                        return (
+                                            <li key={campaign.id}>
+                                                <Link
+                                                    href={show.url([
+                                                        slug,
+                                                        campaign.id,
+                                                    ])}
+                                                    data-test="campaign-row-mobile"
+                                                    className="flex min-h-[68px] items-center gap-3 px-4 py-3 outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-primary-border focus-visible:ring-inset"
                                                 >
-                                                    <TableCell className="py-[3.5px]">
-                                                        <Link
-                                                            href={show.url([
-                                                                slug,
-                                                                campaign.id,
-                                                            ])}
-                                                            className="block truncate font-semibold hover:underline"
-                                                        >
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate text-body leading-5 font-semibold">
                                                             {campaign.name}
-                                                        </Link>
-                                                        {created ? (
-                                                            <span className="block text-label leading-4 text-muted-foreground">
-                                                                Created{' '}
-                                                                {created}
-                                                            </span>
-                                                        ) : null}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <CampaignStatusBadge
-                                                            status={
-                                                                campaign.status
-                                                            }
-                                                            label={
-                                                                campaign.status_label
-                                                            }
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {campaign.steps_count}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {
-                                                            campaign.recipients_count
+                                                        </span>
+                                                        <span className="mt-0.5 block truncate text-label leading-4 text-muted-foreground">
+                                                            {meta}
+                                                        </span>
+                                                    </span>
+                                                    <CampaignStatusBadge
+                                                        status={campaign.status}
+                                                        label={
+                                                            campaign.status_label
                                                         }
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger
-                                                                asChild
+                                                    />
+                                                </Link>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+
+                                <div className="hidden lg:block">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="hover:bg-transparent">
+                                                <TableHead>Name</TableHead>
+                                                <TableHead className="w-[120px]">
+                                                    Status
+                                                </TableHead>
+                                                <TableHead className="w-[80px]">
+                                                    Steps
+                                                </TableHead>
+                                                <TableHead className="w-[116px]">
+                                                    Recipients
+                                                </TableHead>
+                                                <TableHead className="w-[64px]">
+                                                    <span className="sr-only">
+                                                        Actions
+                                                    </span>
+                                                </TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {campaigns.data.map((campaign) => {
+                                                const created =
+                                                    formatRelativeTime(
+                                                        campaign.created_at,
+                                                    );
+
+                                                return (
+                                                    <TableRow
+                                                        key={campaign.id}
+                                                        data-test="campaign-row"
+                                                    >
+                                                        <TableCell className="py-[3.5px]">
+                                                            <Link
+                                                                href={show.url([
+                                                                    slug,
+                                                                    campaign.id,
+                                                                ])}
+                                                                className="block truncate font-semibold hover:underline"
                                                             >
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="size-7 text-muted-foreground"
-                                                                    aria-label={`Actions for ${campaign.name}`}
+                                                                {campaign.name}
+                                                            </Link>
+                                                            {created ? (
+                                                                <span className="block text-label leading-4 text-muted-foreground">
+                                                                    Created{' '}
+                                                                    {created}
+                                                                </span>
+                                                            ) : null}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <CampaignStatusBadge
+                                                                status={
+                                                                    campaign.status
+                                                                }
+                                                                label={
+                                                                    campaign.status_label
+                                                                }
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {
+                                                                campaign.steps_count
+                                                            }
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {
+                                                                campaign.recipients_count
+                                                            }
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger
+                                                                    asChild
                                                                 >
-                                                                    <MoreVertical className="size-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem
-                                                                    onSelect={() =>
-                                                                        router.visit(
-                                                                            show(
-                                                                                [
-                                                                                    slug,
-                                                                                    campaign.id,
-                                                                                ],
-                                                                            ),
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    Open
-                                                                    campaign
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="size-7 text-muted-foreground"
+                                                                        aria-label={`Actions for ${campaign.name}`}
+                                                                    >
+                                                                        <MoreVertical className="size-4" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="end">
+                                                                    <DropdownMenuItem
+                                                                        onSelect={() =>
+                                                                            router.visit(
+                                                                                show(
+                                                                                    [
+                                                                                        slug,
+                                                                                        campaign.id,
+                                                                                    ],
+                                                                                ),
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Open
+                                                                        campaign
+                                                                    </DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
 
                                 <div className="flex h-[52px] items-center justify-between gap-2 border-t px-4">
                                     <p className="text-body leading-5 text-muted-foreground">

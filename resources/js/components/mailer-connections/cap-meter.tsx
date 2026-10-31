@@ -8,7 +8,19 @@ type Props = {
 /** Share of a daily cap at which the board turns the meter red (388 / 400). */
 const WARNING_RATIO = 0.9;
 
-const formatCount = (value: number) => value.toLocaleString('en-US');
+export const formatCount = (value: number) => value.toLocaleString('en-US');
+
+/** `142 / 400`, or an em dash when the connection has no cap. */
+export function capText(
+    sentToday: number,
+    sendingLimit: number | null,
+): string {
+    if (sendingLimit === null || sendingLimit <= 0) {
+        return '—';
+    }
+
+    return `${formatCount(sentToday)} / ${formatCount(sendingLimit)}`;
+}
 
 /**
  * The `Sent today` cell of the connections table.

@@ -1,6 +1,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Filter,
+    MoreHorizontal,
     Plus,
     Search,
     Settings,
@@ -421,6 +422,40 @@ export default function ContactsIndex({
         </CreateContactModal>
     ) : null;
 
+    // 390: the head keeps both actions, the import folded to its icon.
+    const importButtonMobile = can.create ? (
+        <ImportContactsModal
+            fields={fields}
+            lists={listOptions}
+            defaultListId={filters.list}
+        >
+            <Button
+                variant="secondary"
+                size="icon"
+                aria-label="Import CSV"
+                data-test="contacts-import-button-mobile"
+            >
+                <Upload />
+            </Button>
+        </ImportContactsModal>
+    ) : null;
+
+    const addContactButtonMobile = can.create ? (
+        <CreateContactModal
+            lists={listOptions}
+            statuses={statuses}
+            defaultListIds={filters.list ? [filters.list] : undefined}
+        >
+            <Button
+                aria-label="Add contact"
+                data-test="contacts-new-button-mobile"
+            >
+                <Plus />
+                <span>Add</span>
+            </Button>
+        </CreateContactModal>
+    ) : null;
+
     const pagination = (
         <div className="flex items-center gap-2 pr-1 text-body leading-5 text-muted-foreground">
             <span className="hidden whitespace-nowrap sm:inline">
@@ -457,22 +492,42 @@ export default function ContactsIndex({
         <>
             <Head title="Contacts" />
 
-            <div className="flex h-svh min-h-[32rem] w-full min-w-0 flex-col px-4 pt-6 lg:px-6">
+            <div className="flex min-h-[calc(100svh-3.5rem)] w-full min-w-0 flex-col px-4 pt-6 lg:h-svh lg:min-h-[32rem] lg:px-6">
                 <PageHead
                     title="Contacts"
                     description={`${contacts.total.toLocaleString()} ${
                         contacts.total === 1 ? 'contact' : 'contacts'
                     } in this view`}
+                    mobileDescription={`${contacts.total.toLocaleString()} ${
+                        contacts.total === 1 ? 'contact' : 'contacts'
+                    }`}
                     actions={
                         can.create && !isFirstRun ? (
                             <>
-                                {importButton}
-                                {addContactButton}
+                                <div className="hidden items-center gap-2 lg:flex">
+                                    {importButton}
+                                    {addContactButton}
+                                </div>
+                                <div className="flex items-center gap-2 lg:hidden">
+                                    {importButtonMobile}
+                                    {addContactButtonMobile}
+                                </div>
                             </>
                         ) : null
                     }
                     mobileNav
                 />
+
+                <div className="mt-4 lg:hidden">
+                    <ListTabs
+                        lists={lists}
+                        activeListId={filters.list}
+                        canCreate={can.create}
+                        search={filters.q}
+                        disabled={busy !== null}
+                        className="h-auto rounded-lg border py-1"
+                    />
+                </div>
 
                 {latestImport ? (
                     <div className="mt-4">
@@ -486,8 +541,15 @@ export default function ContactsIndex({
                 >
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" disabled={busy !== null}>
-                                <Filter /> Filters
+                            <Button
+                                variant="outline"
+                                disabled={busy !== null}
+                                aria-label="Filters"
+                            >
+                                <Filter />
+                                <span className="hidden lg:inline">
+                                    Filters
+                                </span>
                                 {filters.list ? (
                                     <span
                                         className="size-1.5 rounded-full bg-primary"
@@ -542,7 +604,7 @@ export default function ContactsIndex({
                     </DropdownMenu>
 
                     {selectedCount > 0 ? (
-                        <>
+                        <div className="hidden items-center gap-2 lg:flex">
                             <span
                                 className="text-body leading-5 font-medium text-primary"
                                 data-test="contacts-selection-count"
@@ -583,18 +645,18 @@ export default function ContactsIndex({
                             >
                                 <Trash2 /> Delete
                             </Button>
-                        </>
+                        </div>
                     ) : null}
 
                     <form
                         role="search"
-                        className="ms-auto flex items-center gap-2"
+                        className="flex min-w-0 flex-1 items-center gap-2 lg:ms-auto lg:flex-none"
                         onSubmit={(event) => {
                             event.preventDefault();
                             navigate({ q: search });
                         }}
                     >
-                        <div className="relative">
+                        <div className="relative min-w-0 flex-1 lg:flex-none">
                             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 aria-label="Search contacts"
@@ -616,6 +678,7 @@ export default function ContactsIndex({
                                 size="icon"
                                 aria-label="Manage columns"
                                 disabled={busy !== null}
+                                className="hidden lg:inline-flex"
                                 data-test="contacts-columns-button"
                             >
                                 <Settings />
@@ -643,7 +706,7 @@ export default function ContactsIndex({
                     </p>
                 ) : null}
 
-                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card max-lg:-mx-4 max-lg:overflow-visible max-lg:rounded-none max-lg:border-x-0">
                     {contacts.data.length === 0 ? (
                         <div className="flex min-h-0 flex-1 items-center justify-center p-6">
                             {isOutOfRange ? (
@@ -716,16 +779,109 @@ export default function ContactsIndex({
                         </div>
                     )}
 
-                    <ListTabs
-                        lists={lists}
-                        activeListId={filters.list}
-                        canCreate={can.create}
-                        search={filters.q}
-                        disabled={busy !== null}
-                        trailing={pagination}
-                    />
+                    <div className="hidden lg:block">
+                        <ListTabs
+                            lists={lists}
+                            activeListId={filters.list}
+                            canCreate={can.create}
+                            search={filters.q}
+                            disabled={busy !== null}
+                            trailing={pagination}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t px-4 py-2 lg:hidden">
+                        <p className="text-label leading-4 text-muted-foreground">
+                            {contacts.total === 0
+                                ? '0 contacts'
+                                : `${(contacts.from ?? 0).toLocaleString()}–${(contacts.to ?? 0).toLocaleString()} of ${contacts.total.toLocaleString()}`}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            {previousLink?.url && busy === null ? (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link
+                                        href={previousLink.url}
+                                        preserveScroll
+                                    >
+                                        Previous
+                                    </Link>
+                                </Button>
+                            ) : (
+                                <Button variant="outline" size="sm" disabled>
+                                    Previous
+                                </Button>
+                            )}
+                            {nextLink?.url && busy === null ? (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={nextLink.url} preserveScroll>
+                                        Next
+                                    </Link>
+                                </Button>
+                            ) : (
+                                <Button variant="outline" size="sm" disabled>
+                                    Next
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {selectedCount > 0 ? (
+                <div
+                    className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 flex min-h-14 items-center gap-3 border-t bg-background px-4 py-2.5 lg:hidden"
+                    data-test="contacts-selection-bar"
+                >
+                    <p className="text-body leading-5 font-medium text-primary">
+                        <span className="font-semibold tabular-nums">
+                            {selectedCount}
+                        </span>{' '}
+                        selected
+                    </p>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        className="ms-auto"
+                        onClick={() => setCampaignOpen(true)}
+                        disabled={busy !== null}
+                        data-test="contacts-bulk-add-to-campaign-mobile"
+                    >
+                        <Send /> Add to campaign
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="More contact actions"
+                                data-test="contacts-bulk-more"
+                            >
+                                <MoreHorizontal />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                onSelect={markDoNotContact}
+                                disabled={
+                                    busy !== null || allAlreadyDoNotContact
+                                }
+                            >
+                                Do not contact
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => {
+                                    setDeleteIds(selectedOnPage);
+                                    setDeleteOpen(true);
+                                }}
+                                disabled={busy !== null}
+                            >
+                                <Trash2 /> Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            ) : null}
 
             <ConfirmDialog
                 open={deleteOpen}

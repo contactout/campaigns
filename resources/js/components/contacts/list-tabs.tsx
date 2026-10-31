@@ -20,6 +20,8 @@ type Props = {
     disabled?: boolean;
     /** Pagination, rendered at the right of the strip. */
     trailing?: ReactNode;
+    /** Extra classes on the strip (the 390 page renders it as a card above the grid). */
+    className?: string;
 };
 
 export default function ListTabs({
@@ -29,6 +31,7 @@ export default function ListTabs({
     search,
     disabled = false,
     trailing,
+    className,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
@@ -56,7 +59,10 @@ export default function ListTabs({
 
     return (
         <div
-            className="flex h-[35px] shrink-0 items-stretch justify-between gap-2 border-t bg-card"
+            className={cn(
+                'flex h-[35px] shrink-0 items-stretch justify-between gap-2 border-t bg-card',
+                className,
+            )}
             data-test="contacts-list-tabs"
         >
             <div className="flex min-w-0 items-end gap-1 overflow-x-auto px-1 pb-0.5">

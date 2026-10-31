@@ -1,7 +1,9 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import ConfirmDialog from '@/components/confirm-dialog';
+import DeleteTemplateModal from '@/components/templates/delete-template-modal';
+import FormLabel from '@/components/form-label';
 import InputError from '@/components/input-error';
 import PageHead from '@/components/page-head';
 import PlaceholderManager from '@/components/templates/placeholder-manager';
@@ -15,7 +17,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { index, update } from '@/routes/templates';
 import type {
     EmailTemplateDetail,
@@ -56,6 +57,7 @@ export default function TemplateShow({
     });
 
     const [saved, setSaved] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(
         null,
     );
@@ -137,7 +139,14 @@ export default function TemplateShow({
 
             <div className="flex w-full flex-col gap-5 px-4 py-6 lg:px-6">
                 <PageHead
-                    title={form.data.name.trim() || 'Untitled template'}
+                    title={
+                        <>
+                            <span className="lg:hidden">Edit template</span>
+                            <span className="hidden lg:inline">
+                                {form.data.name.trim() || 'Untitled template'}
+                            </span>
+                        </>
+                    }
                     description={description}
                     mobileNav
                     back={{
@@ -154,29 +163,78 @@ export default function TemplateShow({
                     }}
                     titleAddon={
                         template.is_draft ? (
-                            <Badge variant="neutral">Draft</Badge>
+                            <span className="hidden lg:inline-flex">
+                                <Badge variant="neutral">Draft</Badge>
+                            </span>
                         ) : null
                     }
                     actions={
-                        can.update ? (
+                        can.update || can.delete ? (
                             <>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={() => guard(discard)}
-                                    disabled={form.processing}
-                                    data-test="template-discard-button"
-                                >
-                                    Discard
-                                </Button>
-                                <Button
-                                    type="button"
-                                    onClick={submit}
-                                    disabled={form.processing}
-                                    data-test="template-save-button"
-                                >
-                                    Save template
-                                </Button>
+                                {can.update ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => guard(discard)}
+                                        disabled={form.processing}
+                                        data-test="template-discard-button"
+                                        className="hidden lg:inline-flex"
+                                    >
+                                        Discard
+                                    </Button>
+                                ) : null}
+                                {can.update ? (
+                                    <Button
+                                        type="button"
+                                        onClick={submit}
+                                        disabled={form.processing}
+                                        aria-label="Save template"
+                                        data-test="template-save-button"
+                                        className="max-lg:border-0 max-lg:bg-transparent max-lg:px-2 max-lg:text-primary max-lg:hover:bg-accent max-lg:focus-visible:border-transparent"
+                                    >
+                                        <span className="hidden lg:inline">
+                                            Save template
+                                        </span>
+                                        <span className="lg:hidden">Save</span>
+                                    </Button>
+                                ) : null}
+                                {can.update || can.delete ? (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="icon"
+                                                aria-label="More template actions"
+                                                data-test="template-more-button"
+                                            >
+                                                <MoreHorizontal className="size-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            {can.update ? (
+                                                <DropdownMenuItem
+                                                    className="lg:hidden"
+                                                    onSelect={() =>
+                                                        guard(discard)
+                                                    }
+                                                >
+                                                    Discard changes
+                                                </DropdownMenuItem>
+                                            ) : null}
+                                            {can.delete ? (
+                                                <DropdownMenuItem
+                                                    variant="destructive"
+                                                    onSelect={() =>
+                                                        setDeleteOpen(true)
+                                                    }
+                                                >
+                                                    <Trash2 /> Delete template
+                                                </DropdownMenuItem>
+                                            ) : null}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                ) : null}
                             </>
                         ) : null
                     }
@@ -192,7 +250,7 @@ export default function TemplateShow({
                     >
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
                             <div className="grid min-w-0 gap-1.5">
-                                <Label htmlFor="name">Name</Label>
+                                <FormLabel htmlFor="name">Name</FormLabel>
                                 <Input
                                     id="name"
                                     ref={nameRef}
@@ -209,7 +267,9 @@ export default function TemplateShow({
                             </div>
 
                             <div className="grid min-w-0 gap-1.5">
-                                <Label htmlFor="folder_id">Folder</Label>
+                                <FormLabel htmlFor="folder_id">
+                                    Folder
+                                </FormLabel>
                                 <select
                                     id="folder_id"
                                     value={form.data.folder_id}
@@ -237,7 +297,7 @@ export default function TemplateShow({
                         </div>
 
                         <div className="mt-4 grid min-w-0 gap-1.5">
-                            <Label htmlFor="subject">Subject</Label>
+                            <FormLabel htmlFor="subject">Subject</FormLabel>
                             <Input
                                 id="subject"
                                 value={form.data.subject}
@@ -252,7 +312,7 @@ export default function TemplateShow({
                         </div>
 
                         <div className="mt-4 grid min-w-0 gap-1.5">
-                            <Label id="template-body-label">Body</Label>
+                            <FormLabel id="template-body-label">Body</FormLabel>
                             <RichTextEditor
                                 name="body"
                                 value={form.data.body}
@@ -270,8 +330,15 @@ export default function TemplateShow({
                                                     type="button"
                                                     variant="outline"
                                                     size="sm"
+                                                    aria-label="Insert placeholder"
                                                 >
-                                                    <Plus /> Placeholder
+                                                    <Plus />
+                                                    <span className="lg:hidden">
+                                                        Insert
+                                                    </span>
+                                                    <span className="hidden lg:inline">
+                                                        Placeholder
+                                                    </span>
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
@@ -309,7 +376,7 @@ export default function TemplateShow({
                             <h2 className="text-h3 leading-6 font-semibold">
                                 Placeholders
                             </h2>
-                            <p className="mt-1 text-label leading-4 text-muted-foreground">
+                            <p className="mt-1 hidden text-label leading-4 text-muted-foreground lg:block">
                                 Click to insert at cursor. Fallback used when a
                                 contact field is empty.
                             </p>
@@ -334,11 +401,23 @@ export default function TemplateShow({
                 title="Discard your changes?"
                 description="This template has edits that have not been saved. Leaving now discards them."
                 confirmLabel="Discard changes"
+                onCloseAutoFocus={(event) => {
+                    // Radix would put focus back on the Discard button after the
+                    // dialog closes, undoing discard()'s own focus target.
+                    event.preventDefault();
+                    nameRef.current?.focus();
+                }}
                 onConfirm={() => {
                     const action = pendingAction;
                     setPendingAction(null);
                     action?.();
                 }}
+            />
+
+            <DeleteTemplateModal
+                template={template}
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
             />
         </>
     );

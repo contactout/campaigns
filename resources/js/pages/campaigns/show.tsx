@@ -1,4 +1,4 @@
-import { Form, Head, usePage } from '@inertiajs/react';
+import { Form, Head, router, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     Archive,
@@ -26,6 +26,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -177,7 +178,14 @@ export default function CampaignShow({
         openerSelector.current = null;
 
         requestAnimationFrame(() => {
-            document.querySelector<HTMLElement>(selector)?.focus();
+            // The 390 list and the desktop list each render an Add step button,
+            // and only one of them is displayed at a time.
+            const targets = document.querySelectorAll<HTMLElement>(selector);
+            const visible = [...targets].find(
+                (target) => target.offsetParent !== null,
+            );
+
+            visible?.focus();
         });
     }, [editor]);
 
@@ -243,31 +251,35 @@ export default function CampaignShow({
             ) : null}
 
             {can.duplicate ? (
-                <Form {...duplicate.form([slug, campaign.id])}>
-                    {({ processing }) => (
-                        <Button
-                            type="submit"
-                            variant="outline"
-                            disabled={processing}
-                        >
-                            <Copy /> Duplicate
-                        </Button>
-                    )}
-                </Form>
+                <div className="hidden lg:block">
+                    <Form {...duplicate.form([slug, campaign.id])}>
+                        {({ processing }) => (
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                disabled={processing}
+                            >
+                                <Copy /> Duplicate
+                            </Button>
+                        )}
+                    </Form>
+                </div>
             ) : null}
 
             {canArchive ? (
-                <Form {...archive.form([slug, campaign.id])}>
-                    {({ processing }) => (
-                        <Button
-                            type="submit"
-                            variant="outline"
-                            disabled={processing}
-                        >
-                            <Archive /> Archive
-                        </Button>
-                    )}
-                </Form>
+                <div className="hidden lg:block">
+                    <Form {...archive.form([slug, campaign.id])}>
+                        {({ processing }) => (
+                            <Button
+                                type="submit"
+                                variant="outline"
+                                disabled={processing}
+                            >
+                                <Archive /> Archive
+                            </Button>
+                        )}
+                    </Form>
+                </div>
             ) : null}
 
             {canStop ? (
@@ -308,36 +320,99 @@ export default function CampaignShow({
                 </Form>
             ) : null}
 
-            {can.update && tab !== 'recipients' ? (
+            {can.update ? (
                 <Button
                     variant={canStart ? 'outline' : 'default'}
                     onClick={() => setRecipientsOpen(true)}
+                    aria-label="Add recipients"
                     data-test="campaign-add-recipients-button"
+                    className={cn(tab === 'recipients' && 'lg:hidden')}
                 >
-                    <Plus /> Add recipients
+                    <Plus />
+                    <span className="hidden lg:inline">Add recipients</span>
+                    <span className="lg:hidden">Recipients</span>
                 </Button>
             ) : null}
 
+            {/* The 390 head has one overflow menu; the desktop keeps the explicit
+                buttons above and only puts Delete behind it. */}
+            {can.duplicate || canArchive || can.delete ? (
+                <div className="lg:hidden">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="More campaign actions"
+                            >
+                                <MoreHorizontal />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="lg:hidden">
+                            {can.duplicate ? (
+                                <DropdownMenuItem
+                                    onSelect={() =>
+                                        router.post(
+                                            duplicate.url([slug, campaign.id]),
+                                            {},
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    <Copy /> Duplicate
+                                </DropdownMenuItem>
+                            ) : null}
+                            {canArchive ? (
+                                <DropdownMenuItem
+                                    onSelect={() =>
+                                        router.post(
+                                            archive.url([slug, campaign.id]),
+                                            {},
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    <Archive /> Archive
+                                </DropdownMenuItem>
+                            ) : null}
+                            {can.delete ? (
+                                <>
+                                    <DropdownMenuSeparator className="lg:hidden" />
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onSelect={() => setDeleteOpen(true)}
+                                    >
+                                        <Trash2 /> Delete campaign
+                                    </DropdownMenuItem>
+                                </>
+                            ) : null}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            ) : null}
+
             {can.delete ? (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="More campaign actions"
-                        >
-                            <MoreHorizontal />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={() => setDeleteOpen(true)}
-                        >
-                            <Trash2 /> Delete campaign
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="hidden lg:block">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="More campaign actions"
+                            >
+                                <MoreHorizontal />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => setDeleteOpen(true)}
+                            >
+                                <Trash2 /> Delete campaign
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             ) : null}
         </>
     );
@@ -349,15 +424,22 @@ export default function CampaignShow({
             <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-6">
                 <PageHead
                     title={campaign.name}
+                    mobileDescription={`${campaign.status_label} · ${stats.recipients_count} ${
+                        stats.recipients_count === 1
+                            ? 'recipient'
+                            : 'recipients'
+                    }`}
                     back={{
                         href: index.url(slug),
                         label: 'Back to campaigns',
                     }}
                     titleAddon={
-                        <CampaignStatusBadge
-                            status={campaign.status}
-                            label={campaign.status_label}
-                        />
+                        <span className="hidden lg:inline-flex">
+                            <CampaignStatusBadge
+                                status={campaign.status}
+                                label={campaign.status_label}
+                            />
+                        </span>
                     }
                     actions={actions}
                     mobileNav

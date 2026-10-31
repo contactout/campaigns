@@ -6,6 +6,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import { update } from '@/routes/mailer-connections/signature';
 import type {
     MailerConnection,
@@ -18,6 +19,8 @@ type Props = {
     connection: MailerConnection;
     signatures: MailerConnectionSignatureOption[];
     disabled?: boolean;
+    /** Extra classes for the trigger, for the 390 card's inline text row. */
+    triggerClassName?: string;
 };
 
 /**
@@ -32,6 +35,7 @@ export default function SignatureSelect({
     connection,
     signatures,
     disabled = false,
+    triggerClassName,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
@@ -69,7 +73,11 @@ export default function SignatureSelect({
             <SelectTrigger
                 size="sm"
                 aria-label={`Signature for ${connection.name}`}
-                className="w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-1 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate"
+                title={label}
+                className={cn(
+                    'w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-0.5 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate',
+                    triggerClassName,
+                )}
                 data-test="connection-signature"
             >
                 <SelectValue>{label}</SelectValue>

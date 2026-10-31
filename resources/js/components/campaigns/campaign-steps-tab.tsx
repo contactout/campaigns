@@ -162,7 +162,7 @@ export default function CampaignStepsTab({
                 />
             ) : null}
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:gap-3 xl:grid-cols-4">
                 <StatCard label="Steps" value={String(stats.steps_count)} />
                 <StatCard
                     label="Recipients"
@@ -172,7 +172,7 @@ export default function CampaignStepsTab({
                 <StatCard label="Opened" value={openedRate} />
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="hidden flex-wrap items-center justify-between gap-3 lg:flex">
                 <p className="text-body leading-5 text-muted-foreground">
                     {sender ? (
                         <>
@@ -271,13 +271,13 @@ export default function CampaignStepsTab({
                                         >
                                             <GripVertical
                                                 className={cn(
-                                                    'size-4 shrink-0 text-muted-foreground',
+                                                    'hidden size-4 shrink-0 text-muted-foreground lg:block',
                                                     canUpdate && 'cursor-grab',
                                                 )}
                                                 aria-hidden
                                             />
 
-                                            <span className="ml-4 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                                            <span className="ml-3 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground lg:ml-4">
                                                 <Mail
                                                     className="size-3"
                                                     aria-hidden
@@ -299,7 +299,7 @@ export default function CampaignStepsTab({
 
                                             <div
                                                 data-test="campaign-step-metrics"
-                                                className="grid w-[288px] shrink-0 grid-cols-3"
+                                                className="hidden w-[288px] shrink-0 grid-cols-3 lg:grid"
                                             >
                                                 <Metric
                                                     label="Sent"
@@ -411,6 +411,18 @@ export default function CampaignStepsTab({
                             </div>
                         </div>
                     ))}
+
+                    {canUpdate ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full lg:hidden"
+                            onClick={onAddStep}
+                            data-test="campaign-add-step-button-mobile"
+                        >
+                            <Plus /> Add step
+                        </Button>
+                    ) : null}
                 </div>
             )}
         </div>

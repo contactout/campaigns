@@ -164,22 +164,34 @@ export default function Dashboard({
             />
             <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-6">
                 <PageHead
-                    title={firstName ? `${greeting}, ${firstName}` : greeting}
+                    title={
+                        <>
+                            <span className="lg:hidden">Dashboard</span>
+                            <span className="hidden lg:inline">
+                                {firstName
+                                    ? `${greeting}, ${firstName}`
+                                    : greeting}
+                            </span>
+                        </>
+                    }
                     description={
                         currentTeam
                             ? `${currentTeam.name} · ${dateFormatter.format(new Date())}`
                             : undefined
                     }
+                    mobileDescription={currentTeam?.name}
                     mobileNav
                     actions={
                         can?.create && currentTeam ? (
-                            <CreateCampaignModal
-                                mailerConnections={mailerConnections}
-                            >
-                                <Button data-test="dashboard-new-campaign">
-                                    <Plus /> New campaign
-                                </Button>
-                            </CreateCampaignModal>
+                            <div className="hidden lg:block">
+                                <CreateCampaignModal
+                                    mailerConnections={mailerConnections}
+                                >
+                                    <Button data-test="dashboard-new-campaign">
+                                        <Plus /> New campaign
+                                    </Button>
+                                </CreateCampaignModal>
+                            </div>
                         ) : null
                     }
                 />
@@ -204,7 +216,7 @@ export default function Dashboard({
                 ) : null}
 
                 {metrics ? (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-4 lg:gap-3 xl:grid-cols-4">
                         <StatCard
                             label="Emails sent · 30d"
                             value={formatCount(metrics.emails_sent)}
@@ -287,7 +299,7 @@ export default function Dashboard({
                                 {checklist.map((step) => (
                                     <li
                                         key={step.key}
-                                        className="flex items-center gap-3 border-b py-2.5"
+                                        className="flex items-start gap-3 border-b py-2.5 lg:items-center"
                                     >
                                         {step.done ? (
                                             <span
@@ -323,11 +335,24 @@ export default function Dashboard({
                                             <p className="text-body leading-5 text-muted-foreground">
                                                 {step.description}
                                             </p>
+                                            {!step.done ? (
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="mt-2 w-full lg:hidden"
+                                                    asChild
+                                                >
+                                                    <Link href={step.href}>
+                                                        {step.cta}
+                                                    </Link>
+                                                </Button>
+                                            ) : null}
                                         </div>
                                         {!step.done ? (
                                             <Button
                                                 variant="secondary"
                                                 size="sm"
+                                                className="hidden lg:inline-flex"
                                                 asChild
                                             >
                                                 <Link href={step.href}>

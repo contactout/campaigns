@@ -64,7 +64,12 @@
     --text-h1: 20px;
     --text-h1--letter-spacing: -0.01em;
     --text-h3: 16px;
-    --text-body: 13px;
+    /* Mobile-first: the 390 boards set body text one step up from the desktop
+       13px (a campaign row's name measures 169px at 390 against 158px at 1280
+       for the same string, and the 24px stat role is unchanged at both).
+       `--type-body` is the single switch; every primitive reads text-body, so
+       the mobile scale applies without per-page one-offs. */
+    --text-body: var(--type-body);
     --text-label: 12px;
     --text-stat: 24px;
     --text-brand: 14px;
@@ -89,6 +94,7 @@
 }
 
 :root {
+    --type-body: 14px;
     --background: #ffffff;
     --foreground: #18181b;
     --card: #ffffff;
@@ -199,5 +205,17 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/* The 390 boards show 28-32px controls; a finger needs 44px. The mobile box is
+   raised to a real 44px (see the min-height in the Button, Input and
+   SelectTrigger primitives) rather than faking it with an overflowing pseudo
+   element, which later siblings paint over. Rows and the tab bar carry their
+   own 44px+ targets. */
+
+@media (width >= 64rem) {
+    :root {
+        --type-body: 13px;
     }
 }

@@ -1,10 +1,10 @@
 import { Form, usePage } from '@inertiajs/react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import FormLabel from '@/components/form-label';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -60,13 +60,21 @@ export default function PlaceholderManager({
                             type="button"
                             onClick={() => onInsert?.(placeholder.name)}
                             title={`Insert {{${placeholder.name}}}`}
+                            aria-label={
+                                placeholder.fallback
+                                    ? `Insert ${placeholder.name}, fallback ${placeholder.fallback}`
+                                    : `Insert ${placeholder.name}`
+                            }
                             className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border"
                         >
                             {`{{${placeholder.name}}}`}
                         </button>
 
+                        {/* The 390 board shows chips only; the stored fallback
+                            stays reachable through the chip's accessible name and
+                            is visible from lg up. */}
                         <span
-                            className="min-w-0 truncate text-label leading-4 text-muted-foreground group-focus-within:opacity-0 group-hover:opacity-0"
+                            className="hidden min-w-0 truncate text-label leading-4 text-muted-foreground group-focus-within:opacity-0 group-hover:opacity-0 lg:block"
                             title={placeholder.fallback ?? undefined}
                         >
                             {placeholder.fallback ?? '—'}
@@ -84,7 +92,7 @@ export default function PlaceholderManager({
                                         size="icon"
                                         disabled={processing}
                                         aria-label={`Delete ${placeholder.name}`}
-                                        className="pointer-events-none size-7 text-muted-foreground opacity-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                                        className="size-7 text-muted-foreground max-lg:pointer-events-auto max-lg:opacity-100 lg:pointer-events-none lg:opacity-0 lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100 lg:focus-visible:pointer-events-auto lg:focus-visible:opacity-100"
                                     >
                                         <Trash2 className="size-3.5" />
                                     </Button>
@@ -120,9 +128,9 @@ export default function PlaceholderManager({
                             {({ errors, processing }) => (
                                 <>
                                     <div className="grid min-w-0 gap-1.5">
-                                        <Label htmlFor="placeholder-name">
+                                        <FormLabel htmlFor="placeholder-name">
                                             Name
-                                        </Label>
+                                        </FormLabel>
                                         <Input
                                             id="placeholder-name"
                                             name="name"
@@ -134,9 +142,9 @@ export default function PlaceholderManager({
                                     </div>
 
                                     <div className="grid min-w-0 gap-1.5">
-                                        <Label htmlFor="placeholder-fallback">
+                                        <FormLabel htmlFor="placeholder-fallback">
                                             Fallback
-                                        </Label>
+                                        </FormLabel>
                                         <Input
                                             id="placeholder-fallback"
                                             name="fallback"
@@ -147,9 +155,9 @@ export default function PlaceholderManager({
                                     </div>
 
                                     <div className="grid min-w-0 gap-1.5">
-                                        <Label htmlFor="placeholder-type">
+                                        <FormLabel htmlFor="placeholder-type">
                                             Type
-                                        </Label>
+                                        </FormLabel>
                                         <Select
                                             name="type"
                                             value={type}

@@ -1,6 +1,10 @@
 import { useSyncExternalStore } from 'react';
 
-const MOBILE_BREAKPOINT = 768;
+// The product shell drops its sidebar at lg (64rem), so "mobile" means
+// "below the sidebar breakpoint": the 390 bottom tab bar and the page-head
+// sheet trigger replace the rail there. Settings and auth inherit the same
+// line, which keeps their navigation reachable at every width.
+const MOBILE_BREAKPOINT = 1024;
 
 const mql =
     typeof window === 'undefined'

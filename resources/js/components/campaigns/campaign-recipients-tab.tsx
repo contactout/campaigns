@@ -21,6 +21,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import { show } from '@/routes/campaigns';
 import {
     bulkDestroy,
@@ -130,7 +131,7 @@ export default function CampaignRecipientsTab({
 
             <div className="flex flex-wrap items-center gap-2">
                 {selectedOnPage.length > 0 ? (
-                    <div className="flex items-center gap-3">
+                    <div className="hidden items-center gap-3 lg:flex">
                         <p
                             className="text-body leading-5 font-medium"
                             data-test="campaign-recipients-selected-count"
@@ -151,9 +152,13 @@ export default function CampaignRecipientsTab({
                     </div>
                 ) : null}
 
-                <div className="ms-auto flex flex-wrap items-center gap-2">
-                    <form role="search" onSubmit={searchRecipients}>
-                        <div className="relative w-[220px]">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:ms-auto lg:flex-none">
+                    <form
+                        role="search"
+                        onSubmit={searchRecipients}
+                        className="min-w-0 flex-1 lg:flex-none"
+                    >
+                        <div className="relative w-full lg:w-[220px]">
                             <Search
                                 className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
                                 aria-hidden
@@ -175,7 +180,9 @@ export default function CampaignRecipientsTab({
                             type="button"
                             variant="secondary"
                             onClick={onAddRecipients}
+                            aria-label="Add recipients"
                             data-test="campaign-add-recipients-button"
+                            className="hidden lg:inline-flex"
                         >
                             <Plus /> Add recipients
                         </Button>
@@ -230,115 +237,65 @@ export default function CampaignRecipientsTab({
                     )}
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-lg border bg-card">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                                <TableHead className="w-[34px] pr-0">
-                                    <Checkbox
-                                        checked={
-                                            allSelected
-                                                ? true
-                                                : someSelected
-                                                  ? 'indeterminate'
-                                                  : false
-                                        }
-                                        onCheckedChange={toggleAll}
-                                        aria-label="Select all recipients on this page"
-                                    />
-                                </TableHead>
-                                <TableHead className="w-[220px]">
-                                    Name
-                                </TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead className="w-[148px]">
-                                    Status
-                                </TableHead>
-                                <TableHead className="w-[64px] text-right">
-                                    <span className="sr-only">Actions</span>
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {recipients.data.map((recipient) => (
-                                <TableRow
+                <>
+                    <ul
+                        className={cn(
+                            'divide-y overflow-hidden rounded-lg border bg-card lg:hidden',
+                            selectedOnPage.length > 0 && 'mb-16',
+                        )}
+                        data-test="campaign-recipient-list-mobile"
+                    >
+                        {recipients.data.map((recipient) => {
+                            const isSelected = selectedOnPage.includes(
+                                recipient.id,
+                            );
+
+                            return (
+                                <li
                                     key={recipient.id}
-                                    data-state={
-                                        selectedOnPage.includes(recipient.id)
-                                            ? 'selected'
-                                            : undefined
-                                    }
-                                    data-test="campaign-recipient-row"
+                                    className={cn(
+                                        'flex min-h-[64px] items-center gap-1 py-2.5 pr-4 pl-1',
+                                        isSelected && 'bg-accent',
+                                    )}
+                                    onClick={() => {
+                                        if (canUpdate) {
+                                            toggleOne(recipient.id);
+                                        }
+                                    }}
+                                    data-test="campaign-recipient-row-mobile"
                                 >
-                                    <TableCell className="h-[44px] pr-0">
+                                    <span
+                                        className="flex size-11 shrink-0 items-center justify-center"
+                                        onClick={(event) =>
+                                            event.stopPropagation()
+                                        }
+                                    >
                                         <Checkbox
-                                            checked={selectedOnPage.includes(
-                                                recipient.id,
-                                            )}
+                                            checked={isSelected}
                                             onCheckedChange={() =>
                                                 toggleOne(recipient.id)
                                             }
                                             aria-label={`Select ${recipient.name}`}
                                         />
-                                    </TableCell>
-                                    <TableCell className="h-[44px] truncate font-semibold">
-                                        {recipient.name}
-                                    </TableCell>
-                                    <TableCell className="h-[44px] truncate text-muted-foreground">
-                                        {recipient.email ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="h-[44px]">
-                                        <RecipientStatusBadge
-                                            recipient={recipient}
-                                        />
-                                    </TableCell>
-                                    <TableCell className="h-[44px] text-right">
-                                        {canUpdate ? (
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="size-7 text-muted-foreground"
-                                                        aria-label={`Actions for ${recipient.name}`}
-                                                    >
-                                                        <MoreVertical className="size-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem
-                                                        variant="destructive"
-                                                        onSelect={() =>
-                                                            router.delete(
-                                                                destroyRecipient.url(
-                                                                    [
-                                                                        slug,
-                                                                        campaignId,
-                                                                        recipient.id,
-                                                                    ],
-                                                                ),
-                                                                {
-                                                                    preserveScroll: true,
-                                                                    preserveState: true,
-                                                                },
-                                                            )
-                                                        }
-                                                    >
-                                                        <Trash2 /> Remove from
-                                                        campaign
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        ) : null}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                                    </span>
+                                    <span className="mx-1 min-w-0 flex-1">
+                                        <span className="block truncate text-body leading-5 font-semibold">
+                                            {recipient.name}
+                                        </span>
+                                        <span className="block truncate text-label leading-4 text-muted-foreground">
+                                            {recipient.email ?? '—'}
+                                        </span>
+                                    </span>
+                                    <RecipientStatusBadge
+                                        recipient={recipient}
+                                    />
+                                </li>
+                            );
+                        })}
+                    </ul>
 
-                    <div className="flex h-[52px] items-center justify-between gap-2 border-t px-4">
-                        <p className="text-body leading-5 text-muted-foreground">
+                    <div className="flex items-center justify-between gap-2 lg:hidden">
+                        <p className="text-label leading-4 text-muted-foreground">
                             Showing {recipients.from ?? 0}–{recipients.to ?? 0}{' '}
                             of {recipients.total}
                         </p>
@@ -375,8 +332,187 @@ export default function CampaignRecipientsTab({
                             )}
                         </div>
                     </div>
-                </div>
+
+                    <div className="hidden overflow-hidden rounded-lg border bg-card lg:block">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="hover:bg-transparent">
+                                    <TableHead className="w-[34px] pr-0">
+                                        <Checkbox
+                                            checked={
+                                                allSelected
+                                                    ? true
+                                                    : someSelected
+                                                      ? 'indeterminate'
+                                                      : false
+                                            }
+                                            onCheckedChange={toggleAll}
+                                            aria-label="Select all recipients on this page"
+                                        />
+                                    </TableHead>
+                                    <TableHead className="w-[220px]">
+                                        Name
+                                    </TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead className="w-[148px]">
+                                        Status
+                                    </TableHead>
+                                    <TableHead className="w-[64px] text-right">
+                                        <span className="sr-only">Actions</span>
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {recipients.data.map((recipient) => (
+                                    <TableRow
+                                        key={recipient.id}
+                                        data-state={
+                                            selectedOnPage.includes(
+                                                recipient.id,
+                                            )
+                                                ? 'selected'
+                                                : undefined
+                                        }
+                                        data-test="campaign-recipient-row"
+                                    >
+                                        <TableCell className="h-[44px] pr-0">
+                                            <Checkbox
+                                                checked={selectedOnPage.includes(
+                                                    recipient.id,
+                                                )}
+                                                onCheckedChange={() =>
+                                                    toggleOne(recipient.id)
+                                                }
+                                                aria-label={`Select ${recipient.name}`}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="h-[44px] truncate font-semibold">
+                                            {recipient.name}
+                                        </TableCell>
+                                        <TableCell className="h-[44px] truncate text-muted-foreground">
+                                            {recipient.email ?? '—'}
+                                        </TableCell>
+                                        <TableCell className="h-[44px]">
+                                            <RecipientStatusBadge
+                                                recipient={recipient}
+                                            />
+                                        </TableCell>
+                                        <TableCell className="h-[44px] text-right">
+                                            {canUpdate ? (
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger
+                                                        asChild
+                                                    >
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-7 text-muted-foreground"
+                                                            aria-label={`Actions for ${recipient.name}`}
+                                                        >
+                                                            <MoreVertical className="size-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem
+                                                            variant="destructive"
+                                                            onSelect={() =>
+                                                                router.delete(
+                                                                    destroyRecipient.url(
+                                                                        [
+                                                                            slug,
+                                                                            campaignId,
+                                                                            recipient.id,
+                                                                        ],
+                                                                    ),
+                                                                    {
+                                                                        preserveScroll: true,
+                                                                        preserveState: true,
+                                                                    },
+                                                                )
+                                                            }
+                                                        >
+                                                            <Trash2 /> Remove
+                                                            from campaign
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            ) : null}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+
+                        <div className="flex h-[52px] items-center justify-between gap-2 border-t px-4">
+                            <p className="text-body leading-5 text-muted-foreground">
+                                Showing {recipients.from ?? 0}–
+                                {recipients.to ?? 0} of {recipients.total}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                {previousLink?.url ? (
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link
+                                            href={previousLink.url}
+                                            preserveScroll
+                                            preserveState
+                                        >
+                                            Previous
+                                        </Link>
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled
+                                    >
+                                        Previous
+                                    </Button>
+                                )}
+                                {nextLink?.url ? (
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link
+                                            href={nextLink.url}
+                                            preserveScroll
+                                            preserveState
+                                        >
+                                            Next
+                                        </Link>
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled
+                                    >
+                                        Next
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
+
+            {selectedOnPage.length > 0 && canUpdate ? (
+                <div
+                    className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 flex min-h-14 items-center gap-3 border-t bg-background px-4 py-2.5 lg:hidden"
+                    data-test="campaign-recipients-selection-bar"
+                >
+                    <p className="text-body leading-5 font-medium">
+                        {selectedOnPage.length} selected
+                    </p>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="ms-auto text-destructive-foreground"
+                        onClick={() => setConfirmOpen(true)}
+                    >
+                        <Trash2 /> Remove
+                    </Button>
+                </div>
+            ) : null}
         </div>
     );
 }
