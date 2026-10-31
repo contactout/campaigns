@@ -7,7 +7,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     <div data-slot="table-container" className="relative w-full overflow-x-auto">
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-[13px]", className)}
+        className={cn("w-full caption-bottom text-body", className)}
         {...props}
       />
     </div>
@@ -18,7 +18,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("bg-muted [&_tr]:border-b", className)}
+      className={cn("bg-muted/50 [&_tr]:border-b", className)}
       {...props}
     />
   )
@@ -52,7 +52,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "text-muted-foreground h-9 px-3 text-left align-middle text-[12px] font-medium whitespace-nowrap",
+        "text-muted-foreground h-[34px] px-4 text-left align-middle text-label font-medium whitespace-nowrap",
         className
       )}
       {...props}
@@ -65,7 +65,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "h-9 px-3 align-middle text-[13px] leading-5 whitespace-nowrap",
+        "h-9 px-4 align-middle text-body whitespace-nowrap",
         className
       )}
       {...props}

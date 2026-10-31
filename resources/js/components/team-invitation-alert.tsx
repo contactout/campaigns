@@ -18,10 +18,10 @@ export default function TeamInvitationAlert(props: Props) {
         return (
             <Alert
                 data-test="team-invitation-alert"
-                className="border-accent bg-banner text-primary [&>svg]:text-primary"
+                className="border-accent bg-banner text-banner-foreground [&>svg]:text-banner-foreground"
             >
                 <InfoIcon />
-                <AlertDescription className="text-primary">
+                <AlertDescription className="text-banner-foreground">
                     {props.action} to join the "{props.invitation.teamName}"
                     team.
                 </AlertDescription>
@@ -32,11 +32,10 @@ export default function TeamInvitationAlert(props: Props) {
     return (
         <Alert
             data-test="team-invitation-alert"
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-accent bg-banner px-4 py-2.5 text-primary"
+            role="status"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-accent bg-banner px-4 py-2.5 text-banner-foreground"
         >
-            <div className="min-w-0 text-[13px] leading-5 font-medium text-primary">
-                {props.message}
-            </div>
+            <div className="min-w-0 text-body font-medium">{props.message}</div>
             {props.actionSlot}
         </Alert>
     );

@@ -48,12 +48,27 @@
 
     --color-success: var(--success);
     --color-banner: var(--banner);
+    --color-banner-foreground: var(--banner-foreground);
 
     --color-badge-success: var(--badge-success);
     --color-badge-success-foreground: var(--badge-success-foreground);
     --color-badge-warning: var(--badge-warning);
     --color-badge-warning-foreground: var(--badge-warning-foreground);
     --color-badge-danger: var(--badge-danger);
+    --color-badge-danger-foreground: var(--badge-danger-foreground);
+    --color-badge-neutral-foreground: var(--badge-neutral-foreground);
+
+    --text-h1: 20px;
+    --text-h1--line-height: 28px;
+    --text-h1--letter-spacing: -0.01em;
+    --text-h3: 16px;
+    --text-h3--line-height: 24px;
+    --text-body: 13px;
+    --text-body--line-height: 20px;
+    --text-label: 12px;
+    --text-label--line-height: 16px;
+    --text-stat: 24px;
+    --text-stat--line-height: 32px;
 
     --shadow-dialog: 0 8px 24px #18181b14;
 
@@ -94,7 +109,8 @@
     --destructive-foreground: #dc2626;
     --border: #e4e4e7;
     --input: #e4e4e7;
-    --ring: #b8afff;
+    /* 4.99:1 on white. The board's #b8afff is 1.98:1, under the 3:1 focus floor. */
+    --ring: #6552ff;
     --ring-halo: #f4ebff;
     --success: #16a34a;
     --success-foreground: #35754e;
@@ -103,7 +119,10 @@
     --badge-warning: #fef3c7;
     --badge-warning-foreground: #854d0e;
     --badge-danger: #fef2f2;
+    --badge-danger-foreground: #b91c1c;
+    --badge-neutral-foreground: #52525b;
     --banner: #f8f7ff;
+    --banner-foreground: #3222b1;
     --chart-1: #3222b1;
     --chart-2: #6552ff;
     --chart-3: #b8afff;
@@ -153,6 +172,22 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(0.269 0 0);
     --sidebar-ring: oklch(0.439 0 0);
+
+    /* Additive only: dark counterparts for the tokens phases 1-2 introduced.
+       Measured against oklch(0.145 0 0) = #0a0a0a unless noted. */
+    --primary-border: #8b7dff; /* 6.10:1 on #0a0a0a, 3.11:1 on the dark primary button */
+    --success: #4ade80; /* 11.36:1 */
+    --success-foreground: #86efac; /* 14.10:1 */
+    --badge-success: #14351f;
+    --badge-success-foreground: #86efac; /* 9.59:1 on its fill */
+    --badge-warning: #3a2c0a;
+    --badge-warning-foreground: #fcd34d; /* 9.43:1 on its fill */
+    --badge-danger: #3b1518;
+    --badge-danger-foreground: #fca5a5; /* 8.47:1 on its fill */
+    --badge-neutral-foreground: #d4d4d8; /* 10.24:1 on dark muted */
+    --banner: #221d3a;
+    --banner-foreground: #c9c2ff; /* 9.69:1 on the banner */
+    --ring-halo: #2b2544;
 }
 
 @layer base {
