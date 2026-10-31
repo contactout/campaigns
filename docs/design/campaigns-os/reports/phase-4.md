@@ -1,6 +1,7 @@
 # Phase 4 report — contacts grid
 
-Branch `design/campaigns-os`, feature commit `57a15f1` on top of `2c94273`. Worktree
+Branch `design/campaigns-os`: feature commit `57a15f1` and follow-up `045f845`
+on top of `2c94273`. Worktree
 `/home/azri/projects/contactout/campaigns-design`. Paper MCP was not called. Every board
 number below is a pixel scan of `06-contacts-grid-a-1280.jpg`; every implementation number
 is a DOM rect from a 1280×900 headless Chromium render in the cua Space `local:devtest`.
@@ -74,14 +75,15 @@ stays reachable through a 28px arrow that appears on hover/focus in the last dat
 The only new query is the campaigns prop:
 
 ```sql
-select id, team_id, name from campaigns where team_id = ? order by name asc
+select id, name from campaigns where team_id = ? order by name asc
 ```
 
 SQLite `EXPLAIN QUERY PLAN` on the render fixture:
 `SEARCH campaigns USING INDEX campaigns_team_id_index (team_id=?)` then
-`USE TEMP B-TREE FOR ORDER BY`. `team_id` is selected because the payload filters the
-collection through `$user->can('update', $campaign)`, whose policy reads
-`$campaign->team`; the response never exposes it. The action still posts to
+`USE TEMP B-TREE FOR ORDER BY`. That is one query and no per-campaign work. The first cut
+filtered the collection through `$user->can('update', $campaign)`, which lazy-loaded
+`team` per campaign; `045f845` removed the filter because the policy is just team
+membership, already enforced by the route middleware, and the action still posts to
 `campaigns.recipients.store`, which owns the update gate. The contacts index query itself
 is unchanged: `SEARCH contacts USING INDEX contacts_team_id_status_index (team_id=?)` plus
 a temp B-tree for the existing `latest()` sort.
@@ -187,12 +189,13 @@ Northwind Growth / `preview@northwind.io`, `Company` and `Title` contact fields,
 board lists, 1,284 contacts (the board's eight rows first, all six statuses, a long
 company/title row, email + phone on the rows on page 1) and two campaigns.
 
-Final checks on the clean tree (no preview route, no fixture seeder):
+Final checks on the tree that matches `045f845` (no preview route, no fixture seeder,
+no render artifacts):
 
 ```
 $ npm run build            BUILD_EXIT=0    ✓ built in 2.52s
 $ npm run types:check      TYPES_EXIT=0    tsc --noEmit
-$ npm run check            CHECK_EXIT=0    All 157 files are correctly formatted
+$ npm run check            CHECK_EXIT=0    All 156 files are correctly formatted
                                            Found no warnings or lint errors in 139 files
 $ php artisan test         TEST_EXIT=0     Tests: 571 passed (2483 assertions)
 $ php vendor/bin/pint --test               PINT_EXIT=0     PASS 365 files
@@ -225,6 +228,11 @@ Screenshots (committed next to this report):
 - `phase-4/06-contacts-truncation-1280.png` — the same table with the long company/title
   row and the hovered link.
 - `phase-4/06-contacts-1280-dark.png` — dark mode.
+
+The Space tree (`/home/cua/work/campaigns-phase4`) was re-extracted from the host after
+`045f845`; the changed PHP/TS files were md5-compared with the host worktree and matched.
+It is kept with `vendor/` and `node_modules/` for phase 5. The host tar and `/tmp/phase4`
+were deleted.
 
 ## Deviations
 
@@ -290,6 +298,20 @@ Screenshots (committed next to this report):
 7. **The sidebar still says `Team · Owner`** instead of the board's `Team · 4 members`
    (phase 1's `UserTeam` has no member count).
 8. **The fixture's `1,284 contacts`** is render data; no production count was implied.
+9. **Bulk `Do not contact` writes `status` only**, not `do_not_contact_at`, because it
+   reuses the cell endpoint. Phase-3 R2-7 counts either as blocked, but
+   `ContactController::show()` reads the timestamp, so a contact marked in bulk still shows
+   `Do not contact: No` on its detail page. The inline status dropdown had the same
+   behaviour before this phase; fixing it needs an action/request change.
 9. **The board's active-cell border** is reproduced as a 2px `--ring` focus ring, which
    only appears once a cell is clicked or tabbed to; the light screenshot has no focused
    cell, so the board's outlined Name cell has no direct visual counterpart in it.
+10. **The campaigns payload is a non-column addition.** The brief allows a read-only payload
+   addition only when a column is one `with`/join away; `campaigns` is there for the
+   `Add to campaign` picker, not for a column. The alternative was a disabled button and a
+   gap. The picker lists the team's campaigns and the recipients endpoint re-gates every
+   insert.
+11. **The status trigger hides its chevron** (`[&>svg]:hidden`) to fit `Do not contact` /
+   `Unsubscribed` in the board's 140px column. The pill is still a select (click, arrows,
+   Enter) but no longer advertises that visually; the header could not carry a caret the
+   board does not have.
