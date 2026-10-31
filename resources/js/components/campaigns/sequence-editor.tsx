@@ -1,3 +1,4 @@
+import type { PendingVisit } from '@inertiajs/core';
 import { router, usePage } from '@inertiajs/react';
 import { Mail, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -6,6 +7,7 @@ import ConfirmDialog from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { cn } from '@/lib/utils';
 import { destroy as destroyStep } from '@/routes/campaigns/steps';
 import type {
@@ -55,10 +57,16 @@ export default function SequenceEditor({
     const isMobile = useIsMobile();
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const mobileHeadingRef = useRef<HTMLHeadingElement | null>(null);
-    const dirtyRef = useRef(false);
-    const [pendingAction, setPendingAction] = useState<(() => void) | null>(
-        null,
-    );
+    const [isDirty, setIsDirty] = useState(false);
+
+    // Saving the step, deleting it and reordering are visits under this
+    // campaign's steps endpoint: they reload the same page, keep or discard the
+    // draft deliberately, and need no confirmation. Every other visit (the tab
+    // bar, the sidebar, Duplicate, Archive, Stop, browser Back) asks first.
+    const allowVisit = (visit: PendingVisit): boolean =>
+        visit.url.pathname.includes(`/campaigns/${campaignId}/steps`);
+
+    const guard = useUnsavedChangesGuard({ isDirty, allow: allowVisit });
 
     // The row menu that opened the editor is unmounted with it, so focus has to
     // land somewhere useful inside the pane instead of falling to <body>.
@@ -76,15 +84,7 @@ export default function SequenceEditor({
         headingRef.current?.focus();
     }, [activeStepId]);
 
-    const requestAction = (action: () => void) => {
-        if (dirtyRef.current) {
-            setPendingAction(() => action);
-
-            return;
-        }
-
-        action();
-    };
+    const requestAction = guard.request;
 
     // The board's `Esc` hint is a real affordance, but a dirty draft is not
     // discarded without asking.
@@ -104,19 +104,13 @@ export default function SequenceEditor({
                 return;
             }
 
-            if (dirtyRef.current) {
-                setPendingAction(() => onClose);
-
-                return;
-            }
-
-            onClose();
+            requestAction(onClose);
         };
 
         window.addEventListener('keydown', onKeyDown);
 
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [onClose]);
+    }, [onClose, requestAction]);
 
     const deleteStep = () => {
         if (activeStep === null) {
@@ -183,9 +177,9 @@ export default function SequenceEditor({
                 placeholders={placeholders}
                 onSuccess={onClose}
                 formClassName="flex min-h-0 flex-1 flex-col"
-                onDirtyChange={(isDirty) => {
-                    dirtyRef.current = isDirty;
-                    onDirtyChange?.(isDirty);
+                onDirtyChange={(dirty) => {
+                    setIsDirty(dirty);
+                    onDirtyChange?.(dirty);
                 }}
             >
                 {({ processing, fields }) => (
@@ -382,20 +376,16 @@ export default function SequenceEditor({
             )}
 
             <ConfirmDialog
-                open={pendingAction !== null}
+                open={guard.pending}
                 onOpenChange={(open) => {
                     if (!open) {
-                        setPendingAction(null);
+                        guard.cancel();
                     }
                 }}
                 title="Discard your changes?"
                 description="This step has edits that have not been saved. Leaving now discards them."
                 confirmLabel="Discard changes"
-                onConfirm={() => {
-                    const action = pendingAction;
-                    setPendingAction(null);
-                    action?.();
-                }}
+                onConfirm={guard.confirm}
             />
         </div>
     );

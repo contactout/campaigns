@@ -1,10 +1,12 @@
-import { Head, router, useForm, usePage } from '@inertiajs/react';
+import type { PendingVisit } from '@inertiajs/core';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import ConfirmDialog from '@/components/confirm-dialog';
 import DeleteTemplateModal from '@/components/templates/delete-template-modal';
 import FormLabel from '@/components/form-label';
 import InputError from '@/components/input-error';
+import NativeSelect from '@/components/native-select';
 import PageHead from '@/components/page-head';
 import PlaceholderManager from '@/components/templates/placeholder-manager';
 import RichTextEditor from '@/components/templates/rich-text-editor';
@@ -17,6 +19,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { index, update } from '@/routes/templates';
 import type {
     EmailTemplateDetail,
@@ -61,9 +64,6 @@ export default function TemplateShow({
     // check compares against what the editor holds rather than the raw prop.
     const [savedBody, setSavedBody] = useState(template.body);
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [pendingAction, setPendingAction] = useState<(() => void) | null>(
-        null,
-    );
     const nameRef = useRef<HTMLInputElement | null>(null);
     const discardedRef = useRef(false);
     const insertRef = useRef<((text: string) => void) | null>(null);
@@ -77,33 +77,18 @@ export default function TemplateShow({
         form.data.folder_id !== initialFolder ||
         form.data.body !== savedBody;
 
-    // A closed tab or a hard reload cannot be intercepted by a dialog; the
-    // browser's own confirmation is the only guard there. Inertia visits started
-    // elsewhere on the page (the sidebar) are not guarded.
-    useEffect(() => {
-        if (!isDirty) {
-            return;
-        }
+    // Saving this template and editing its placeholder rail both reload this
+    // same page with the draft still in the form, so they need no confirmation.
+    // Every other visit (the tab bar, the sidebar, the back chevron, browser
+    // Back) asks first.
+    const allowVisit = (visit: PendingVisit): boolean => {
+        const { pathname } = visit.url;
+        const current = window.location.pathname;
 
-        const onBeforeUnload = (event: BeforeUnloadEvent) => {
-            event.preventDefault();
-            event.returnValue = '';
-        };
-
-        window.addEventListener('beforeunload', onBeforeUnload);
-
-        return () => window.removeEventListener('beforeunload', onBeforeUnload);
-    }, [isDirty]);
-
-    const guard = (action: () => void) => {
-        if (isDirty) {
-            setPendingAction(() => action);
-
-            return;
-        }
-
-        action();
+        return pathname === current || pathname.startsWith(`${current}/`);
     };
+
+    const guard = useUnsavedChangesGuard({ isDirty, allow: allowVisit });
 
     const discard = () => {
         form.reset();
@@ -116,7 +101,6 @@ export default function TemplateShow({
         if (!can.update) {
             return;
         }
-
         form.transform((data) => ({
             ...data,
             folder_id: data.folder_id === NO_FOLDER ? null : data.folder_id,
@@ -160,18 +144,7 @@ export default function TemplateShow({
                     }
                     description={description}
                     mobileNav
-                    back={{
-                        href: listUrl,
-                        label: 'Back to templates',
-                        onClick: (event) => {
-                            if (!isDirty) {
-                                return;
-                            }
-
-                            event.preventDefault();
-                            guard(() => router.visit(listUrl));
-                        },
-                    }}
+                    back={{ href: listUrl, label: 'Back to templates' }}
                     titleAddon={
                         template.is_draft ? (
                             <span className="hidden lg:inline-flex">
@@ -186,7 +159,12 @@ export default function TemplateShow({
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => guard(discard)}
+                                        onClick={() =>
+                                            guard.request(() => {
+                                                discardedRef.current = true;
+                                                discard();
+                                            })
+                                        }
                                         disabled={form.processing}
                                         data-test="template-discard-button"
                                         className="hidden lg:inline-flex"
@@ -227,7 +205,10 @@ export default function TemplateShow({
                                                 <DropdownMenuItem
                                                     className="lg:hidden"
                                                     onSelect={() =>
-                                                        guard(discard)
+                                                        guard.request(() => {
+                                                            discardedRef.current = true;
+                                                            discard();
+                                                        })
                                                     }
                                                 >
                                                     Discard changes
@@ -281,7 +262,7 @@ export default function TemplateShow({
                                 <FormLabel htmlFor="folder_id">
                                     Folder
                                 </FormLabel>
-                                <select
+                                <NativeSelect
                                     id="folder_id"
                                     value={form.data.folder_id}
                                     onChange={(event) =>
@@ -291,7 +272,6 @@ export default function TemplateShow({
                                         )
                                     }
                                     disabled={!can.update}
-                                    className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-body outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-primary-border disabled:pointer-events-none disabled:opacity-50"
                                 >
                                     <option value={NO_FOLDER}>No folder</option>
                                     {folders.map((folder) => (
@@ -302,7 +282,7 @@ export default function TemplateShow({
                                             {folder.name}
                                         </option>
                                     ))}
-                                </select>
+                                </NativeSelect>
                                 <InputError message={form.errors.folder_id} />
                             </div>
                         </div>
@@ -408,10 +388,10 @@ export default function TemplateShow({
             </div>
 
             <ConfirmDialog
-                open={pendingAction !== null}
+                open={guard.pending}
                 onOpenChange={(open) => {
                     if (!open) {
-                        setPendingAction(null);
+                        guard.cancel();
                     }
                 }}
                 title="Discard your changes?"
@@ -426,17 +406,11 @@ export default function TemplateShow({
                     if (!discardedRef.current) {
                         return;
                     }
-
                     discardedRef.current = false;
                     event.preventDefault();
                     nameRef.current?.focus();
                 }}
-                onConfirm={() => {
-                    const action = pendingAction;
-                    discardedRef.current = true;
-                    setPendingAction(null);
-                    action?.();
-                }}
+                onConfirm={guard.confirm}
             />
 
             <DeleteTemplateModal
@@ -447,7 +421,6 @@ export default function TemplateShow({
         </>
     );
 }
-
 TemplateShow.layout = (props: { currentTeam?: { slug: string } | null }) => ({
     breadcrumbs: [
         {
