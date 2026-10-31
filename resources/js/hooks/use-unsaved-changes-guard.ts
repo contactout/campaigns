@@ -228,6 +228,23 @@ export function useUnsavedChangesGuard({
             }
 
             if (allowRef.current?.(event.detail.visit)) {
+                // A same-page reload (the editor's own save, the placeholder
+                // rail, a step endpoint) keeps the draft, but our trap entry has
+                // to come off first: the emptied entry below it would otherwise
+                // be left behind, and the next Back press would be a no-op.
+                if (armedRef.current) {
+                    event.preventDefault();
+
+                    void rewind().then(() => {
+                        bypassRef.current = true;
+                        router.visit(
+                            event.detail.visit.url,
+                            replayOptions(event.detail.visit),
+                        );
+                        bypassRef.current = false;
+                    });
+                }
+
                 return;
             }
 
@@ -249,6 +266,14 @@ export function useUnsavedChangesGuard({
             event.returnValue = '';
         };
 
+        const offFinish = router.on('finish', () => {
+            // A save that failed (a 422 keeps the draft) or a reload that left
+            // the page dirty must re-arm the trap it was rewound for.
+            if (dirtyRef.current) {
+                arm();
+            }
+        });
+
         window.addEventListener('beforeunload', onBeforeUnload);
         window.addEventListener('popstate', onPopState);
         rewindRef.current = rewind;
@@ -258,6 +283,7 @@ export function useUnsavedChangesGuard({
             dirtyRef.current = false;
             rewindRef.current = null;
             offBefore();
+            offFinish();
             window.removeEventListener('beforeunload', onBeforeUnload);
             window.removeEventListener('popstate', onPopState);
             // Only pop our own entry: a confirmed visit has already pushed the

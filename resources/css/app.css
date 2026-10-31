@@ -100,7 +100,7 @@
     --secondary: #f0eeff;
     --secondary-foreground: #3222b1;
     --muted: #f4f4f5;
-    /* 4.81:1 on `--muted` and 4.63:1 on the selected-row `--accent`; #71717a was
+    /* 4.81:1 on `--muted` and 4.62:1 on the selected-row `--accent`; #71717a was
        4.40 and 4.23, under 4.5 for the 12px sublines those two fills carry. */
     --muted-foreground: #6b6b74;
     --accent: #f0eeff;
