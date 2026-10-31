@@ -75,7 +75,9 @@ export default function SignatureSelect({
                 aria-label={`Signature for ${connection.name}`}
                 title={label}
                 className={cn(
-                    'w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-0.5 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border dark:bg-transparent [&>span]:truncate lg:[&>svg]:hidden',
+                    // px-0 from lg so the value starts on the cell's 16px inset, the
+                    // same x as the `Signature` column header.
+                    'w-full max-w-full min-w-0 gap-1 rounded-md border-0 bg-transparent px-0.5 text-body shadow-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-primary-border lg:px-0 dark:bg-transparent [&>span]:truncate lg:[&>svg]:hidden',
                     triggerClassName,
                 )}
                 data-test="connection-signature"

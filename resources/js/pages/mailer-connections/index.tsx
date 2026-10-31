@@ -490,7 +490,7 @@ export default function MailerConnectionsIndex({
                                                         '—'}
                                                 </span>
                                             </td>
-                                            <td className="py-0 pr-1 pl-1.5">
+                                            <td className="py-0 pr-0 pl-4">
                                                 <SignatureSelect
                                                     connection={connection}
                                                     signatures={signatures}
