@@ -930,3 +930,162 @@ test('the show page exposes the campaigns sending connection without its credent
             ->missing('connection.smtp_setting')
             ->missing('connection.password'));
 });
+
+test('the recipients payload covers every display status and its precedence', function (
+    string $expected,
+    RecipientStatus $status,
+    ?EmailStatus $emailStatus,
+    array $emailAttributes,
+): void {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $contact = Contact::factory()->forTeam($team)->create();
+    $recipient = Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $contact->id,
+        'status' => $status,
+    ]);
+
+    if ($emailStatus !== null) {
+        CampaignEmail::factory()->create([
+            'campaign_id' => $campaign->id,
+            'recipient_id' => $recipient->id,
+            'status' => $emailStatus,
+            'dispatched_at' => now(),
+            ...$emailAttributes,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('recipients.data', 1)
+            ->where('recipients.data.0.display_status', $expected)
+            ->where('recipients.data.0.status', $status->value));
+})->with([
+    // The recipient status alone, with no email history at all.
+    'replied from the recipient row' => ['replied', RecipientStatus::Replied, null, []],
+    'bounced from the recipient row' => ['bounced', RecipientStatus::Bounced, null, []],
+    'unsubscribed' => ['unsubscribed', RecipientStatus::Unsubscribed, null, []],
+    'error' => ['error', RecipientStatus::Error, null, []],
+    'paused' => ['paused', RecipientStatus::Paused, null, []],
+    'archived' => ['archived', RecipientStatus::Archived, null, []],
+    'completed' => ['completed', RecipientStatus::Completed, null, []],
+    'not contacted' => ['not_contacted', RecipientStatus::Active, null, []],
+    // The engagement the campaign's own emails prove.
+    'replied from an email' => ['replied', RecipientStatus::Active, EmailStatus::Replied, ['opened_at' => now(), 'replied_at' => now()]],
+    'bounced from an email' => ['bounced', RecipientStatus::Active, EmailStatus::Bounced, []],
+    'opened' => ['opened', RecipientStatus::Active, EmailStatus::Opened, ['opened_at' => now()]],
+    'contacted' => ['contacted', RecipientStatus::Active, EmailStatus::Sent, []],
+    // Precedence: a reply outranks a bounce, and a dispatched email outranks a
+    // terminal recipient status, so the row cannot read Error after it sent.
+    'a reply outranks a bounce' => ['replied', RecipientStatus::Replied, EmailStatus::Bounced, []],
+    'a dispatched email outranks the error status' => ['contacted', RecipientStatus::Error, EmailStatus::Sent, []],
+]);
+
+test('a stopped campaign reports the same start blockers as a draft', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'status' => CampaignStatus::Stopped,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('campaign.status', CampaignStatus::Stopped->value)
+            ->where('start.blocked', true)
+            ->has('start.reasons', 2)
+            ->where('start.reasons.0.message', 'This campaign has no steps yet.')
+            ->where('start.reasons.1.message', 'This campaign has no sending connection.'));
+});
+
+test('a connection that is not verified names its state in the start blockers', function (
+    MailerConnectionStatus $status,
+    string $label,
+) {
+    [$team, $user] = campaignTeamWithMember();
+
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'Navy relay',
+        'status' => $status,
+        'exception_type' => null,
+    ]);
+
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'mailer_connection_id' => $connection->id,
+        'status' => CampaignStatus::Draft,
+    ]);
+
+    CampaignStep::factory()->forCampaign($campaign)->create(['subject' => 'Hello']);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->where('start.blocked', true)
+            ->has('start.reasons', 1)
+            ->where('start.reasons.0.type', 'connection')
+            ->where('start.reasons.0.message', "The sending connection \"Navy relay\" is {$label}"));
+})->with([
+    [MailerConnectionStatus::Pending, 'pending'],
+    [MailerConnectionStatus::Deactivated, 'deactivated'],
+    [MailerConnectionStatus::Disconnected, 'disconnected'],
+]);
+
+test('the recipients search never reaches another teams contact', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+
+    $ours = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
+    $ours->identities()->create([
+        'team_id' => $team->id,
+        'identity_type' => 'email',
+        'normalized_value' => 'ada@analytical.engine',
+    ]);
+    Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $ours->id,
+        'created_at' => now()->subMinute(),
+    ]);
+
+    // Same name and address shape, another team: neither the name nor the email
+    // branch of the search may cross the team boundary.
+    $otherTeam = Team::factory()->create();
+    $theirs = Contact::factory()->forTeam($otherTeam)->create(['name' => 'Ada Lovelace']);
+    $theirs->identities()->create([
+        'team_id' => $otherTeam->id,
+        'identity_type' => 'email',
+        'normalized_value' => 'ada@theirs.example',
+    ]);
+    Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => $theirs->id,
+        'created_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+            'recipients_q' => 'Ada',
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('campaigns/show')
+            ->has('recipients.data', 2)
+            // The foreign recipient row still exists (nothing in the API writes
+            // one) but the contact lookup is team-scoped, so it renders as a
+            // deleted contact instead of handing over the name and address.
+            ->where('recipients.data.0.name', 'Deleted contact')
+            ->where('recipients.data.0.email', null)
+            ->where('recipients.data.1.name', 'Ada Lovelace')
+            ->where('recipients.data.1.email', 'ada@analytical.engine'));
+});

@@ -448,3 +448,23 @@ test('dashboard flags every non-active connection and every active connection wi
             ->where('jumpBackIn.connections_needing_attention', 4),
         );
 });
+
+test('a team with no connections gets an empty connection payload and no attention count', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            // Nothing to list is a list, not a missing prop: the page maps it.
+            ->has('mailerConnections', 0)
+            ->where('jumpBackIn.connections', 0)
+            ->where('jumpBackIn.connections_needing_attention', 0)
+            ->where('setup.has_connection', false)
+            // Every member can create a campaign, and EnsureTeamMembership keeps
+            // a non-member off the page entirely, so this is the only value the
+            // flag takes for a user who can see the dashboard.
+            ->where('can.create', true));
+});
