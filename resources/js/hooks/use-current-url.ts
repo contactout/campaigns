@@ -63,7 +63,28 @@ export function useCurrentUrl(): UseCurrentUrlReturn {
         urlToCheck: NonNullable<InertiaLinkProps['href']>,
         currentUrl?: string,
     ) => {
-        return isCurrentUrl(urlToCheck, currentUrl, true);
+        const urlToCompare = currentUrl ?? currentUrlPath;
+        const urlString = toUrl(urlToCheck);
+
+        let path = urlString;
+
+        if (urlString.startsWith('http')) {
+            try {
+                path = new URL(urlString).pathname;
+            } catch {
+                return false;
+            }
+        }
+
+        // Match whole segments so `/templates` never claims `/templates-archive`.
+        // A bare `/` is a fallback for "no team", not a parent of every path.
+        const base = path.replace(/\/$/, '');
+
+        if (base === '') {
+            return urlToCompare === '/';
+        }
+
+        return urlToCompare === base || urlToCompare.startsWith(`${base}/`);
     };
 
     const whenCurrentUrl: WhenCurrentUrlFn = <TIfTrue, TIfFalse = null>(

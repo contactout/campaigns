@@ -4,6 +4,8 @@ import type { BreadcrumbItem } from '@/types/navigation';
 export type AppLayoutProps = {
     children: ReactNode;
     breadcrumbs?: BreadcrumbItem[];
+    /** Per-page opt-out of the breadcrumb bar; the page renders its own head. */
+    showHeader?: boolean;
 };
 
 export type AppVariant = 'header' | 'sidebar';

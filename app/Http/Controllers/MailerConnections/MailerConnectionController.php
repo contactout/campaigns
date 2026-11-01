@@ -20,6 +20,7 @@ use App\Services\OAuth\MicrosoftOAuthClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,8 +40,15 @@ class MailerConnectionController extends Controller
         $connections = MailerConnection::query()
             ->forTeam($currentTeam->id)
             ->orderBy('name')
-            ->get()
-            ->map(fn (MailerConnection $connection): array => $this->connectionSummary($connection))
+            ->get();
+
+        $connectionPayload = $connections
+            ->map(fn (MailerConnection $connection): array => [
+                ...$this->connectionSummary($connection),
+                'display_status' => $connection->displayStatus()->value,
+                'display_status_label' => $connection->displayStatus()->label(),
+                'needs_attention' => $connection->needsAttention(),
+            ])
             ->values()
             ->all();
 
@@ -58,7 +66,7 @@ class MailerConnectionController extends Controller
             ->all();
 
         return Inertia::render('mailer-connections/index', [
-            'connections' => $connections,
+            'connections' => $connectionPayload,
             'signatures' => $signatures,
             'oauth' => [
                 'gmail' => $google->configured(),
@@ -172,11 +180,30 @@ class MailerConnectionController extends Controller
     }
 
     /**
+     * The sends the day's cap is counting, so the meter cannot disagree with it.
+     *
+     * `sent_count` is the counter `SendEmail::isRateLimited()` enforces, reset
+     * lazily on the next send after `sending_limit_refreshed_at` passes. While
+     * that window is still open the counter is today's and is shown as-is; once
+     * it has passed the counter is yesterday's and the meter reads 0.
+     *
+     * Counting `campaign_emails` rows instead made the meter read low whenever a
+     * campaign or recipient was deleted (the rows cascade, the counter does not),
+     * so an at-cap connection could look like it had room left.
+     */
+    protected function sentToday(MailerConnection $connection): int
+    {
+        return $connection->sending_limit_refreshed_at?->isFuture()
+            ? (int) $connection->sent_count
+            : 0;
+    }
+
+    /**
      * Map a mailer connection to the safe payload exposed to the client.
      *
      * SMTP/IMAP credentials (including both passwords) are never serialized.
      *
-     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sending_limit: int|null, min_seconds_between_sends: int|null, last_error: string|null, created_at: string|null}
+     * @return array{id: int, name: string, signature_id: int|null, mailer_type: string, mailer_type_label: string, host: string|null, port: int|null, username: string|null, encryption: string|null, from_email: string|null, from_name: string|null, imap_host: string|null, imap_port: int|null, imap_username: string|null, imap_encryption: string|null, status: string, status_label: string, sent_count: int, sent_today: int, sending_limit: int|null, min_seconds_between_sends: int|null, last_error: string|null, last_error_message: string|null, created_at: string|null}
      */
     protected function connectionSummary(MailerConnection $connection): array
     {
@@ -201,10 +228,76 @@ class MailerConnectionController extends Controller
             'status' => $connection->status->value,
             'status_label' => $connection->status->label(),
             'sent_count' => $connection->sent_count,
+            'sent_today' => $this->sentToday($connection),
             'sending_limit' => $connection->sending_limit,
             'min_seconds_between_sends' => $connection->min_seconds_between_sends,
             'last_error' => $connection->exception_type,
+            'last_error_message' => $this->exceptionMessage($connection),
             'created_at' => $connection->created_at?->toISOString(),
         ];
+    }
+
+    /**
+     * Get the stored verification/runtime failure message, if any.
+     *
+     * The exception class alone ("TransportException") tells an operator nothing,
+     * so the banner shows the message the job or the probe recorded. Every member
+     * of the team sees it, which the policy intends: `MailerConnectionPolicy`
+     * gives every member `update`, so every member is expected to fix the
+     * connection. What is trimmed is the body around the reason: Guzzle appends
+     * "response: {\"error\":…}", and the useful part is that reason, not the
+     * envelope — so the reason is kept and the rest is dropped. The cap bounds
+     * the rest.
+     */
+    protected function exceptionMessage(MailerConnection $connection): ?string
+    {
+        $message = $connection->exception_data['message'] ?? null;
+
+        if (! is_string($message) || trim($message) === '') {
+            return null;
+        }
+
+        $echo = stripos($message, 'response:');
+
+        if ($echo !== false) {
+            $reason = $this->providerReason(substr($message, $echo + strlen('response:')));
+            $message = trim(substr($message, 0, $echo));
+            $message = $reason === null ? $message : "{$message}; {$reason}";
+        }
+
+        return Str::limit(trim($message), 300);
+    }
+
+    /**
+     * Pull the provider's own reason out of an echoed response body.
+     *
+     * `invalid_client` plus its description is what separates a revoked grant
+     * from a bad secret; the raw body is what the 300-character cap would cut
+     * first.
+     */
+    protected function providerReason(string $body): ?string
+    {
+        $decoded = json_decode(trim($body), true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $error = $decoded['error'] ?? null;
+        $description = $decoded['error_description'] ?? null;
+
+        if (is_array($error)) {
+            $description = is_string($error['message'] ?? null) ? $error['message'] : $description;
+            $error = $error['type'] ?? $error['code'] ?? null;
+        }
+
+        $error = is_string($error) ? $error : null;
+        $description = is_string($description) ? $description : null;
+
+        return match (true) {
+            $error !== null && $description !== null && $description !== '' => "{$error}: {$description}",
+            $error !== null => $error,
+            default => $description,
+        };
     }
 }

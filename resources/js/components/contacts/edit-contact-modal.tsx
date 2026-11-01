@@ -1,4 +1,5 @@
 import { Form, usePage } from '@inertiajs/react';
+import { contactStatusLabel } from '@/components/contacts/contact-status-badge';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -125,7 +126,10 @@ export default function EditContactModal({
                                                     key={option.value}
                                                     value={option.value}
                                                 >
-                                                    {option.label}
+                                                    {contactStatusLabel(
+                                                        option.value,
+                                                        option.label,
+                                                    )}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>

@@ -1,22 +1,33 @@
-import { Form, Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import type { PendingVisit } from '@inertiajs/core';
+import { Head, useForm, usePage } from '@inertiajs/react';
+import { MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import ConfirmDialog from '@/components/confirm-dialog';
 import DeleteTemplateModal from '@/components/templates/delete-template-modal';
+import FormLabel from '@/components/form-label';
+import InputError from '@/components/input-error';
+import NativeSelect from '@/components/native-select';
+import PageHead from '@/components/page-head';
 import PlaceholderManager from '@/components/templates/placeholder-manager';
 import RichTextEditor from '@/components/templates/rich-text-editor';
-import Heading from '@/components/heading';
-import InputError from '@/components/input-error';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { index, update } from '@/routes/templates';
 import type {
     EmailTemplateDetail,
     TemplateFolder,
     TemplatePlaceholder,
 } from '@/types';
+
+const NO_FOLDER = 'none';
 
 type Props = {
     template: EmailTemplateDetail;
@@ -36,155 +47,380 @@ export default function TemplateShow({
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
+    const listUrl = index.url(slug);
+
+    const form = useForm({
+        name: template.name,
+        subject: template.subject ?? '',
+        folder_id:
+            template.folder_id === null
+                ? NO_FOLDER
+                : String(template.folder_id),
+        body: template.body,
+    });
+
+    const [saved, setSaved] = useState(false);
+    // The editor normalises the stored HTML when it parses it, so the dirty
+    // check compares against what the editor holds rather than the raw prop.
+    const [savedBody, setSavedBody] = useState(template.body);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const nameRef = useRef<HTMLInputElement | null>(null);
+    const discardedRef = useRef(false);
+    const insertRef = useRef<((text: string) => void) | null>(null);
+
+    const initialFolder =
+        template.folder_id === null ? NO_FOLDER : String(template.folder_id);
+
+    const isDirty =
+        form.data.name !== template.name ||
+        form.data.subject !== (template.subject ?? '') ||
+        form.data.folder_id !== initialFolder ||
+        form.data.body !== savedBody;
+
+    // Saving this template and editing its placeholder rail both reload this
+    // same page with the draft still in the form, so they need no confirmation.
+    // Every other visit (the tab bar, the sidebar, the back chevron, browser
+    // Back) asks first.
+    const allowVisit = (visit: PendingVisit): boolean => {
+        const { pathname } = visit.url;
+        const current = window.location.pathname;
+
+        return pathname === current || pathname.startsWith(`${current}/`);
+    };
+
+    const guard = useUnsavedChangesGuard({ isDirty, allow: allowVisit });
+
+    const discard = () => {
+        form.reset();
+        form.clearErrors();
+        setSaved(false);
+        nameRef.current?.focus();
+    };
+
+    const submit = () => {
+        if (!can.update) {
+            return;
+        }
+        form.transform((data) => ({
+            ...data,
+            folder_id: data.folder_id === NO_FOLDER ? null : data.folder_id,
+        }));
+        form.patch(update.url([slug, template.id]), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setSaved(true);
+                // The instance survives a save, so the baseline and the form
+                // defaults have to move to what was just stored, or the next
+                // edit reads as unsaved and a discard restores stale content.
+                setSavedBody(form.data.body);
+                form.setDefaults();
+            },
+        });
+    };
+
+    const folderName =
+        folders.find((folder) => String(folder.id) === form.data.folder_id)
+            ?.name ?? 'No folder';
+
+    const description = saved ? `${folderName} · Saved just now` : folderName;
+
+    const insertPlaceholder = (name: string) => {
+        insertRef.current?.(`{{${name}}}`);
+    };
 
     return (
         <>
-            <Head title={template.name} />
+            <Head title={form.data.name || template.name} />
 
-            <h1 className="sr-only">{template.name}</h1>
-
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Heading variant="small" title={template.name} />
-                        {template.is_draft && (
-                            <Badge variant="secondary">Draft</Badge>
-                        )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button variant="outline" asChild>
-                            <Link href={index(slug)}>
-                                <ArrowLeft /> Templates
-                            </Link>
-                        </Button>
-                        {can.delete ? (
-                            <Button
-                                variant="destructive"
-                                onClick={() => setDeleteOpen(true)}
-                            >
-                                <Trash2 /> Delete
-                            </Button>
-                        ) : null}
-                    </div>
-                </div>
-
-                <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                    <Form
-                        {...update.form([slug, template.id])}
-                        className="min-w-0 space-y-6 rounded-xl border bg-card p-5 sm:p-6"
-                        options={{ preserveScroll: true }}
-                    >
-                        {({ errors, processing, recentlySuccessful }) => (
+            <div className="flex w-full flex-col gap-5 px-4 py-6 lg:px-6">
+                <PageHead
+                    title={
+                        <>
+                            <span className="lg:hidden">Edit template</span>
+                            <span className="hidden lg:inline">
+                                {form.data.name.trim() || 'Untitled template'}
+                            </span>
+                        </>
+                    }
+                    description={description}
+                    mobileNav
+                    back={{ href: listUrl, label: 'Back to templates' }}
+                    titleAddon={
+                        template.is_draft ? (
+                            <span className="hidden lg:inline-flex">
+                                <Badge variant="neutral">Draft</Badge>
+                            </span>
+                        ) : null
+                    }
+                    actions={
+                        can.update || can.delete ? (
                             <>
-                                <div className="grid gap-5 sm:grid-cols-2">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="name">Name</Label>
-                                        <Input
-                                            id="name"
-                                            name="name"
-                                            defaultValue={template.name}
-                                            required
-                                            disabled={!can.update}
-                                        />
-                                        <InputError message={errors.name} />
-                                    </div>
-
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="subject">Subject</Label>
-                                        <Input
-                                            id="subject"
-                                            name="subject"
-                                            defaultValue={template.subject}
-                                            disabled={!can.update}
-                                        />
-                                        <InputError message={errors.subject} />
-                                    </div>
-                                </div>
-
-                                <div className="grid gap-2 sm:max-w-xs">
-                                    <Label htmlFor="folder_id">Folder</Label>
-                                    <select
-                                        id="folder_id"
-                                        name="folder_id"
-                                        defaultValue={
-                                            template.folder_id
-                                                ? String(template.folder_id)
-                                                : ''
-                                        }
-                                        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-                                        disabled={!can.update}
-                                    >
-                                        <option value="">No folder</option>
-                                        {folders.map((folder) => (
-                                            <option
-                                                key={folder.id}
-                                                value={folder.id}
-                                            >
-                                                {folder.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <InputError message={errors.folder_id} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label id="template-body-label">Body</Label>
-                                    <RichTextEditor
-                                        name="body"
-                                        value={template.body}
-                                        labelledBy="template-body-label"
-                                        readOnly={!can.update}
-                                    />
-                                    <InputError message={errors.body} />
-                                </div>
-
                                 {can.update ? (
-                                    <div className="flex items-center gap-3">
-                                        <Button disabled={processing}>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() =>
+                                            guard.request(() => {
+                                                discardedRef.current = true;
+                                                discard();
+                                            })
+                                        }
+                                        disabled={form.processing}
+                                        data-test="template-discard-button"
+                                        className="hidden lg:inline-flex"
+                                    >
+                                        Discard
+                                    </Button>
+                                ) : null}
+                                {can.update ? (
+                                    <Button
+                                        type="button"
+                                        onClick={submit}
+                                        disabled={form.processing}
+                                        aria-label="Save template"
+                                        data-test="template-save-button"
+                                        className="max-lg:border-0 max-lg:bg-transparent max-lg:px-2 max-lg:text-primary max-lg:hover:bg-accent max-lg:focus-visible:border-transparent"
+                                    >
+                                        <span className="hidden lg:inline">
                                             Save template
-                                        </Button>
-                                        {recentlySuccessful ? (
-                                            <span className="text-sm text-muted-foreground">
-                                                Saved.
-                                            </span>
-                                        ) : null}
-                                    </div>
+                                        </span>
+                                        <span className="lg:hidden">Save</span>
+                                    </Button>
+                                ) : null}
+                                {can.update || can.delete ? (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="icon"
+                                                aria-label="More template actions"
+                                                data-test="template-more-button"
+                                            >
+                                                <MoreHorizontal className="size-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            {can.update ? (
+                                                <DropdownMenuItem
+                                                    className="lg:hidden"
+                                                    onSelect={() =>
+                                                        guard.request(() => {
+                                                            discardedRef.current = true;
+                                                            discard();
+                                                        })
+                                                    }
+                                                >
+                                                    Discard changes
+                                                </DropdownMenuItem>
+                                            ) : null}
+                                            {can.delete ? (
+                                                <DropdownMenuItem
+                                                    variant="destructive"
+                                                    onSelect={() =>
+                                                        setDeleteOpen(true)
+                                                    }
+                                                >
+                                                    <Trash2 /> Delete template
+                                                </DropdownMenuItem>
+                                            ) : null}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
                                 ) : null}
                             </>
-                        )}
-                    </Form>
+                        ) : null
+                    }
+                />
 
-                    <Card className="min-w-0 shadow-sm">
-                        <CardHeader>
-                            <CardTitle>Placeholders</CardTitle>
-                            <p className="text-sm text-muted-foreground">
-                                Use these fields in your email body.
-                            </p>
-                        </CardHeader>
-                        <CardContent>
-                            <PlaceholderManager
-                                templateId={template.id}
-                                placeholders={placeholders}
-                                canManage={can.update}
+                <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_299px]">
+                    <form
+                        className="min-w-0"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            submit();
+                        }}
+                    >
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                            <div className="grid min-w-0 gap-1.5">
+                                <FormLabel htmlFor="name">Name</FormLabel>
+                                <Input
+                                    id="name"
+                                    ref={nameRef}
+                                    value={form.data.name}
+                                    onChange={(event) =>
+                                        form.setData('name', event.target.value)
+                                    }
+                                    required
+                                    disabled={!can.update}
+                                    aria-invalid={Boolean(form.errors.name)}
+                                    className="h-9"
+                                />
+                                <InputError message={form.errors.name} />
+                            </div>
+
+                            <div className="grid min-w-0 gap-1.5">
+                                <FormLabel htmlFor="folder_id">
+                                    Folder
+                                </FormLabel>
+                                <NativeSelect
+                                    id="folder_id"
+                                    value={form.data.folder_id}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'folder_id',
+                                            event.target.value,
+                                        )
+                                    }
+                                    disabled={!can.update}
+                                >
+                                    <option value={NO_FOLDER}>No folder</option>
+                                    {folders.map((folder) => (
+                                        <option
+                                            key={folder.id}
+                                            value={String(folder.id)}
+                                        >
+                                            {folder.name}
+                                        </option>
+                                    ))}
+                                </NativeSelect>
+                                <InputError message={form.errors.folder_id} />
+                            </div>
+                        </div>
+
+                        <div className="mt-4 grid min-w-0 gap-1.5">
+                            <FormLabel htmlFor="subject">Subject</FormLabel>
+                            <Input
+                                id="subject"
+                                value={form.data.subject}
+                                onChange={(event) =>
+                                    form.setData('subject', event.target.value)
+                                }
+                                disabled={!can.update}
+                                aria-invalid={Boolean(form.errors.subject)}
+                                className="h-9"
                             />
-                        </CardContent>
-                    </Card>
+                            <InputError message={form.errors.subject} />
+                        </div>
+
+                        <div className="mt-4 grid min-w-0 gap-1.5">
+                            <FormLabel id="template-body-label">Body</FormLabel>
+                            <RichTextEditor
+                                name="body"
+                                value={form.data.body}
+                                onChange={(html) => form.setData('body', html)}
+                                onCanonical={(html) => {
+                                    setSavedBody(html);
+                                    form.setDefaults('body', html);
+                                    form.setData('body', html);
+                                }}
+                                labelledBy="template-body-label"
+                                readOnly={!can.update}
+                                toolbar="board"
+                                minHeightClass="min-h-[280px]"
+                                insertRef={insertRef}
+                                actions={
+                                    placeholders.length > 0 ? (
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    aria-label="Insert placeholder"
+                                                >
+                                                    <Plus />
+                                                    <span className="lg:hidden">
+                                                        Insert
+                                                    </span>
+                                                    <span className="hidden lg:inline">
+                                                        Placeholder
+                                                    </span>
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                {placeholders.map(
+                                                    (placeholder) => (
+                                                        <DropdownMenuItem
+                                                            key={placeholder.id}
+                                                            onSelect={() =>
+                                                                insertPlaceholder(
+                                                                    placeholder.name,
+                                                                )
+                                                            }
+                                                        >
+                                                            {
+                                                                placeholder.type_label
+                                                            }{' '}
+                                                            · {placeholder.name}
+                                                        </DropdownMenuItem>
+                                                    ),
+                                                )}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    ) : null
+                                }
+                            />
+                            <InputError message={form.errors.body} />
+                        </div>
+                    </form>
+
+                    <section
+                        aria-label="Placeholders"
+                        className="min-w-0 overflow-hidden rounded-lg border bg-card"
+                    >
+                        <div className="px-4 pt-4 pb-3">
+                            <h2 className="text-h3 leading-6 font-semibold">
+                                Placeholders
+                            </h2>
+                            <p className="mt-1 hidden text-label leading-4 text-muted-foreground lg:block">
+                                Click to insert at cursor. Fallback used when a
+                                contact field is empty.
+                            </p>
+                        </div>
+                        <PlaceholderManager
+                            templateId={template.id}
+                            placeholders={placeholders}
+                            canManage={can.update}
+                            onInsert={insertPlaceholder}
+                        />
+                    </section>
                 </div>
             </div>
 
-            {deleteOpen ? (
-                <DeleteTemplateModal
-                    template={template}
-                    open={deleteOpen}
-                    onOpenChange={setDeleteOpen}
-                />
-            ) : null}
+            <ConfirmDialog
+                open={guard.pending}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        guard.cancel();
+                    }
+                }}
+                title="Discard your changes?"
+                description="This template has edits that have not been saved. Leaving now discards them."
+                confirmLabel="Discard changes"
+                onCloseAutoFocus={(event) => {
+                    // Radix would put focus back on the Discard button after the
+                    // dialog closes, undoing discard()'s own focus target. Only the
+                    // confirmed discard has moved focus itself; on Cancel, leave
+                    // Radix's restore alone so focus returns to whatever opened the
+                    // dialog (the Discard button, the list menu or the back link).
+                    if (!discardedRef.current) {
+                        return;
+                    }
+                    discardedRef.current = false;
+                    event.preventDefault();
+                    nameRef.current?.focus();
+                }}
+                onConfirm={guard.confirm}
+            />
+
+            <DeleteTemplateModal
+                template={template}
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+            />
         </>
     );
 }
-
 TemplateShow.layout = (props: { currentTeam?: { slug: string } | null }) => ({
     breadcrumbs: [
         {
@@ -192,4 +428,5 @@ TemplateShow.layout = (props: { currentTeam?: { slug: string } | null }) => ({
             href: props.currentTeam ? index(props.currentTeam.slug) : '/',
         },
     ],
+    showHeader: false,
 });

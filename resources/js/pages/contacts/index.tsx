@@ -1,29 +1,45 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    ArrowUpRight,
-    Pencil,
+    Filter,
+    MoreHorizontal,
     Plus,
     Search,
+    Settings,
+    Send,
     Trash2,
     Upload,
+    Users,
 } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import AddToCampaignModal from '@/components/contacts/add-to-campaign-modal';
 import ContactFieldFormModal from '@/components/contacts/contact-field-form-modal';
+import ContactGrid from '@/components/contacts/contact-grid';
 import CreateContactModal from '@/components/contacts/create-contact-modal';
 import DeleteContactFieldModal from '@/components/contacts/delete-contact-field-modal';
 import ImportContactsModal from '@/components/contacts/import-contacts-modal';
 import ImportSummary from '@/components/contacts/import-summary';
-import InlineCell from '@/components/contacts/inline-cell';
-import InlinePropertyCell from '@/components/contacts/inline-property-cell';
-import InlineStatusCell from '@/components/contacts/inline-status-cell';
 import ListTabs from '@/components/contacts/list-tabs';
-import Heading from '@/components/heading';
-import Pagination from '@/components/pagination';
+import ConfirmDialog from '@/components/confirm-dialog';
+import EmptyState from '@/components/empty-state';
+import PageHead from '@/components/page-head';
+import { setFlashToastSuppressed } from '@/hooks/use-flash-toast';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { index, show } from '@/routes/contacts';
+import { cell, destroy, index as contactsIndex } from '@/routes/contacts';
 import type {
+    ContactCampaignOption,
     ContactField,
     ContactImportSummary,
     ContactListSummary,
@@ -42,10 +58,14 @@ type Props = {
     lists: ContactListSummary[];
     statuses: StatusOption[];
     latestImport: ContactImportSummary | null;
+    campaigns: ContactCampaignOption[];
     can: {
         create: boolean;
     };
 };
+
+const DELETE_COPY =
+    'This removes the contacts from their lists and from this view. It cannot be undone here.';
 
 export default function ContactsIndex({
     contacts,
@@ -54,48 +74,68 @@ export default function ContactsIndex({
     lists,
     statuses,
     latestImport,
+    campaigns,
     can,
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
+
     const [search, setSearch] = useState(filters.q ?? '');
-    const gridViewportRef = useRef<HTMLDivElement>(null);
-    const [visibleRows, setVisibleRows] = useState(8);
+    const [selected, setSelected] = useState<number[]>([]);
+    const [busy, setBusy] = useState<'do-not-contact' | 'delete' | null>(null);
+    const [bulkError, setBulkError] = useState<string | null>(null);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteIds, setDeleteIds] = useState<number[]>([]);
+    const [campaignOpen, setCampaignOpen] = useState(false);
     const [fieldModalOpen, setFieldModalOpen] = useState(false);
     const [editingField, setEditingField] = useState<ContactField | null>(null);
     const [deletingField, setDeletingField] = useState<ContactField | null>(
         null,
     );
 
+    // The server owns `q`; keep the field in step when a visit reloads it.
     useEffect(() => {
-        const viewport = gridViewportRef.current;
+        setSearch(filters.q ?? '');
+    }, [filters.q]);
 
-        if (!viewport) {
-            return;
-        }
+    // Selection never crosses a page or filter change.
+    useEffect(() => {
+        setSelected([]);
+    }, [contacts.current_page, filters.q, filters.list]);
 
-        const updateRows = () => {
-            setVisibleRows(
-                Math.max(8, Math.ceil((viewport.clientHeight - 44) / 44)),
-            );
-        };
-
-        updateRows();
-
-        const observer = new ResizeObserver(updateRows);
-        observer.observe(viewport);
-
-        return () => observer.disconnect();
-    }, []);
+    const pageIds = contacts.data.map((contact) => contact.id);
+    const selectedOnPage = selected.filter((id) => pageIds.includes(id));
+    const selectedCount = selectedOnPage.length;
+    const allAlreadyDoNotContact =
+        selectedCount > 0 &&
+        selectedOnPage.every(
+            (id) =>
+                contacts.data.find((contact) => contact.id === id)?.status ===
+                'DoNotContact',
+        );
 
     const listOptions = lists.map((list) => ({
         id: list.id,
         name: list.name,
     }));
 
-    const navigate = (params: { q?: string; list?: number | null }) => {
+    const hasFilters = Boolean(filters.q || filters.list);
+    const isFirstRun = contacts.total === 0 && !hasFilters;
+    const isOutOfRange =
+        contacts.data.length === 0 && !hasFilters && contacts.current_page > 1;
+
+    const previousLink = contacts.links.find((link) =>
+        link.label.includes('Previous'),
+    );
+    const nextLink = contacts.links.find((link) => link.label.includes('Next'));
+
+    const navigate = (params: { q?: string; list?: number | null } = {}) => {
+        if (busy !== null) {
+            return;
+        }
+
         router.get(
-            index.url(slug),
+            contactsIndex.url(slug),
             {
                 q: params.q ?? filters.q ?? '',
                 list:
@@ -105,6 +145,31 @@ export default function ContactsIndex({
             },
             { preserveState: true, preserveScroll: true, replace: true },
         );
+    };
+
+    const clearFilters = () => {
+        if (busy !== null) {
+            return;
+        }
+
+        setSearch('');
+        router.get(
+            contactsIndex.url(slug),
+            {},
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
+    const toggle = (contactId: number) => {
+        setSelected((current) =>
+            current.includes(contactId)
+                ? current.filter((id) => id !== contactId)
+                : [...current, contactId],
+        );
+    };
+
+    const toggleAll = (checked: boolean) => {
+        setSelected(checked ? pageIds : []);
     };
 
     const openNewField = () => {
@@ -117,422 +182,745 @@ export default function ContactsIndex({
         setFieldModalOpen(true);
     };
 
-    const handleGridKeyDown = (event: KeyboardEvent<HTMLTableElement>) => {
-        if (
-            !(event.target instanceof HTMLElement) ||
-            !event.target.matches('[data-grid-cell]')
-        ) {
+    /**
+     * Return to the list the user was looking at after a delete.
+     *
+     * Every successful DELETE redirects to the bare index, so the browser is on
+     * unfiltered page 1 by the time a bulk loop ends. `force` visits even when
+     * the target is the bare first page, because the failure path has to replace
+     * that bare URL with the filtered one it started from.
+     */
+    const restoreAfterDelete = (
+        deleted: number,
+        force = false,
+        onDone?: () => void,
+    ) => {
+        const perPage = contacts.per_page || 25;
+        const remaining = Math.max(0, contacts.total - deleted);
+        const lastPage = Math.max(1, Math.ceil(remaining / perPage));
+        const targetPage = Math.min(contacts.current_page, lastPage);
+        const needsVisit =
+            force ||
+            hasFilters ||
+            targetPage !== 1 ||
+            contacts.current_page !== 1;
+
+        if (!needsVisit) {
+            onDone?.();
+
             return;
         }
 
-        const column = Number(event.target.closest('td')?.dataset.gridColumn);
-        const row = Number(event.target.closest('tr')?.dataset.gridRow);
+        router.get(
+            contactsIndex.url(slug),
+            {
+                q: filters.q ?? '',
+                list: filters.list ?? '',
+                page: targetPage === 1 ? '' : String(targetPage),
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                replace: true,
+                async: true,
+                onFinish: () => onDone?.(),
+            },
+        );
+    };
 
-        if (
-            column === 3 ||
-            !['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(
-                event.key,
-            )
-        ) {
+    const runBulk = (kind: 'do-not-contact' | 'delete', ids: number[]) => {
+        if (ids.length === 0) {
+            setSelected([]);
+
             return;
         }
 
-        const nextColumn =
-            column +
-            (event.key === 'ArrowRight'
-                ? 1
-                : event.key === 'ArrowLeft'
-                  ? -1
-                  : 0);
-        const nextRow =
-            row +
-            (event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0);
-        const next = event.currentTarget.querySelector<HTMLElement>(
-            `tr[data-grid-row="${nextRow}"] td[data-grid-column="${nextColumn}"] [data-grid-cell]`,
+        const total = ids.length;
+        let done = 0;
+        let stopped = false;
+
+        setBusy(kind);
+        setBulkError(null);
+        setFlashToastSuppressed(true);
+
+        const finish = (failed: boolean) => {
+            if (stopped) {
+                return;
+            }
+
+            stopped = true;
+            setBusy(null);
+            setFlashToastSuppressed(false);
+
+            const noun = total === 1 ? 'contact' : 'contacts';
+
+            if (failed) {
+                const message =
+                    kind === 'delete'
+                        ? `Deleted ${done} of ${total} ${noun}. The rest were not deleted.`
+                        : `Marked ${done} of ${total} ${noun} as do not contact. The rest were not changed.`;
+
+                setBulkError(message);
+                toast.error(message);
+
+                if (kind === 'delete') {
+                    // The successful DELETEs moved the browser to the bare index;
+                    // go back to the filtered page and page number the loop began
+                    // on, then re-select what is left once that page has landed.
+                    restoreAfterDelete(done, true, () =>
+                        setSelected(ids.slice(done)),
+                    );
+
+                    return;
+                }
+
+                setSelected(ids.slice(done));
+
+                // Reflect the rows that did change before the failure.
+                router.reload({
+                    only: ['contacts', 'lists'],
+                    async: true,
+                });
+
+                return;
+            }
+
+            setSelected([]);
+            toast.success(
+                kind === 'delete'
+                    ? done === 1
+                        ? 'Deleted 1 contact.'
+                        : `Deleted ${done} contacts.`
+                    : done === 1
+                      ? 'Marked 1 contact as do not contact.'
+                      : `Marked ${done} contacts as do not contact.`,
+            );
+
+            if (kind === 'delete') {
+                restoreAfterDelete(done);
+            }
+        };
+
+        const next = (index: number) => {
+            if (stopped) {
+                return;
+            }
+
+            if (index >= ids.length) {
+                finish(false);
+
+                return;
+            }
+
+            let settled = false;
+
+            const succeed = () => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                done += 1;
+                next(index + 1);
+            };
+
+            const fail = () => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                finish(true);
+            };
+
+            const options = {
+                preserveScroll: true,
+                preserveState: true,
+                async: true,
+                only: index === ids.length - 1 ? undefined : [],
+                onSuccess: succeed,
+                onError: fail,
+                onHttpException: () => {
+                    fail();
+
+                    return false;
+                },
+                onNetworkError: () => {
+                    fail();
+
+                    return false;
+                },
+                onCancel: fail,
+                onFinish: () => {
+                    if (!settled) {
+                        fail();
+                    }
+                },
+            };
+
+            try {
+                if (kind === 'delete') {
+                    router.delete(destroy.url([slug, ids[index]]), options);
+                } else {
+                    router.patch(
+                        cell.url([slug, ids[index]]),
+                        { field: 'status', value: 'DoNotContact' },
+                        options,
+                    );
+                }
+            } catch {
+                fail();
+            }
+        };
+
+        next(0);
+    };
+
+    const markDoNotContact = () => {
+        const ids = selectedOnPage.filter(
+            (id) =>
+                contacts.data.find((contact) => contact.id === id)?.status !==
+                'DoNotContact',
         );
 
-        if (next) {
-            event.preventDefault();
-            next.focus();
-        }
+        runBulk('do-not-contact', ids);
     };
+
+    const deleteSelected = () => {
+        const ids = [...deleteIds];
+
+        setDeleteOpen(false);
+
+        if (ids.length === 0) {
+            return;
+        }
+
+        runBulk('delete', ids);
+    };
+
+    const importButton = can.create ? (
+        <ImportContactsModal
+            fields={fields}
+            lists={listOptions}
+            defaultListId={filters.list}
+        >
+            <Button variant="secondary" data-test="contacts-import-button">
+                <Upload /> Import CSV
+            </Button>
+        </ImportContactsModal>
+    ) : null;
+
+    const addContactButton = can.create ? (
+        <CreateContactModal
+            lists={listOptions}
+            statuses={statuses}
+            defaultListIds={filters.list ? [filters.list] : undefined}
+        >
+            <Button data-test="contacts-new-button">
+                <Plus /> Add contact
+            </Button>
+        </CreateContactModal>
+    ) : null;
+
+    // 390: the head keeps both actions, the import folded to its icon.
+    const importButtonMobile = can.create ? (
+        <ImportContactsModal
+            fields={fields}
+            lists={listOptions}
+            defaultListId={filters.list}
+        >
+            <Button
+                variant="secondary"
+                size="icon"
+                aria-label="Import CSV"
+                data-test="contacts-import-button-mobile"
+            >
+                <Upload />
+            </Button>
+        </ImportContactsModal>
+    ) : null;
+
+    const addContactButtonMobile = can.create ? (
+        <CreateContactModal
+            lists={listOptions}
+            statuses={statuses}
+            defaultListIds={filters.list ? [filters.list] : undefined}
+        >
+            <Button
+                aria-label="Add contact"
+                data-test="contacts-new-button-mobile"
+            >
+                <Plus />
+                <span>Add</span>
+            </Button>
+        </CreateContactModal>
+    ) : null;
+
+    const pagination = (
+        <div className="flex items-center gap-2 pr-1 text-body leading-5 text-muted-foreground">
+            <span className="hidden whitespace-nowrap sm:inline">
+                {contacts.total === 0
+                    ? '0 contacts'
+                    : `Showing ${(contacts.from ?? 0).toLocaleString()}–${(contacts.to ?? 0).toLocaleString()} of ${contacts.total.toLocaleString()}`}
+            </span>
+            {previousLink?.url && busy === null ? (
+                <Button variant="outline" size="sm" asChild>
+                    <Link href={previousLink.url} preserveScroll>
+                        Previous
+                    </Link>
+                </Button>
+            ) : (
+                <Button variant="outline" size="sm" disabled>
+                    Previous
+                </Button>
+            )}
+            {nextLink?.url && busy === null ? (
+                <Button variant="outline" size="sm" asChild>
+                    <Link href={nextLink.url} preserveScroll>
+                        Next
+                    </Link>
+                </Button>
+            ) : (
+                <Button variant="outline" size="sm" disabled>
+                    Next
+                </Button>
+            )}
+        </div>
+    );
 
     return (
         <>
             <Head title="Contacts" />
 
-            <h1 className="sr-only">Contacts</h1>
+            <div
+                className={cn(
+                    'flex min-h-[calc(100svh-3.5rem)] w-full min-w-0 flex-col px-4 pt-6 lg:h-svh lg:min-h-[32rem] lg:px-6',
+                    // The 390 selection bar is fixed above the tab bar; reserve its
+                    // height at the end of the page so pagination stays reachable.
+                    selectedCount > 0 &&
+                        'max-lg:pb-[calc(4.25rem+env(safe-area-inset-bottom))]',
+                )}
+            >
+                <PageHead
+                    title="Contacts"
+                    description={`${contacts.total.toLocaleString()} ${
+                        contacts.total === 1 ? 'contact' : 'contacts'
+                    } in this view`}
+                    mobileDescription={`${contacts.total.toLocaleString()} ${
+                        contacts.total === 1 ? 'contact' : 'contacts'
+                    }`}
+                    actions={
+                        can.create && !isFirstRun ? (
+                            <>
+                                <div className="hidden items-center gap-2 lg:flex">
+                                    {importButton}
+                                    {addContactButton}
+                                </div>
+                                <div className="flex items-center gap-2 lg:hidden">
+                                    {importButtonMobile}
+                                    {addContactButtonMobile}
+                                </div>
+                            </>
+                        ) : null
+                    }
+                    mobileNav
+                />
 
-            <div className="flex h-[calc(100svh-4rem)] min-h-[28rem] w-full min-w-0 flex-col gap-5 px-4 py-6 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        variant="small"
-                        title="Contacts"
-                        description={`${contacts.total} ${contacts.total === 1 ? 'contact' : 'contacts'} in this view`}
-                    />
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        {can.create ? (
-                            <Button
-                                variant="secondary"
-                                onClick={openNewField}
-                                data-test="contacts-add-column"
-                            >
-                                <Plus /> Add column
-                            </Button>
-                        ) : null}
-
-                        {can.create ? (
-                            <ImportContactsModal
-                                fields={fields}
-                                lists={listOptions}
-                                defaultListId={filters.list}
-                            >
-                                <Button
-                                    variant="secondary"
-                                    data-test="contacts-import-button"
-                                >
-                                    <Upload /> Import CSV
-                                </Button>
-                            </ImportContactsModal>
-                        ) : null}
-
-                        {can.create ? (
-                            <CreateContactModal
-                                lists={listOptions}
-                                statuses={statuses}
-                                defaultListIds={
-                                    filters.list ? [filters.list] : undefined
-                                }
-                            >
-                                <Button data-test="contacts-new-button">
-                                    <Plus /> New contact
-                                </Button>
-                            </CreateContactModal>
-                        ) : null}
-                    </div>
-                </div>
-
-                {latestImport ? (
-                    <ImportSummary contactImport={latestImport} />
-                ) : null}
-
-                <form
-                    role="search"
-                    className="flex flex-wrap items-center gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        navigate({ q: search });
-                    }}
-                >
-                    <div className="relative min-w-48 flex-1 sm:max-w-xs">
-                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            aria-label="Search contacts"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search by name or email"
-                            className="pl-9"
-                        />
-                    </div>
-                    <Button type="submit" variant="secondary">
-                        Search
-                    </Button>
-                </form>
-
-                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card">
-                    <div
-                        ref={gridViewportRef}
-                        className="min-h-0 flex-1 overflow-auto overscroll-x-contain"
-                    >
-                        <table
-                            onKeyDown={handleGridKeyDown}
-                            className="w-full table-fixed border-separate border-spacing-0 text-sm"
-                            style={{ minWidth: 1136 + fields.length * 200 }}
-                            aria-label="Contacts spreadsheet"
-                        >
-                            <colgroup>
-                                <col className="w-12" />
-                                <col className="w-60" />
-                                <col className="w-72" />
-                                <col className="w-48" />
-                                <col className="w-44" />
-                                <col className="w-24" />
-                                {fields.map((field) => (
-                                    <col key={field.id} className="w-[200px]" />
-                                ))}
-                                <col className="w-24" />
-                            </colgroup>
-                            <thead className="sticky top-0 z-20 bg-muted text-left text-muted-foreground">
-                                <tr className="h-11">
-                                    <th
-                                        scope="col"
-                                        className="sticky left-0 z-30 border-r border-b bg-muted text-center font-normal"
-                                    >
-                                        #
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="sticky left-12 z-30 border-r border-b bg-muted px-3 font-medium"
-                                    >
-                                        Name
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Email
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Phone
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Status
-                                    </th>
-                                    <th
-                                        scope="col"
-                                        className="border-r border-b px-3 font-medium"
-                                    >
-                                        Lists
-                                    </th>
-                                    {fields.map((field) => (
-                                        <th
-                                            key={field.id}
-                                            scope="col"
-                                            className="group border-r border-b px-3 font-medium"
-                                        >
-                                            <span className="flex min-w-0 items-center gap-1">
-                                                <span
-                                                    className="min-w-0 truncate"
-                                                    title={field.name}
-                                                >
-                                                    {field.name}
-                                                </span>
-                                                {can.create && (
-                                                    <span className="ml-auto flex shrink-0 items-center sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                openEditField(
-                                                                    field,
-                                                                )
-                                                            }
-                                                            aria-label={`Edit ${field.name}`}
-                                                            className="rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                                        >
-                                                            <Pencil className="size-3.5" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setDeletingField(
-                                                                    field,
-                                                                )
-                                                            }
-                                                            aria-label={`Delete ${field.name}`}
-                                                            className="rounded p-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                                        >
-                                                            <Trash2 className="size-3.5" />
-                                                        </button>
-                                                    </span>
-                                                )}
-                                            </span>
-                                        </th>
-                                    ))}
-                                    <th
-                                        scope="col"
-                                        className="border-b px-3 font-medium"
-                                    >
-                                        Details
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {contacts.data.map((contact, row) => (
-                                    <tr
-                                        key={contact.id}
-                                        data-grid-row={row}
-                                        data-test="contact-row"
-                                        className="group h-11 hover:bg-muted/30"
-                                    >
-                                        <th
-                                            scope="row"
-                                            className="sticky left-0 z-10 border-r border-b bg-muted/60 text-center text-xs font-normal text-muted-foreground group-hover:bg-muted"
-                                        >
-                                            {(contacts.from ?? 1) + row}
-                                        </th>
-                                        <td
-                                            data-grid-column={0}
-                                            className="sticky left-12 z-10 border-r border-b bg-card font-medium group-hover:bg-muted/30"
-                                        >
-                                            <InlineCell
-                                                contactId={contact.id}
-                                                field="name"
-                                                columnLabel="Name"
-                                                value={contact.name}
-                                                placeholder="Add name"
-                                            />
-                                        </td>
-                                        <td
-                                            data-grid-column={1}
-                                            className="border-r border-b text-muted-foreground"
-                                        >
-                                            <InlineCell
-                                                contactId={contact.id}
-                                                field="email"
-                                                columnLabel="Email"
-                                                type="email"
-                                                value={contact.email}
-                                                placeholder="Add email"
-                                            />
-                                        </td>
-                                        <td
-                                            data-grid-column={2}
-                                            className="border-r border-b text-muted-foreground"
-                                        >
-                                            <InlineCell
-                                                contactId={contact.id}
-                                                field="phone"
-                                                columnLabel="Phone"
-                                                value={contact.phone}
-                                                placeholder="Add phone"
-                                            />
-                                        </td>
-                                        <td
-                                            data-grid-column={3}
-                                            className="border-r border-b"
-                                        >
-                                            <InlineStatusCell
-                                                contactId={contact.id}
-                                                status={contact.status}
-                                                label={contact.status_label}
-                                                statuses={statuses}
-                                            />
-                                        </td>
-                                        <td className="border-r border-b px-3 text-muted-foreground">
-                                            {contact.lists_count}
-                                        </td>
-                                        {fields.map((field, column) => (
-                                            <td
-                                                key={field.id}
-                                                data-grid-column={4 + column}
-                                                className="border-r border-b text-muted-foreground"
-                                            >
-                                                <InlinePropertyCell
-                                                    contactId={contact.id}
-                                                    fieldId={field.id}
-                                                    fieldName={field.name}
-                                                    value={
-                                                        contact.properties[
-                                                            field.id
-                                                        ] ?? null
-                                                    }
-                                                />
-                                            </td>
-                                        ))}
-                                        <td className="border-b px-3">
-                                            <Link
-                                                href={show([slug, contact.id])}
-                                                aria-label={`Open ${contact.name}`}
-                                                className="inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                            >
-                                                Open{' '}
-                                                <ArrowUpRight className="size-3.5" />
-                                            </Link>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {Array.from(
-                                    {
-                                        length: Math.max(
-                                            0,
-                                            visibleRows - contacts.data.length,
-                                        ),
-                                    },
-                                    (_, row) => (
-                                        <tr
-                                            key={`blank-${row}`}
-                                            aria-hidden="true"
-                                            className="h-11 text-muted-foreground/60"
-                                        >
-                                            <td className="sticky left-0 border-r border-b bg-muted/60 text-center text-xs">
-                                                {(contacts.from ?? 1) +
-                                                    contacts.data.length +
-                                                    row}
-                                            </td>
-                                            <td className="sticky left-12 border-r border-b bg-card" />
-                                            <td className="border-r border-b" />
-                                            <td className="border-r border-b" />
-                                            <td className="border-r border-b" />
-                                            <td className="border-r border-b" />
-                                            {fields.map((field) => (
-                                                <td
-                                                    key={field.id}
-                                                    className="border-r border-b"
-                                                />
-                                            ))}
-                                            <td className="border-b" />
-                                        </tr>
-                                    ),
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    {contacts.data.length === 0 && (
-                        <div className="pointer-events-none absolute inset-x-4 top-16 z-10 flex justify-center">
-                            <div className="pointer-events-auto w-full max-w-md rounded-xl border bg-card p-6 text-center shadow-sm">
-                                <h2 className="font-semibold">
-                                    {filters.q || filters.list
-                                        ? 'No matching contacts'
-                                        : 'No contacts yet'}
-                                </h2>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    {filters.q || filters.list
-                                        ? 'Try another search or switch lists.'
-                                        : 'Add your first contact to start filling this sheet.'}
-                                </p>
-                                {can.create && !filters.q && (
-                                    <CreateContactModal
-                                        lists={listOptions}
-                                        statuses={statuses}
-                                        defaultListIds={
-                                            filters.list
-                                                ? [filters.list]
-                                                : undefined
-                                        }
-                                    >
-                                        <Button className="mt-4">
-                                            <Plus /> New contact
-                                        </Button>
-                                    </CreateContactModal>
-                                )}
-                            </div>
-                        </div>
-                    )}
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
-                        <span>
-                            {contacts.total === 0
-                                ? '0 contacts'
-                                : `Showing ${contacts.from}–${contacts.to} of ${contacts.total} contacts`}
-                        </span>
-                        <span>
-                            Click a cell to edit · Use arrow keys to move
-                        </span>
-                    </div>
+                <div className="mt-4 lg:hidden">
                     <ListTabs
                         lists={lists}
                         activeListId={filters.list}
                         canCreate={can.create}
+                        search={filters.q}
+                        disabled={busy !== null}
+                        className="h-auto rounded-lg border py-1"
                     />
                 </div>
-                <Pagination links={contacts.links} />
+
+                {latestImport ? (
+                    <div className="mt-4">
+                        <ImportSummary contactImport={latestImport} />
+                    </div>
+                ) : null}
+
+                <div
+                    className="mt-6 flex flex-wrap items-center gap-2"
+                    data-test="contacts-toolbar"
+                >
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                disabled={busy !== null}
+                                aria-label="Filters"
+                            >
+                                <Filter />
+                                <span className="hidden lg:inline">
+                                    Filters
+                                </span>
+                                {filters.list ? (
+                                    <span
+                                        className="size-1.5 rounded-full bg-primary"
+                                        aria-hidden
+                                    />
+                                ) : null}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                            <DropdownMenuLabel>Lists</DropdownMenuLabel>
+                            <DropdownMenuRadioGroup
+                                value={
+                                    filters.list === null
+                                        ? 'all'
+                                        : String(filters.list)
+                                }
+                                onValueChange={(value) =>
+                                    navigate({
+                                        list:
+                                            value === 'all'
+                                                ? null
+                                                : Number(value),
+                                    })
+                                }
+                            >
+                                <DropdownMenuRadioItem value="all">
+                                    All contacts
+                                </DropdownMenuRadioItem>
+                                {lists.map((list) => (
+                                    <DropdownMenuRadioItem
+                                        key={list.id}
+                                        value={String(list.id)}
+                                    >
+                                        <span className="truncate">
+                                            {list.name}
+                                        </span>
+                                        <span className="ms-auto text-label text-muted-foreground tabular-nums">
+                                            {list.contacts_count}
+                                        </span>
+                                    </DropdownMenuRadioItem>
+                                ))}
+                            </DropdownMenuRadioGroup>
+                            {hasFilters ? (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onSelect={clearFilters}>
+                                        Clear filters
+                                    </DropdownMenuItem>
+                                </>
+                            ) : null}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {selectedCount > 0 ? (
+                        <div className="hidden items-center gap-2 lg:flex">
+                            <span
+                                className="text-body leading-5 font-medium text-primary"
+                                data-test="contacts-selection-count"
+                            >
+                                <span className="font-semibold tabular-nums">
+                                    {selectedCount}
+                                </span>{' '}
+                                selected
+                            </span>
+
+                            <Button
+                                variant="outline"
+                                onClick={() => setCampaignOpen(true)}
+                                disabled={busy !== null}
+                                data-test="contacts-bulk-add-to-campaign"
+                            >
+                                <Send /> Add to campaign
+                            </Button>
+                            <Button
+                                variant="outline"
+                                onClick={markDoNotContact}
+                                disabled={
+                                    busy !== null || allAlreadyDoNotContact
+                                }
+                                data-test="contacts-bulk-do-not-contact"
+                            >
+                                Do not contact
+                            </Button>
+                            <Button
+                                variant="outline"
+                                className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                onClick={() => {
+                                    setDeleteIds(selectedOnPage);
+                                    setDeleteOpen(true);
+                                }}
+                                disabled={busy !== null}
+                                data-test="contacts-bulk-delete"
+                            >
+                                <Trash2 /> Delete
+                            </Button>
+                        </div>
+                    ) : null}
+
+                    <form
+                        role="search"
+                        className="flex min-w-0 flex-1 items-center gap-2 lg:ms-auto lg:flex-none"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            navigate({ q: search });
+                        }}
+                    >
+                        <div className="relative min-w-0 flex-1 lg:flex-none">
+                            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                aria-label="Search contacts"
+                                value={search}
+                                onChange={(event) =>
+                                    setSearch(event.target.value)
+                                }
+                                placeholder="Search name or email…"
+                                disabled={busy !== null}
+                                className="h-8 w-[246px] max-w-full pl-8"
+                            />
+                        </div>
+                    </form>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="Manage columns"
+                                disabled={busy !== null}
+                                className="hidden lg:inline-flex"
+                                data-test="contacts-columns-button"
+                            >
+                                <Settings />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Columns</DropdownMenuLabel>
+                            <DropdownMenuItem
+                                disabled={!can.create}
+                                onSelect={openNewField}
+                                data-test="contacts-add-column"
+                            >
+                                <Plus /> Add column
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+
+                {bulkError ? (
+                    <p
+                        role="alert"
+                        className="mt-2 text-body leading-5 text-destructive-foreground"
+                    >
+                        {bulkError}
+                    </p>
+                ) : null}
+
+                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card max-lg:-mx-4 max-lg:overflow-visible max-lg:rounded-none max-lg:border-x-0">
+                    {contacts.data.length === 0 ? (
+                        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+                            {isOutOfRange ? (
+                                <EmptyState
+                                    className="w-full max-w-lg border-0 py-16"
+                                    title="This page has no contacts"
+                                    description="The list has fewer pages than this one. Go back to the first page."
+                                    actions={
+                                        <Button variant="outline" asChild>
+                                            <Link
+                                                href={contactsIndex.url(slug)}
+                                            >
+                                                Back to page 1
+                                            </Link>
+                                        </Button>
+                                    }
+                                />
+                            ) : isFirstRun ? (
+                                <EmptyState
+                                    icon={Users}
+                                    className="w-full max-w-lg border-0 py-16"
+                                    title="No contacts yet"
+                                    description="Add your first contact or import a CSV to start filling this grid."
+                                    actions={
+                                        can.create ? (
+                                            <>
+                                                {importButton}
+                                                {addContactButton}
+                                            </>
+                                        ) : null
+                                    }
+                                />
+                            ) : (
+                                <EmptyState
+                                    className="w-full max-w-lg border-0 py-16"
+                                    title="No contacts match your filters"
+                                    description="Try another search term or switch lists."
+                                    actions={
+                                        <Button
+                                            variant="outline"
+                                            onClick={clearFilters}
+                                        >
+                                            Clear filters
+                                        </Button>
+                                    }
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        <div
+                            aria-busy={busy !== null}
+                            className={cn(
+                                // Descendant, not child: the grid wraps its table in a
+                                // breakpoint wrapper, and a direct-child selector would
+                                // skip it and leave the table unclipped.
+                                'flex min-h-0 flex-1 flex-col [&_[data-slot=table-container]]:min-h-0 [&_[data-slot=table-container]]:flex-1 [&_[data-slot=table-container]]:overflow-auto',
+                                busy !== null &&
+                                    'pointer-events-none opacity-60',
+                            )}
+                        >
+                            <ContactGrid
+                                slug={slug}
+                                contacts={contacts}
+                                fields={fields}
+                                statuses={statuses}
+                                selected={selectedOnPage}
+                                canManageFields={can.create}
+                                onToggle={toggle}
+                                onToggleAll={toggleAll}
+                                onEditField={openEditField}
+                                onDeleteField={setDeletingField}
+                            />
+                        </div>
+                    )}
+
+                    <div className="hidden lg:block">
+                        <ListTabs
+                            lists={lists}
+                            activeListId={filters.list}
+                            canCreate={can.create}
+                            search={filters.q}
+                            disabled={busy !== null}
+                            trailing={pagination}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t px-4 py-2 lg:hidden">
+                        <p className="text-label leading-4 text-muted-foreground">
+                            {contacts.total === 0
+                                ? '0 contacts'
+                                : `${(contacts.from ?? 0).toLocaleString()}–${(contacts.to ?? 0).toLocaleString()} of ${contacts.total.toLocaleString()}`}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            {previousLink?.url && busy === null ? (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link
+                                        href={previousLink.url}
+                                        preserveScroll
+                                    >
+                                        Previous
+                                    </Link>
+                                </Button>
+                            ) : (
+                                <Button variant="outline" size="sm" disabled>
+                                    Previous
+                                </Button>
+                            )}
+                            {nextLink?.url && busy === null ? (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={nextLink.url} preserveScroll>
+                                        Next
+                                    </Link>
+                                </Button>
+                            ) : (
+                                <Button variant="outline" size="sm" disabled>
+                                    Next
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            {selectedCount > 0 ? (
+                <div
+                    className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 flex min-h-14 items-center gap-3 border-t bg-background px-4 py-2.5 lg:hidden"
+                    data-test="contacts-selection-bar"
+                >
+                    <p className="text-body leading-5 font-medium text-primary">
+                        <span className="font-semibold tabular-nums">
+                            {selectedCount}
+                        </span>{' '}
+                        selected
+                    </p>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        className="ms-auto"
+                        onClick={() => setCampaignOpen(true)}
+                        disabled={busy !== null}
+                        data-test="contacts-bulk-add-to-campaign-mobile"
+                    >
+                        <Send /> Add to campaign
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                aria-label="More contact actions"
+                                data-test="contacts-bulk-more"
+                            >
+                                <MoreHorizontal />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                onSelect={markDoNotContact}
+                                disabled={
+                                    busy !== null || allAlreadyDoNotContact
+                                }
+                            >
+                                Do not contact
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => {
+                                    setDeleteIds(selectedOnPage);
+                                    setDeleteOpen(true);
+                                }}
+                                disabled={busy !== null}
+                            >
+                                <Trash2 /> Delete
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            ) : null}
+
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                title={
+                    deleteIds.length === 1
+                        ? 'Delete 1 contact?'
+                        : `Delete ${deleteIds.length} contacts?`
+                }
+                description={DELETE_COPY}
+                confirmLabel={
+                    deleteIds.length === 1
+                        ? 'Delete contact'
+                        : `Delete ${deleteIds.length} contacts`
+                }
+                onConfirm={deleteSelected}
+                processing={busy === 'delete'}
+            />
+
+            {campaignOpen ? (
+                <AddToCampaignModal
+                    campaigns={campaigns}
+                    contactIds={selectedOnPage}
+                    open={campaignOpen}
+                    onOpenChange={setCampaignOpen}
+                    onSuccess={() => setSelected([])}
+                />
+            ) : null}
 
             {fieldModalOpen ? (
                 <ContactFieldFormModal
@@ -557,11 +945,6 @@ export default function ContactsIndex({
     );
 }
 
-ContactsIndex.layout = (props: { currentTeam?: { slug: string } | null }) => ({
-    breadcrumbs: [
-        {
-            title: 'Contacts',
-            href: props.currentTeam ? index(props.currentTeam.slug) : '/',
-        },
-    ],
+ContactsIndex.layout = () => ({
+    showHeader: false,
 });

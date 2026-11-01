@@ -38,6 +38,14 @@ export type CampaignDetail = {
     updated_at: string | null;
 };
 
+export type CampaignStepMetrics = {
+    sent: number;
+    opened: number;
+    replied: number;
+    opened_rate: number | null;
+    replied_rate: number | null;
+};
+
 export type CampaignStep = {
     id: number;
     sequence: number;
@@ -47,6 +55,28 @@ export type CampaignStep = {
     time: string | null;
     is_threaded: boolean;
     setting: Record<string, unknown> | null;
+    metrics: CampaignStepMetrics;
+};
+
+export type CampaignConnection = {
+    id: number;
+    name: string;
+    from_email: string | null;
+    status: string;
+    status_label: string;
+};
+
+export type CampaignStartReason = {
+    type: 'steps' | 'step' | 'connection' | 'recipients' | 'do_not_contact';
+    message: string;
+    blocking: boolean;
+    step_id: number | null;
+    step_sequence: number | null;
+};
+
+export type CampaignStartState = {
+    blocked: boolean;
+    reasons: CampaignStartReason[];
 };
 
 export type CampaignStats = {
@@ -68,6 +98,18 @@ export type CampaignPermissions = {
     duplicate: boolean;
 };
 
+export type RecipientDisplayStatus =
+    | 'replied'
+    | 'bounced'
+    | 'unsubscribed'
+    | 'opened'
+    | 'contacted'
+    | 'error'
+    | 'paused'
+    | 'archived'
+    | 'completed'
+    | 'not_contacted';
+
 export type RecipientSummary = {
     id: number;
     contact_id: number;
@@ -75,6 +117,9 @@ export type RecipientSummary = {
     email: string | null;
     status: string;
     status_label: string;
+    /** Board vocabulary derived from the campaign's own emails and the recipient status. */
+    display_status: RecipientDisplayStatus;
+    display_status_label: string;
     created_at: string | null;
 };
 

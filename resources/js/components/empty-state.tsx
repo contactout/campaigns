@@ -20,18 +20,25 @@ export default function EmptyState({
     return (
         <div
             className={cn(
-                'flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-16 text-center',
+                'flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-24 text-center',
                 className,
             )}
         >
             {Icon ? (
-                <span className="flex size-12 items-center justify-center rounded-xl bg-muted">
-                    <Icon className="size-6 text-muted-foreground" />
+                <span className="flex size-16 items-center justify-center rounded-lg bg-accent">
+                    <Icon className="size-7 text-primary" />
                 </span>
             ) : null}
-            <h2 className={cn('font-semibold', Icon && 'mt-4')}>{title}</h2>
+            <h2
+                className={cn(
+                    'text-h3 leading-6 font-semibold',
+                    Icon && 'mt-4',
+                )}
+            >
+                {title}
+            </h2>
             {description ? (
-                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                <p className="mt-1.5 max-w-[380px] text-body leading-5 text-muted-foreground">
                     {description}
                 </p>
             ) : null}

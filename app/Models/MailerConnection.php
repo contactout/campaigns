@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\MailerConnectionDisplayStatus;
 use App\Enums\MailerConnectionStatus;
 use App\Enums\MailerType;
 use Carbon\CarbonImmutable;
@@ -110,6 +111,62 @@ class MailerConnection extends Model
     public function scopeForTeam(Builder $query, int $teamId): Builder
     {
         return $query->where('team_id', $teamId);
+    }
+
+    /**
+     * Get the status the connection is shown with.
+     *
+     * See MailerConnectionDisplayStatus: an Active connection with a recorded
+     * exception is Failed, so a failed row can never read Verified.
+     */
+    public function displayStatus(): MailerConnectionDisplayStatus
+    {
+        return MailerConnectionDisplayStatus::derive($this->status, $this->exception_type !== null);
+    }
+
+    /**
+     * Whether the connection is counted as needing attention.
+     *
+     * The dashboard's count and the connections table read this method, so the
+     * two cannot disagree: a row that does not show Verified needs attention.
+     */
+    public function needsAttention(): bool
+    {
+        return $this->displayStatus() !== MailerConnectionDisplayStatus::Verified;
+    }
+
+    /**
+     * Get the compact option payload used by the campaign modals.
+     *
+     * Single source for the mapping: the campaigns index, the campaign detail
+     * page and the dashboard all read it, so their pickers cannot diverge.
+     *
+     * @return array{id: int, name: string, status: string, status_label: string}
+     */
+    public function optionPayload(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'status' => $this->status->value,
+            'status_label' => $this->status->label(),
+        ];
+    }
+
+    /**
+     * Get the option payload for every connection a team owns, ordered by name.
+     *
+     * @return array<int, array{id: int, name: string, status: string, status_label: string}>
+     */
+    public static function optionsForTeam(int $teamId): array
+    {
+        return static::query()
+            ->forTeam($teamId)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (MailerConnection $connection): array => $connection->optionPayload())
+            ->values()
+            ->all();
     }
 
     /**

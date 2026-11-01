@@ -7,6 +7,7 @@ use App\Actions\Contacts\DeleteContact;
 use App\Actions\Contacts\SaveContactProperty;
 use App\Actions\Contacts\UpdateContact;
 use App\Actions\Contacts\UpdateContactCell;
+use App\Enums\CampaignStatus;
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
 use App\Http\Controllers\Controller;
@@ -14,6 +15,7 @@ use App\Http\Requests\Contacts\StoreContactRequest;
 use App\Http\Requests\Contacts\UpdateContactCellRequest;
 use App\Http\Requests\Contacts\UpdateContactPropertyRequest;
 use App\Http\Requests\Contacts\UpdateContactRequest;
+use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactIdentity;
@@ -82,6 +84,7 @@ class ContactController extends Controller
                 ])
                 ->all(),
             'latestImport' => $this->latestImport($currentTeam, $user),
+            'campaigns' => $this->campaignOptions($currentTeam),
             'can' => [
                 'create' => $user->can('create', [Contact::class, $currentTeam]),
             ],
@@ -256,6 +259,33 @@ class ContactController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Contact deleted.')]);
 
         return to_route('contacts.index');
+    }
+
+    /**
+     * List the team's campaigns that accept contacts for "Add to campaign".
+     *
+     * Archived and running campaigns are excluded: adding to an Active campaign
+     * queues its first step immediately. Read-only payload addition; the
+     * recipients endpoint owns the update gate and the insert.
+     *
+     * @return array<int, array{id: int, name: string, status_label: string}>
+     */
+    protected function campaignOptions(Team $team): array
+    {
+        return Campaign::forTeam($team->id)
+            ->whereIn('status', [
+                CampaignStatus::Draft->value,
+                CampaignStatus::Stopped->value,
+            ])
+            ->orderBy('name')
+            ->get(['id', 'name', 'status'])
+            ->map(fn (Campaign $campaign): array => [
+                'id' => $campaign->id,
+                'name' => $campaign->name,
+                'status_label' => $campaign->status->label(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

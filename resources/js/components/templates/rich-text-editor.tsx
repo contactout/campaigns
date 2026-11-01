@@ -9,25 +9,56 @@ import {
     Strikethrough,
     Undo2,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 type Props = {
     name: string;
     value: string;
     onChange?: (html: string) => void;
+    /**
+     * Receives the editor's own serialisation of the initial content once it
+     * has parsed it. TipTap rewrites the markup it is given (`<br />` becomes
+     * `<br>`, attributes are reordered), so a form that compares `onChange`
+     * against the stored HTML reads a freshly opened document as edited.
+     */
+    onCanonical?: (html: string) => void;
     labelledBy?: string;
     readOnly?: boolean;
+    /**
+     * `icons` is the original icon toolbar used by the template screens.
+     * `board` is the labelled toolbar on the sequence-step board
+     * (`B I U • 1. Link`) with a slot for extra actions on the right.
+     */
+    toolbar?: 'icons' | 'board';
+    actions?: ReactNode;
+    minHeightClass?: string;
+    /**
+     * Receives a function that inserts text at the cursor, so a page can offer
+     * its own placeholder chips outside the toolbar.
+     */
+    insertRef?: { current: ((text: string) => void) | null };
 };
 
 export default function RichTextEditor({
     name,
     value,
     onChange,
+    onCanonical,
     labelledBy,
     readOnly = false,
+    toolbar = 'icons',
+    actions,
+    minHeightClass = 'min-h-72',
+    insertRef,
 }: Props) {
     const [html, setHtml] = useState(value);
+    const onCanonicalRef = useRef(onCanonical);
+    onCanonicalRef.current = onCanonical;
+    const [linkOpen, setLinkOpen] = useState(false);
+    const [linkHref, setLinkHref] = useState('');
 
     const editor = useEditor({
         extensions: [StarterKit],
@@ -42,7 +73,15 @@ export default function RichTextEditor({
         editorProps: {
             attributes: {
                 'aria-labelledby': labelledBy ?? '',
-                class: 'min-h-72 max-w-none px-3 py-2 text-sm focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+                class: cn(
+                    minHeightClass,
+                    'max-w-none px-3 py-2 focus:outline-none [&_h2]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+                    // The template screens keep their pre-phase-3 scale; the
+                    // board toolbar is the 13px body role.
+                    toolbar === 'board'
+                        ? 'text-body leading-5 [&_h2]:text-h3'
+                        : 'text-sm [&_h2]:text-lg',
+                ),
             },
         },
     });
@@ -50,6 +89,30 @@ export default function RichTextEditor({
     useEffect(() => {
         editor?.setEditable(!readOnly);
     }, [editor, readOnly]);
+
+    // Once per editor instance: the canonical form of the content it was opened
+    // with, so a caller's dirty check starts from what the editor holds.
+    useEffect(() => {
+        if (!editor) {
+            return;
+        }
+
+        onCanonicalRef.current?.(editor.getHTML());
+    }, [editor]);
+
+    useEffect(() => {
+        if (!insertRef) {
+            return;
+        }
+
+        insertRef.current = (text: string) => {
+            editor?.chain().focus().insertContent(text).run();
+        };
+
+        return () => {
+            insertRef.current = null;
+        };
+    }, [editor, insertRef]);
 
     useEffect(() => {
         if (!editor) {
@@ -62,7 +125,23 @@ export default function RichTextEditor({
         }
     }, [editor, value]);
 
-    const actions: Array<{
+    const applyLink = () => {
+        const href = linkHref.trim();
+
+        if (href !== '') {
+            editor
+                ?.chain()
+                .focus()
+                .extendMarkRange('link')
+                .setLink({ href })
+                .run();
+        }
+
+        setLinkHref('');
+        setLinkOpen(false);
+    };
+
+    const actionsList: Array<{
         icon: typeof Bold;
         label: string;
         run: () => void;
@@ -112,22 +191,144 @@ export default function RichTextEditor({
         },
     ];
 
+    const boardActions: Array<{
+        label: string;
+        glyph: string;
+        aria: string;
+        run: () => void;
+        isActive: () => boolean;
+        className?: string;
+    }> = [
+        {
+            label: 'Bold',
+            glyph: 'B',
+            aria: 'Bold',
+            run: () => editor?.chain().focus().toggleBold().run(),
+            isActive: () => editor?.isActive('bold') ?? false,
+            className: 'font-bold',
+        },
+        {
+            label: 'Italic',
+            glyph: 'I',
+            aria: 'Italic',
+            run: () => editor?.chain().focus().toggleItalic().run(),
+            isActive: () => editor?.isActive('italic') ?? false,
+            className: 'italic',
+        },
+        {
+            label: 'Underline',
+            glyph: 'U',
+            aria: 'Underline',
+            run: () => editor?.chain().focus().toggleUnderline().run(),
+            isActive: () => editor?.isActive('underline') ?? false,
+            className: 'underline',
+        },
+        {
+            label: 'Bullet list',
+            glyph: '•',
+            aria: 'Bullet list',
+            run: () => editor?.chain().focus().toggleBulletList().run(),
+            isActive: () => editor?.isActive('bulletList') ?? false,
+        },
+        {
+            label: 'Numbered list',
+            glyph: '1.',
+            aria: 'Numbered list',
+            run: () => editor?.chain().focus().toggleOrderedList().run(),
+            isActive: () => editor?.isActive('orderedList') ?? false,
+        },
+        {
+            label: 'Link',
+            glyph: 'Link',
+            aria: 'Link',
+            run: () => setLinkOpen((open) => !open),
+            isActive: () => editor?.isActive('link') ?? false,
+        },
+    ];
+
     return (
-        <div className="rounded-md border">
+        <div className="rounded-md border bg-background focus-within:ring-2 focus-within:ring-primary-border">
             {!readOnly ? (
-                <div className="flex flex-wrap items-center gap-1 border-b p-1">
-                    {actions.map((action) => (
-                        <Button
-                            key={action.label}
-                            type="button"
-                            variant={action.isActive() ? 'secondary' : 'ghost'}
-                            size="icon"
-                            aria-label={action.label}
-                            onClick={action.run}
-                        >
-                            <action.icon className="h-4 w-4" />
-                        </Button>
-                    ))}
+                toolbar === 'board' ? (
+                    <div className="flex flex-wrap items-center gap-1 border-b px-1.5 py-1">
+                        {boardActions.map((action, index) => (
+                            <span
+                                key={action.label}
+                                className="flex items-center"
+                            >
+                                {index === 3 || index === 5 ? (
+                                    <span
+                                        className="mx-1 h-4 w-px bg-border"
+                                        aria-hidden
+                                    />
+                                ) : null}
+                                <Button
+                                    type="button"
+                                    variant={
+                                        action.isActive()
+                                            ? 'secondary'
+                                            : 'ghost'
+                                    }
+                                    size="sm"
+                                    className={cn('px-2', action.className)}
+                                    aria-label={action.aria}
+                                    aria-pressed={action.isActive()}
+                                    onClick={action.run}
+                                >
+                                    {action.glyph}
+                                </Button>
+                            </span>
+                        ))}
+                        {actions ? (
+                            <div className="ms-auto flex items-center gap-1.5">
+                                {actions}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap items-center gap-1 border-b p-1">
+                        {actionsList.map((action) => (
+                            <Button
+                                key={action.label}
+                                type="button"
+                                variant={
+                                    action.isActive() ? 'secondary' : 'ghost'
+                                }
+                                size="icon"
+                                aria-label={action.label}
+                                onClick={action.run}
+                            >
+                                <action.icon className="h-4 w-4" />
+                            </Button>
+                        ))}
+                    </div>
+                )
+            ) : null}
+
+            {linkOpen ? (
+                <div className="flex items-center gap-1.5 border-b px-1.5 py-1.5">
+                    <Input
+                        autoFocus
+                        value={linkHref}
+                        onChange={(event) => setLinkHref(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                                event.preventDefault();
+                                applyLink();
+                            }
+
+                            if (event.key === 'Escape') {
+                                event.stopPropagation();
+                                setLinkOpen(false);
+                            }
+                        }}
+                        placeholder="https://example.com"
+                        aria-label="Link URL"
+                        className="h-7"
+                    />
+                    <Button type="button" size="sm" onClick={applyLink}>
+                        Apply
+                    </Button>
                 </div>
             ) : null}
 

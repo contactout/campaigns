@@ -11,4 +11,10 @@ export type NavItem = {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    /**
+     * Path prefix that decides the active state, when it differs from `href`.
+     * Settings is four sibling pages under `/settings`, so its link points at
+     * the profile page but every one of them should mark it current.
+     */
+    activeMatch?: string;
 };

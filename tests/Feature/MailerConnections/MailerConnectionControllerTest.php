@@ -8,6 +8,7 @@ use App\Models\Signature;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\Mail\SmtpConnectionVerifier;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery\MockInterface;
@@ -406,4 +407,195 @@ test('verifying an unreachable mailer connection deactivates it and stores the e
         ->and($connection->exception_type)->toBe(RuntimeException::class)
         ->and($connection->exception_data)->toBe(['message' => 'Connection refused'])
         ->and($connection->threw_at)->not->toBeNull();
+});
+
+test('sent today reads the counter the daily cap enforces inside its refresh window', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    // Windows still open: the counter is today's, so the meter and the cap agree.
+    $inside = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A inside window',
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 142,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->addHours(8),
+    ]);
+
+    $quiet = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'B quiet',
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 0,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->addHours(8),
+    ]);
+
+    // The window passed: `sent_count` is still yesterday's, so it must not show.
+    $stale = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'C stale window',
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 99,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->subDay(),
+    ]);
+
+    // A deleted campaign takes its `campaign_emails` rows with it, but not the
+    // counter the cap counts; the at-cap connection still shows no room left.
+    $atCap = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'D at cap',
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => 400,
+        'sent_count' => 400,
+        'sending_limit_refreshed_at' => CarbonImmutable::now('UTC')->addHours(8),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->has('connections', 4)
+            ->where('connections.0.id', $inside->id)
+            ->where('connections.0.sent_today', 142)
+            ->where('connections.1.id', $quiet->id)
+            ->where('connections.1.sent_today', 0)
+            ->where('connections.2.id', $stale->id)
+            ->where('connections.2.sent_today', 0)
+            ->where('connections.3.id', $atCap->id)
+            ->where('connections.3.sent_today', 400));
+});
+
+test('each connection exposes the derived display status and needs attention flag', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    $verified = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A verified',
+        'status' => MailerConnectionStatus::Active,
+    ]);
+
+    $failed = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'B failed',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => '535 Authentication failed.'],
+        'threw_at' => now(),
+    ]);
+
+    $pending = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'C pending',
+        'status' => MailerConnectionStatus::Pending,
+    ]);
+
+    $deactivated = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'D deactivated',
+        'status' => MailerConnectionStatus::Deactivated,
+    ]);
+
+    $disconnected = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'E disconnected',
+        'status' => MailerConnectionStatus::Disconnected,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->has('connections', 5)
+            ->where('connections.0.id', $verified->id)
+            ->where('connections.0.display_status', 'Verified')
+            ->where('connections.0.display_status_label', 'Verified')
+            ->where('connections.0.needs_attention', false)
+            ->where('connections.0.last_error_message', null)
+            ->where('connections.1.id', $failed->id)
+            ->where('connections.1.display_status', 'Failed')
+            ->where('connections.1.needs_attention', true)
+            ->where('connections.1.last_error_message', '535 Authentication failed.')
+            ->where('connections.2.id', $pending->id)
+            ->where('connections.2.display_status', 'Pending')
+            ->where('connections.2.needs_attention', true)
+            ->where('connections.3.id', $deactivated->id)
+            ->where('connections.3.display_status', 'Deactivated')
+            ->where('connections.3.needs_attention', true)
+            ->where('connections.4.id', $disconnected->id)
+            ->where('connections.4.display_status', 'Disconnected')
+            ->where('connections.4.needs_attention', true));
+});
+
+test('a connection that has never refreshed its sending window reports zero sent today', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    // No window has rolled yet, so nothing can be inside one. The payload says
+    // 0 and the page renders "—" for the limit rather than inventing a usage.
+    $connection = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A never rolled',
+        'status' => MailerConnectionStatus::Active,
+        'sent_count' => 250,
+        'sending_limit' => null,
+        'sending_limit_refreshed_at' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->where('connections.0.id', $connection->id)
+            ->where('connections.0.sent_today', 0)
+            ->where('connections.0.sending_limit', null));
+});
+
+test('the stored failure message is trimmed and capped before it leaves the server', function () {
+    [$team, $user] = mailerConnectionTeamWithMember();
+
+    // A Guzzle message appends the provider's response body after "response:".
+    $providerEcho = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'A provider echo',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => [
+            'message' => 'Client error: `POST https://oauth2.example/token` resulted in a `401 Unauthorized` response: {"error":"invalid_client","error_description":"Unauthorized"}',
+        ],
+        'threw_at' => now(),
+    ]);
+
+    $long = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'B long message',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => str_repeat('S', 900)],
+        'threw_at' => now(),
+    ]);
+
+    $empty = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'C empty',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => '   '],
+        'threw_at' => now(),
+    ]);
+
+    $notAString = MailerConnection::factory()->forTeam($team)->create([
+        'name' => 'D array',
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => RuntimeException::class,
+        'exception_data' => ['message' => ['not', 'a', 'string']],
+        'threw_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('mailer-connections.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('mailer-connections/index')
+            ->has('connections', 4)
+            ->where('connections.0.id', $providerEcho->id)
+            // The envelope is dropped and the provider's own reason is kept: the
+            // codes are what separate a revoked grant from a bad secret.
+            ->where('connections.0.last_error_message', 'Client error: `POST https://oauth2.example/token` resulted in a `401 Unauthorized`; invalid_client: Unauthorized')
+            ->where('connections.1.id', $long->id)
+            ->where('connections.1.last_error_message', str_repeat('S', 300).'...')
+            ->where('connections.2.id', $empty->id)
+            ->where('connections.2.last_error_message', null)
+            ->where('connections.3.id', $notAString->id)
+            ->where('connections.3.last_error_message', null));
 });

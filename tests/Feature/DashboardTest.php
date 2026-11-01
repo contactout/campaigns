@@ -1,12 +1,18 @@
 <?php
 
+use App\Enums\MailerConnectionStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
+use App\Models\CampaignEmail;
 use App\Models\Contact;
+use App\Models\ContactList;
+use App\Models\EmailTemplate;
 use App\Models\MailerConnection;
 use App\Models\Team;
 use App\Models\TeamInvitation;
+use App\Models\TemplateFolder;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('guests are redirected to the login page', function () {
@@ -237,4 +243,228 @@ test('dashboard does not include or delete other users invitations', function ()
     $this->assertDatabaseHas('team_invitations', [
         'id' => $invitation->id,
     ]);
+});
+
+test('dashboard reports 30 day email metrics and their previous window deltas', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $campaign = Campaign::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+    ]);
+
+    $send = function (CarbonInterface $dispatchedAt, bool $opened, bool $replied) use ($campaign): void {
+        CampaignEmail::factory()->create([
+            'campaign_id' => $campaign->id,
+            'dispatched_at' => $dispatchedAt,
+            'opened_at' => $opened ? $dispatchedAt->copy()->addHour() : null,
+            'replied_at' => $replied ? $dispatchedAt->copy()->addHours(2) : null,
+        ]);
+    };
+
+    // Current window: 3 sent, 1 opened and 1 replied (33.3% each; 1 of 3 rounds).
+    $send(now()->subDays(2), true, true);
+    $send(now()->subDays(4), false, false);
+    $send(now()->subDays(20), false, false);
+
+    // Previous window: 2 sent, 1 opened and 1 replied (50% each).
+    $send(now()->subDays(35), true, true);
+    $send(now()->subDays(45), false, false);
+
+    // Older than both windows: must not reach any aggregate.
+    $send(now()->subDays(70), true, true);
+
+    Campaign::factory()->forTeam($team)->active()->create([
+        'user_id' => $user->id,
+    ]);
+    $connection = MailerConnection::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'name' => 'Maya Gmail',
+        'status' => MailerConnectionStatus::Active,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('metrics.emails_sent', 3)
+            ->where('metrics.open_rate', 33.3)
+            ->where('metrics.reply_rate', 33.3)
+            ->where('metrics.active_campaigns', 1)
+            // 3 vs 2 sent is +50%; both rates fell 16.7 points.
+            // JSON drops the trailing .0, so 50.0 arrives as 50.
+            ->where('metrics.emails_sent_delta', 50)
+            ->where('metrics.open_rate_delta', -16.7)
+            ->where('metrics.reply_rate_delta', -16.7)
+            ->where('can.create', true)
+            ->has('mailerConnections', 1)
+            ->where('mailerConnections.0.id', $connection->id)
+            ->where('mailerConnections.0.name', 'Maya Gmail')
+            ->where('mailerConnections.0.status', 'Active')
+            ->where('mailerConnections.0.status_label', 'Active'),
+        );
+});
+
+test('dashboard reports the counts behind the jump back in rows', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    Contact::factory()->count(2)->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+    ]);
+    ContactList::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+    ]);
+    Campaign::factory()->forTeam($team)->active()->create([
+        'user_id' => $user->id,
+    ]);
+    Campaign::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+    ]);
+    $folder = TemplateFolder::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+    ]);
+    EmailTemplate::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'folder_id' => $folder->id,
+    ]);
+    MailerConnection::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'status' => MailerConnectionStatus::Active,
+    ]);
+    MailerConnection::factory()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'status' => MailerConnectionStatus::Active,
+        'exception_type' => 'SMTPException',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('jumpBackIn.contacts', 2)
+            ->where('jumpBackIn.lists', 1)
+            ->where('jumpBackIn.active_campaigns', 1)
+            ->where('jumpBackIn.draft_campaigns', 1)
+            ->where('jumpBackIn.templates', 1)
+            ->where('jumpBackIn.template_folders', 1)
+            ->where('jumpBackIn.connections', 2)
+            ->where('jumpBackIn.connections_needing_attention', 1)
+            ->has('mailerConnections', 2),
+        );
+});
+
+test('dashboard metrics ignore other teams data and leave empty rates null', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+    $otherOwner = User::factory()->create();
+    $otherTeam = $otherOwner->currentTeam;
+
+    $otherCampaign = Campaign::factory()->forTeam($otherTeam)->active()->create([
+        'user_id' => $otherOwner->id,
+    ]);
+
+    CampaignEmail::factory()->create([
+        'campaign_id' => $otherCampaign->id,
+        'dispatched_at' => now()->subDay(),
+        'opened_at' => now(),
+    ]);
+
+    Contact::factory()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $otherOwner->id,
+    ]);
+    ContactList::factory()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $otherOwner->id,
+    ]);
+    EmailTemplate::factory()->forTeam($otherTeam)->create([
+        'user_id' => $otherOwner->id,
+    ]);
+    TemplateFolder::factory()->forTeam($otherTeam)->create([
+        'user_id' => $otherOwner->id,
+    ]);
+    MailerConnection::factory()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $otherOwner->id,
+        'exception_type' => 'SMTPException',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('metrics.emails_sent', 0)
+            ->where('metrics.open_rate', null)
+            ->where('metrics.reply_rate', null)
+            ->where('metrics.active_campaigns', 0)
+            ->where('metrics.emails_sent_delta', null)
+            ->where('metrics.open_rate_delta', null)
+            ->where('metrics.reply_rate_delta', null)
+            ->where('jumpBackIn.contacts', 0)
+            ->where('jumpBackIn.lists', 0)
+            ->where('jumpBackIn.active_campaigns', 0)
+            ->where('jumpBackIn.draft_campaigns', 0)
+            ->where('jumpBackIn.templates', 0)
+            ->where('jumpBackIn.template_folders', 0)
+            ->where('jumpBackIn.connections', 0)
+            ->where('jumpBackIn.connections_needing_attention', 0)
+            ->has('mailerConnections', 0),
+        );
+});
+
+test('dashboard flags every non-active connection and every active connection with an exception', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $connect = function (MailerConnectionStatus $status, ?string $exception = null) use ($team, $user): void {
+        MailerConnection::factory()->create([
+            'team_id' => $team->id,
+            'user_id' => $user->id,
+            'status' => $status,
+            'exception_type' => $exception,
+        ]);
+    };
+
+    $connect(MailerConnectionStatus::Active);
+    $connect(MailerConnectionStatus::Active, 'SMTPException');
+    $connect(MailerConnectionStatus::Pending);
+    $connect(MailerConnectionStatus::Deactivated);
+    $connect(MailerConnectionStatus::Disconnected);
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('jumpBackIn.connections', 5)
+            ->where('jumpBackIn.connections_needing_attention', 4),
+        );
+});
+
+test('a team with no connections gets an empty connection payload and no attention count', function () {
+    $user = User::factory()->create();
+    $team = $user->currentTeam;
+
+    $this->actingAs($user)
+        ->get(route('dashboard', ['current_team' => $team]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            // Nothing to list is a list, not a missing prop: the page maps it.
+            ->has('mailerConnections', 0)
+            ->where('jumpBackIn.connections', 0)
+            ->where('jumpBackIn.connections_needing_attention', 0)
+            ->where('setup.has_connection', false)
+            // Every member can create a campaign, and EnsureTeamMembership keeps
+            // a non-member off the page entirely, so this is the only value the
+            // flag takes for a user who can see the dashboard.
+            ->where('can.create', true));
 });

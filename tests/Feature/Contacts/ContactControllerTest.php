@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\CampaignStatus;
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
 use App\Enums\TeamRole;
+use App\Models\Campaign;
 use App\Models\Contact;
 use App\Models\ContactIdentity;
 use App\Models\ContactList;
@@ -74,6 +76,33 @@ test('members can list only their teams contacts', function () {
             ->where('contacts.data.0.status_label', 'NotContacted')
             ->has('lists')
             ->has('statuses'));
+});
+
+test('the index lists only draft and stopped campaigns to add contacts to', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $draft = Campaign::factory()->forTeam($team)->create([
+        'name' => 'Q4 outreach',
+    ]);
+    Campaign::factory()->forTeam($team)->active()->create([
+        'name' => 'Running outreach',
+    ]);
+    Campaign::factory()->forTeam($team)->create([
+        'name' => 'Old outreach',
+        'status' => CampaignStatus::Archived,
+    ]);
+    Campaign::factory()
+        ->forTeam(Team::factory()->create())
+        ->create(['name' => 'Another team campaign']);
+
+    $this->actingAs($user)
+        ->get(route('contacts.index', ['current_team' => $team->slug]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('campaigns', 1)
+            ->where('campaigns.0.id', $draft->id)
+            ->where('campaigns.0.name', 'Q4 outreach')
+            ->where('campaigns.0.status_label', 'Draft'));
 });
 
 test('members can create a contact with identities and lists', function () {

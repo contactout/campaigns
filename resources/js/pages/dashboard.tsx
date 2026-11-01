@@ -1,99 +1,156 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import {
-    ArrowRight,
-    CheckCircle2,
-    Circle,
+    Check,
+    ChevronRight,
+    FileText,
     Plug,
+    Plus,
     Send,
     Users,
-    UsersRound,
 } from 'lucide-react';
 import { useState } from 'react';
+import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
+import StatCard from '@/components/dashboard/stat-card';
+import PageHead from '@/components/page-head';
 import PendingInvitationsModal from '@/components/pending-invitations-modal';
+import TeamInvitationAlert from '@/components/team-invitation-alert';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { index as campaignsIndex } from '@/routes/campaigns';
 import { index as contactsIndex } from '@/routes/contacts';
 import { index as connectionsIndex } from '@/routes/mailer-connections';
 import { index as teamsIndex } from '@/routes/teams';
-import type { DashboardInvitation, DashboardSetup } from '@/types';
+import { index as templatesIndex } from '@/routes/templates';
+import type {
+    DashboardInvitation,
+    DashboardJumpBackIn,
+    DashboardMetrics,
+    DashboardSetup,
+    MailerConnectionOption,
+} from '@/types';
 
 type Props = {
     pendingInvitations?: DashboardInvitation[];
     setup?: DashboardSetup | null;
+    metrics?: DashboardMetrics | null;
+    jumpBackIn?: DashboardJumpBackIn | null;
+    mailerConnections?: MailerConnectionOption[];
+    can?: {
+        create: boolean;
+    };
 };
+
+const numberFormatter = new Intl.NumberFormat();
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+});
+
+const plural = (count: number, singular: string, pluralForm: string) =>
+    count === 1 ? singular : pluralForm;
+
+const formatCount = (value: number) => numberFormatter.format(value);
+
+const formatRate = (value: number | null | undefined) =>
+    value === null || value === undefined ? '—' : `${value.toFixed(1)}%`;
 
 export default function Dashboard({
     pendingInvitations = [],
     setup = null,
+    metrics = null,
+    jumpBackIn = null,
+    mailerConnections = [],
+    can,
 }: Props) {
-    const { currentTeam } = usePage().props;
-    const [showInvitations, setShowInvitations] = useState(
-        pendingInvitations.length > 0,
-    );
+    const { auth, currentTeam } = usePage().props;
+    const [showInvitations, setShowInvitations] = useState(false);
 
-    const setupComplete =
-        setup !== null &&
-        setup.has_connection &&
-        setup.has_contact &&
-        setup.has_campaign;
+    const slug = currentTeam?.slug ?? null;
+    const firstName = auth.user.name.trim().split(/\s+/)[0] ?? '';
+    const hour = new Date().getHours();
+    const greeting =
+        hour < 12
+            ? 'Good morning'
+            : hour < 18
+              ? 'Good afternoon'
+              : 'Good evening';
 
-    const showChecklist =
-        currentTeam !== null && setup !== null && !setupComplete;
+    const checklist = [
+        {
+            key: 'connection',
+            done: setup?.has_connection ?? false,
+            title: 'Connect an inbox',
+            description:
+                'Link Gmail, Outlook, or SMTP so you can send campaigns.',
+            href: slug ? connectionsIndex(slug) : teamsIndex(),
+            cta: 'Go to Connections',
+        },
+        {
+            key: 'contact',
+            done: setup?.has_contact ?? false,
+            title: 'Add contacts',
+            description: 'Build your audience before you launch a sequence.',
+            href: slug ? contactsIndex(slug) : teamsIndex(),
+            cta: 'Go to Contacts',
+        },
+        {
+            key: 'campaign',
+            done: setup?.has_campaign ?? false,
+            title: 'Create a campaign',
+            description: 'Write your first email sequence and add recipients.',
+            href: slug ? campaignsIndex(slug) : teamsIndex(),
+            cta: 'Go to Campaigns',
+        },
+    ];
 
-    const checklist = currentTeam
-        ? [
-              {
-                  key: 'connection',
-                  done: setup?.has_connection ?? false,
-                  title: 'Connect an inbox',
-                  description:
-                      'Link Gmail, Outlook, or SMTP so you can send campaigns.',
-                  href: connectionsIndex(currentTeam.slug),
-                  cta: 'Go to Connections',
-              },
-              {
-                  key: 'contact',
-                  done: setup?.has_contact ?? false,
-                  title: 'Add contacts',
-                  description:
-                      'Build your audience before you launch a sequence.',
-                  href: contactsIndex(currentTeam.slug),
-                  cta: 'Go to Contacts',
-              },
-              {
-                  key: 'campaign',
-                  done: setup?.has_campaign ?? false,
-                  title: 'Create a campaign',
-                  description:
-                      'Write your first email sequence and add recipients.',
-                  href: campaignsIndex(currentTeam.slug),
-                  cta: 'Go to Campaigns',
-              },
-          ]
-        : [];
+    const doneCount = checklist.filter((step) => step.done).length;
 
-    const nextStep = checklist.find((step) => !step.done);
+    const invitationNames = pendingInvitations
+        .map((invitation) => invitation.team.name)
+        .join(', ');
+    const invitationCount = pendingInvitations.length;
 
     const destinations = [
         {
             title: 'Contacts',
-            description:
-                'Organize people and lists for your next conversation.',
             icon: Users,
-            href: currentTeam ? contactsIndex(currentTeam.slug) : teamsIndex(),
+            href: slug ? contactsIndex(slug) : teamsIndex(),
+            qualifier: jumpBackIn
+                ? `${formatCount(jumpBackIn.contacts)} ${plural(jumpBackIn.contacts, 'contact', 'contacts')} · ${formatCount(jumpBackIn.lists)} ${plural(jumpBackIn.lists, 'list', 'lists')}`
+                : null,
         },
         {
             title: 'Campaigns',
-            description: 'Create and manage your email sequences.',
             icon: Send,
-            href: currentTeam ? campaignsIndex(currentTeam.slug) : teamsIndex(),
+            href: slug ? campaignsIndex(slug) : teamsIndex(),
+            qualifier: jumpBackIn
+                ? `${formatCount(jumpBackIn.active_campaigns)} active · ${formatCount(jumpBackIn.draft_campaigns)} draft`
+                : null,
         },
         {
-            title: 'Teams',
-            description: 'Work together and manage your team.',
-            icon: UsersRound,
-            href: teamsIndex(),
+            title: 'Templates',
+            icon: FileText,
+            href: slug ? templatesIndex(slug) : teamsIndex(),
+            qualifier: jumpBackIn
+                ? `${formatCount(jumpBackIn.templates)} ${plural(jumpBackIn.templates, 'template', 'templates')} · ${formatCount(jumpBackIn.template_folders)} ${plural(jumpBackIn.template_folders, 'folder', 'folders')}`
+                : null,
+        },
+        {
+            title: 'Connections',
+            icon: Plug,
+            href: slug ? connectionsIndex(slug) : teamsIndex(),
+            qualifier: jumpBackIn
+                ? [
+                      `${formatCount(jumpBackIn.connections)} ${plural(jumpBackIn.connections, 'inbox', 'inboxes')}`,
+                      jumpBackIn.connections_needing_attention > 0
+                          ? `${formatCount(jumpBackIn.connections_needing_attention)} ${plural(jumpBackIn.connections_needing_attention, 'needs', 'need')} attention`
+                          : null,
+                  ]
+                      .filter(Boolean)
+                      .join(' · ')
+                : null,
         },
     ];
 
@@ -102,134 +159,262 @@ export default function Dashboard({
             <Head title="Dashboard" />
             <PendingInvitationsModal
                 invitations={pendingInvitations}
-                open={pendingInvitations.length > 0 && showInvitations}
+                open={showInvitations}
                 onOpenChange={setShowInvitations}
             />
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12">
-                {showChecklist ? (
-                    <div className="rounded-2xl border bg-gradient-to-br from-muted/70 to-background p-6 sm:p-10">
-                        <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-                            Get started
-                        </p>
-                        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                            Set up {currentTeam?.name}
-                        </h1>
-                        <p className="mt-3 max-w-xl text-muted-foreground">
-                            Connect an inbox, add contacts, then create your
-                            first campaign.
-                        </p>
-
-                        <ol className="mt-8 space-y-3">
-                            {checklist.map((step, index) => (
-                                <li
-                                    key={step.key}
-                                    className="flex items-start gap-3 rounded-xl border bg-card/70 p-4"
+            <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-6">
+                <PageHead
+                    title={
+                        <>
+                            <span className="lg:hidden">Dashboard</span>
+                            <span className="hidden lg:inline">
+                                {firstName
+                                    ? `${greeting}, ${firstName}`
+                                    : greeting}
+                            </span>
+                        </>
+                    }
+                    description={
+                        currentTeam
+                            ? `${currentTeam.name} · ${dateFormatter.format(new Date())}`
+                            : undefined
+                    }
+                    mobileDescription={currentTeam?.name}
+                    mobileNav
+                    actions={
+                        can?.create && currentTeam ? (
+                            <div className="hidden lg:block">
+                                <CreateCampaignModal
+                                    mailerConnections={mailerConnections}
                                 >
-                                    {step.done ? (
-                                        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                    ) : (
-                                        <Circle className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-                                    )}
-                                    <div className="min-w-0 flex-1">
-                                        <p className="font-medium">
-                                            <span className="text-muted-foreground">
-                                                {index + 1}.
-                                            </span>{' '}
-                                            {step.title}
-                                        </p>
-                                        <p className="mt-0.5 text-sm text-muted-foreground">
-                                            {step.description}
-                                        </p>
-                                    </div>
-                                    {!step.done ? (
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            asChild
-                                        >
-                                            <Link href={step.href}>
-                                                {step.cta}
-                                            </Link>
-                                        </Button>
-                                    ) : null}
-                                </li>
-                            ))}
-                        </ol>
+                                    <Button data-test="dashboard-new-campaign">
+                                        <Plus /> New campaign
+                                    </Button>
+                                </CreateCampaignModal>
+                            </div>
+                        ) : null
+                    }
+                />
 
-                        {nextStep ? (
-                            <Button className="mt-6" asChild>
-                                <Link href={nextStep.href}>
-                                    {nextStep.cta} <ArrowRight />
-                                </Link>
+                {invitationCount > 0 ? (
+                    <TeamInvitationAlert
+                        message={`You have ${invitationCount} pending ${plural(
+                            invitationCount,
+                            'team invitation',
+                            'team invitations',
+                        )} from ${invitationNames}`}
+                        actionSlot={
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setShowInvitations(true)}
+                            >
+                                Review
                             </Button>
-                        ) : null}
-                    </div>
-                ) : (
-                    <div className="rounded-2xl border bg-gradient-to-br from-muted/70 to-background p-6 sm:p-10">
-                        <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-                            Workspace
-                        </p>
-                        <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                            Welcome
-                            {currentTeam ? ` to ${currentTeam.name}` : ' back'}.
-                        </h1>
-                        <p className="mt-3 max-w-xl text-muted-foreground">
-                            Everything you need to organize contacts, build
-                            campaigns, and work with your team.
-                        </p>
-                        {currentTeam && (
-                            <Button className="mt-6" asChild>
-                                <Link href={contactsIndex(currentTeam.slug)}>
-                                    Explore contacts <ArrowRight />
-                                </Link>
-                            </Button>
-                        )}
-                    </div>
-                )}
-
-                <section aria-labelledby="quick-links-title">
-                    <div className="mb-5 flex items-baseline justify-between gap-4">
-                        <h2
-                            id="quick-links-title"
-                            className="text-lg font-semibold"
-                        >
-                            Your workspace
-                        </h2>
-                        <span className="text-sm text-muted-foreground">
-                            Pick up where you left off
-                        </span>
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                        {destinations.map(
-                            ({ title, description, icon: Icon, href }) => (
-                                <Link
-                                    key={title}
-                                    href={href}
-                                    className="group flex min-h-48 flex-col rounded-xl border bg-card p-6 transition-colors hover:border-foreground/30 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                >
-                                    <span className="flex size-10 items-center justify-center rounded-lg bg-muted">
-                                        <Icon className="size-5" />
-                                    </span>
-                                    <h3 className="mt-6 font-semibold">
-                                        {title}
-                                    </h3>
-                                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                                        {description}
-                                    </p>
-                                    <ArrowRight className="mt-auto ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-1" />
-                                </Link>
-                            ),
-                        )}
-                    </div>
-                </section>
-
-                {showChecklist ? (
-                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Plug className="size-4" />
-                        Tip: you can connect Gmail, Outlook, or SMTP from
-                        Connections anytime.
-                    </p>
+                        }
+                    />
                 ) : null}
+
+                {metrics ? (
+                    <div className="grid grid-cols-2 gap-4 lg:gap-3 xl:grid-cols-4">
+                        <StatCard
+                            label={
+                                <>
+                                    <span className="lg:hidden">
+                                        Sent · 30d
+                                    </span>
+                                    <span className="hidden lg:inline">
+                                        Emails sent · 30d
+                                    </span>
+                                </>
+                            }
+                            value={formatCount(metrics.emails_sent)}
+                            delta={
+                                metrics.emails_sent_delta === null
+                                    ? null
+                                    : {
+                                          value: metrics.emails_sent_delta,
+                                          unit: '%',
+                                      }
+                            }
+                        />
+                        <StatCard
+                            label="Open rate"
+                            value={formatRate(metrics.open_rate)}
+                            delta={
+                                metrics.open_rate_delta === null
+                                    ? null
+                                    : {
+                                          value: metrics.open_rate_delta,
+                                          unit: 'pt',
+                                      }
+                            }
+                        />
+                        <StatCard
+                            label="Reply rate"
+                            value={formatRate(metrics.reply_rate)}
+                            delta={
+                                metrics.reply_rate_delta === null
+                                    ? null
+                                    : {
+                                          value: metrics.reply_rate_delta,
+                                          unit: 'pt',
+                                      }
+                            }
+                        />
+                        <StatCard
+                            label={
+                                <>
+                                    <span className="lg:hidden">Active</span>
+                                    <span className="hidden lg:inline">
+                                        Active campaigns
+                                    </span>
+                                </>
+                            }
+                            value={formatCount(metrics.active_campaigns)}
+                        />
+                    </div>
+                ) : null}
+
+                <div
+                    className={cn(
+                        'grid items-start gap-4',
+                        setup
+                            ? 'lg:grid-cols-[minmax(0,14fr)_minmax(0,11fr)]'
+                            : '',
+                    )}
+                >
+                    {setup ? (
+                        <section className="rounded-lg border bg-card pb-5">
+                            <div className="px-5 pt-5">
+                                <div className="flex items-baseline justify-between gap-4">
+                                    <h2 className="text-h3 leading-6 font-semibold">
+                                        Finish setting up
+                                    </h2>
+                                    <p className="text-body leading-5 text-muted-foreground">
+                                        {doneCount} of {checklist.length} done
+                                    </p>
+                                </div>
+                                <div
+                                    role="progressbar"
+                                    aria-label="Setup progress"
+                                    aria-valuemin={0}
+                                    aria-valuemax={checklist.length}
+                                    aria-valuenow={doneCount}
+                                    className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+                                >
+                                    <div
+                                        className="h-full rounded-full bg-primary"
+                                        style={{
+                                            width: `${(doneCount / checklist.length) * 100}%`,
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <ul className="mx-5 mt-3">
+                                {checklist.map((step) => (
+                                    <li
+                                        key={step.key}
+                                        className="flex items-start gap-3 border-b py-2.5 lg:items-center"
+                                    >
+                                        {step.done ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary"
+                                            >
+                                                <Check
+                                                    className="size-3 text-primary-foreground"
+                                                    strokeWidth={3}
+                                                />
+                                            </span>
+                                        ) : (
+                                            <span
+                                                aria-hidden="true"
+                                                className="size-5 shrink-0 rounded-full border border-input"
+                                            />
+                                        )}
+                                        <div className="min-w-0 flex-1">
+                                            <p
+                                                className={cn(
+                                                    'text-body leading-5 font-medium',
+                                                    step.done &&
+                                                        'text-muted-foreground line-through',
+                                                )}
+                                            >
+                                                <span className="sr-only">
+                                                    {step.done
+                                                        ? 'Done:'
+                                                        : 'To do:'}
+                                                </span>{' '}
+                                                {step.title}
+                                            </p>
+                                            <p className="text-body leading-5 text-muted-foreground">
+                                                {step.description}
+                                            </p>
+                                            {!step.done ? (
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    className="mt-2 w-full lg:hidden"
+                                                    asChild
+                                                >
+                                                    <Link href={step.href}>
+                                                        {step.cta}
+                                                    </Link>
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                        {!step.done ? (
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                className="hidden lg:inline-flex"
+                                                asChild
+                                            >
+                                                <Link href={step.href}>
+                                                    {step.cta}
+                                                </Link>
+                                            </Button>
+                                        ) : null}
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    ) : null}
+
+                    <section className="rounded-lg border bg-card pb-5">
+                        <h2 className="px-5 pt-5 text-h3 leading-6 font-semibold">
+                            Jump back in
+                        </h2>
+                        <ul className="mx-5 mt-3">
+                            {destinations.map(
+                                ({ title, icon: Icon, href, qualifier }) => (
+                                    <li key={title}>
+                                        <Link
+                                            href={href}
+                                            className="flex items-center gap-3 border-b py-3 transition-colors outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-primary-border focus-visible:ring-inset"
+                                        >
+                                            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-accent">
+                                                <Icon className="size-4 text-primary" />
+                                            </span>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block text-body leading-5 font-semibold">
+                                                    {title}
+                                                </span>
+                                                {qualifier ? (
+                                                    <span className="block text-label leading-4 text-muted-foreground">
+                                                        {qualifier}
+                                                    </span>
+                                                ) : null}
+                                            </span>
+                                            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                                        </Link>
+                                    </li>
+                                ),
+                            )}
+                        </ul>
+                    </section>
+                </div>
             </div>
         </>
     );
@@ -242,4 +427,5 @@ Dashboard.layout = (props: { currentTeam?: { slug: string } | null }) => ({
             href: props.currentTeam ? dashboard(props.currentTeam.slug) : '/',
         },
     ],
+    showHeader: false,
 });

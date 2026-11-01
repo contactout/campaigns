@@ -1,0 +1,599 @@
+{
+  "provenance": {
+    "renders": "086fc59",
+    "checks": "dc6dfbf",
+    "reviewFixes": "858a9e0",
+    "browser": "Chromium 156 headless, CDP",
+    "viewports": [
+      "1280x900",
+      "390x844"
+    ],
+    "deviceScaleFactor": 1,
+    "note": "Coordinates are DOM reads with getBoundingClientRect; the PNGs show the same screens. The sections below were re-read on the review-fix bytes except where marked 086fc59.",
+    "sections": {
+      "858a9e0": [
+        "editorDialog390.dialog",
+        "editorDialog390.initialFocus",
+        "editorDialog390.tabTrail",
+        "editorDialog390.scrollAttempt",
+        "editorDialog390.afterEscapeClean",
+        "stickyBars390.contacts",
+        "safeArea390",
+        "signature1280",
+        "contactsHeaders1280",
+        "templateDirtyFlows1280",
+        "beforeUnload858a9e0"
+      ],
+      "086fc59": [
+        "editorDialog390.afterEscapeDirty",
+        "editorDialog390.afterDiscardCancel",
+        "editorInline1280",
+        "threadedCheckbox",
+        "stickyBars390.recipients",
+        "rowPitches"
+      ]
+    }
+  },
+  "editorDialog390": {
+    "dialog": {
+      "role": "dialog",
+      "ariaModal": "true",
+      "title": "Edit step \u00b7 Day 1",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 390,
+        "h": 844
+      },
+      "bodyOverflow": "hidden",
+      "hiddenSiblings": 3
+    },
+    "initialFocus": {
+      "tag": "BUTTON",
+      "label": null,
+      "text": "Cancel",
+      "inDialog": true
+    },
+    "tabTrail": [
+      {
+        "tag": "BUTTON",
+        "label": null,
+        "text": "Save",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Apply template",
+        "text": "Choose a template\u2026",
+        "inDialog": true
+      },
+      {
+        "tag": "INPUT",
+        "label": null,
+        "text": "Quick idea for {{company}}",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Bold",
+        "text": "B",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Italic",
+        "text": "I",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Underline",
+        "text": "U",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Bullet list",
+        "text": "\u2022",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Numbered list",
+        "text": "1.",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Link",
+        "text": "Link",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Insert placeholder",
+        "text": "Insert",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Insert signature",
+        "text": "",
+        "inDialog": true
+      },
+      {
+        "tag": "DIV",
+        "label": null,
+        "text": "Hi {{first_name}}, Saw that {{company}} ",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Insert Full name",
+        "text": "{{name}}",
+        "inDialog": true
+      },
+      {
+        "tag": "BUTTON",
+        "label": "Insert Email",
+        "text": "{{email}}",
+        "inDialog": true
+      }
+    ],
+    "tabStops": 14,
+    "scrollAttempt": {
+      "scrollY": 0,
+      "bodyScrollTop": 0
+    },
+    "afterEscapeClean": {
+      "dialogs": 0,
+      "editor": false
+    },
+    "afterEscapeDirty": {
+      "dialogs": 2,
+      "editorStillOpen": true,
+      "discardTitle": "Discard your changes?",
+      "discardButtons": [
+        "Cancel",
+        "Discard changes",
+        "Close"
+      ],
+      "subjectValue": "Quixck idea for {{company}}"
+    },
+    "afterDiscardCancel": {
+      "dialogs": 1,
+      "editorOpen": true,
+      "subjectValue": "Quixck idea for {{company}}"
+    }
+  },
+  "editorInline1280": {
+    "dialogCount": 0,
+    "rootDisplay": "grid",
+    "gridTemplate": "300px 692px",
+    "list": {
+      "x": 240,
+      "y": 116,
+      "w": 300,
+      "h": 775
+    },
+    "pane": {
+      "x": 564,
+      "y": 116,
+      "w": 692,
+      "h": 775
+    },
+    "footerVisible": {
+      "x": 565,
+      "y": 833,
+      "w": 690,
+      "h": 57
+    },
+    "mobileHeadDisplay": "none"
+  },
+  "threadedCheckbox": {
+    "before390": {
+      "label": {
+        "x": 16,
+        "y": 882,
+        "w": 358,
+        "h": 44,
+        "right": 374,
+        "bottom": 926
+      },
+      "labelClass": "flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11",
+      "box": {
+        "x": 30,
+        "y": 896,
+        "w": 16,
+        "h": 16,
+        "right": 46,
+        "bottom": 912
+      },
+      "checked": "false",
+      "boxWrapper": {
+        "x": 16,
+        "y": 882,
+        "w": 44,
+        "h": 44,
+        "right": 60,
+        "bottom": 926
+      },
+      "subjectInputRight": 374
+    },
+    "afterOne390": {
+      "label": {
+        "x": 16,
+        "y": 715,
+        "w": 358,
+        "h": 44,
+        "right": 374,
+        "bottom": 759
+      },
+      "labelClass": "flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11",
+      "box": {
+        "x": 30,
+        "y": 729,
+        "w": 16,
+        "h": 16,
+        "right": 46,
+        "bottom": 745
+      },
+      "checked": "true",
+      "boxWrapper": {
+        "x": 16,
+        "y": 715,
+        "w": 44,
+        "h": 44,
+        "right": 60,
+        "bottom": 759
+      },
+      "subjectInputRight": 374
+    },
+    "afterTwo390": {
+      "label": {
+        "x": 16,
+        "y": 715,
+        "w": 358,
+        "h": 44,
+        "right": 374,
+        "bottom": 759
+      },
+      "labelClass": "flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11",
+      "box": {
+        "x": 30,
+        "y": 729,
+        "w": 16,
+        "h": 16,
+        "right": 46,
+        "bottom": 745
+      },
+      "checked": "false",
+      "boxWrapper": {
+        "x": 16,
+        "y": 715,
+        "w": 44,
+        "h": 44,
+        "right": 60,
+        "bottom": 759
+      },
+      "subjectInputRight": 374
+    },
+    "before1280": {
+      "label": {
+        "x": 581,
+        "y": 797,
+        "w": 658,
+        "h": 20,
+        "right": 1239,
+        "bottom": 817
+      },
+      "labelClass": "flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11",
+      "box": {
+        "x": 581,
+        "y": 799,
+        "w": 16,
+        "h": 16,
+        "right": 597,
+        "bottom": 815
+      },
+      "checked": "false",
+      "boxWrapper": {
+        "x": 581,
+        "y": 799,
+        "w": 16,
+        "h": 16,
+        "right": 597,
+        "bottom": 815
+      },
+      "subjectInputRight": 1239
+    },
+    "afterOne1280": {
+      "label": {
+        "x": 581,
+        "y": 782,
+        "w": 658,
+        "h": 20,
+        "right": 1239,
+        "bottom": 802
+      },
+      "labelClass": "flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11",
+      "box": {
+        "x": 581,
+        "y": 784,
+        "w": 16,
+        "h": 16,
+        "right": 597,
+        "bottom": 800
+      },
+      "checked": "true",
+      "boxWrapper": {
+        "x": 581,
+        "y": 784,
+        "w": 16,
+        "h": 16,
+        "right": 597,
+        "bottom": 800
+      },
+      "subjectInputRight": 1239
+    },
+    "afterTwo1280": {
+      "label": {
+        "x": 581,
+        "y": 782,
+        "w": 658,
+        "h": 20,
+        "right": 1239,
+        "bottom": 802
+      },
+      "labelClass": "flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11",
+      "box": {
+        "x": 581,
+        "y": 784,
+        "w": 16,
+        "h": 16,
+        "right": 597,
+        "bottom": 800
+      },
+      "checked": "false",
+      "boxWrapper": {
+        "x": 581,
+        "y": 784,
+        "w": 16,
+        "h": 16,
+        "right": 597,
+        "bottom": 800
+      },
+      "subjectInputRight": 1239
+    }
+  },
+  "stickyBars390": {
+    "contacts": {
+      "bar": {
+        "x": 0,
+        "y": 723,
+        "w": 390,
+        "h": 65,
+        "right": 390,
+        "bottom": 788
+      },
+      "pagination": {
+        "text": "1\u201325 of 1,284",
+        "text_rect": {
+          "top": 681,
+          "bottom": 697
+        },
+        "previous": {
+          "top": 667,
+          "bottom": 711
+        }
+      },
+      "scrollY": 1015
+    },
+    "recipientsAfterScroll": {
+      "showingText": "Showing 1\u201325 of 312",
+      "showing": {
+        "top": 666,
+        "bottom": 682,
+        "h": 16
+      },
+      "previous": {
+        "top": 652,
+        "bottom": 696,
+        "h": 44
+      },
+      "scrollY": 1038,
+      "maxScroll": 1038,
+      "viewportH": 844
+    },
+    "recipientsBar": {
+      "top": 723,
+      "bottom": 788,
+      "left": 0,
+      "right": 390,
+      "w": 390,
+      "h": 65
+    }
+  },
+  "safeArea390": {
+    "env": "34px",
+    "nav": {
+      "top": 753,
+      "bottom": 844,
+      "h": 91
+    },
+    "paddingBottom": "34px",
+    "tabs": {
+      "top": 754,
+      "bottom": 810,
+      "h": 56
+    }
+  },
+  "signature1280": {
+    "headerTextX": 847,
+    "triggerTextX": 847,
+    "cellRight": 940,
+    "text": "Team default"
+  },
+  "contactsHeaders1280": {
+    "scrollTop": 125,
+    "maxScrollTop": 125,
+    "headers": [
+      "Name",
+      "Email",
+      "Phone",
+      "Status",
+      "Company",
+      "Title"
+    ],
+    "name": {
+      "top": 129,
+      "bottom": 164,
+      "left": 279,
+      "right": 469
+    },
+    "company": {
+      "top": 129,
+      "bottom": 164,
+      "left": 989,
+      "right": 1139
+    },
+    "companyPosition": "sticky",
+    "companyBackground": "rgb(255, 255, 255)",
+    "title": {
+      "top": 129,
+      "bottom": 164,
+      "left": 1139,
+      "right": 1255
+    },
+    "hitTag": "TH",
+    "hitText": "Company",
+    "hitInHeader": true
+  },
+  "templateDirtyFlows1280": {
+    "openBack": {
+      "before": {
+        "count": 0,
+        "discard": false,
+        "titles": []
+      },
+      "after": {
+        "path": "/northwind/templates",
+        "desc": "",
+        "count": 0,
+        "discard": false,
+        "titles": []
+      }
+    },
+    "save": {
+      "desc": "",
+      "dialogs": {
+        "count": 0,
+        "discard": false,
+        "titles": []
+      },
+      "after": {
+        "path": "/northwind/templates",
+        "desc": "",
+        "count": 0,
+        "discard": false,
+        "titles": []
+      }
+    },
+    "discard": {
+      "dialog": {
+        "count": 1,
+        "discard": true,
+        "titles": [
+          "Discard your changes?"
+        ]
+      },
+      "afterConfirm": {
+        "desc": "",
+        "dialogs": {
+          "count": 0,
+          "discard": false,
+          "titles": []
+        }
+      },
+      "after": {
+        "path": "/northwind/templates",
+        "desc": "",
+        "count": 0,
+        "discard": false,
+        "titles": []
+      }
+    },
+    "guard": {
+      "dialog": {
+        "count": 1,
+        "discard": true,
+        "titles": [
+          "Discard your changes?"
+        ]
+      },
+      "afterCancel": {
+        "count": 0,
+        "discard": false,
+        "titles": []
+      },
+      "afterBack": {
+        "path": "/northwind/templates/1",
+        "desc": "",
+        "count": 1,
+        "discard": true,
+        "titles": [
+          "Discard your changes?"
+        ]
+      }
+    }
+  },
+  "rowPitches": {
+    "campaigns1280": [
+      44,
+      44,
+      44
+    ],
+    "campaigns390": [
+      69,
+      69,
+      69
+    ],
+    "templates1280": [
+      39,
+      39,
+      39
+    ],
+    "templates390": [
+      55,
+      55,
+      55
+    ],
+    "contacts1280": [
+      33,
+      33,
+      33
+    ],
+    "contacts390": [
+      57,
+      57,
+      57
+    ],
+    "recipients390": [
+      57,
+      57,
+      57
+    ]
+  },
+  "beforeUnload858a9e0": {
+    "method": "Page.javascriptDialogOpening count around Page.navigate",
+    "afterSave": {
+      "dialogs": 0,
+      "path": "/northwind/templates"
+    },
+    "controlDirtyEdit": {
+      "dialogs": 1,
+      "path": "/northwind/templates"
+    },
+    "note": "A full navigation after a successful save raises no beforeunload; an unsaved body edit raises one, so the counter is live."
+  }
+}

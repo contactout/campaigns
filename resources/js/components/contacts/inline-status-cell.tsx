@@ -1,5 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
-import ContactStatusBadge from '@/components/contacts/contact-status-badge';
+import ContactStatusBadge, {
+    contactStatusLabel,
+} from '@/components/contacts/contact-status-badge';
 import {
     Select,
     SelectContent,
@@ -41,9 +43,11 @@ export default function InlineStatusCell({
     return (
         <Select value={status} onValueChange={update}>
             <SelectTrigger
+                size="sm"
                 data-grid-cell
-                aria-label={`Status: ${label}`}
-                className="h-11 w-full justify-start rounded-none border-0 bg-transparent px-3 shadow-none focus:ring-2 focus:ring-primary focus:ring-inset"
+                aria-label={`Status: ${contactStatusLabel(status, label)}`}
+                title={contactStatusLabel(status, label)}
+                className="h-8 w-full justify-start overflow-hidden rounded-none border-0 bg-transparent px-3 shadow-none focus:ring-2 focus:ring-ring focus:ring-inset [&>svg]:hidden"
             >
                 <SelectValue>
                     <ContactStatusBadge status={status} label={label} />
@@ -52,7 +56,7 @@ export default function InlineStatusCell({
             <SelectContent>
                 {statuses.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                        {contactStatusLabel(option.value, option.label)}
                     </SelectItem>
                 ))}
             </SelectContent>

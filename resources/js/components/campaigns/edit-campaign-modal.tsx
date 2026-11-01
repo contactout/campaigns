@@ -1,5 +1,6 @@
 import { Form, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
+import NativeSelect from '@/components/native-select';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -91,7 +92,7 @@ export default function EditCampaignModal({
                                         <Label htmlFor="mailer_connection_id">
                                             Connection
                                         </Label>
-                                        <select
+                                        <NativeSelect
                                             id="mailer_connection_id"
                                             name="mailer_connection_id"
                                             defaultValue={
@@ -101,7 +102,6 @@ export default function EditCampaignModal({
                                                       )
                                                     : ''
                                             }
-                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             <option value="">
                                                 No connection
@@ -116,7 +116,7 @@ export default function EditCampaignModal({
                                                     </option>
                                                 ),
                                             )}
-                                        </select>
+                                        </NativeSelect>
                                         <InputError
                                             message={
                                                 errors.mailer_connection_id
@@ -160,21 +160,20 @@ export default function EditCampaignModal({
                                         <Label htmlFor="sending_hour_from">
                                             First send hour
                                         </Label>
-                                        <select
+                                        <NativeSelect
                                             id="sending_hour_from"
                                             name="settings[sending_hour_from]"
                                             defaultValue={String(
                                                 campaign.settings
                                                     .sending_hour_from,
                                             )}
-                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             {hours.map((hour) => (
                                                 <option key={hour} value={hour}>
                                                     {hourLabel(hour)}
                                                 </option>
                                             ))}
-                                        </select>
+                                        </NativeSelect>
                                         <InputError
                                             message={
                                                 errors[
@@ -188,21 +187,20 @@ export default function EditCampaignModal({
                                         <Label htmlFor="sending_hour_to">
                                             Last send hour
                                         </Label>
-                                        <select
+                                        <NativeSelect
                                             id="sending_hour_to"
                                             name="settings[sending_hour_to]"
                                             defaultValue={String(
                                                 campaign.settings
                                                     .sending_hour_to,
                                             )}
-                                            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             {hours.map((hour) => (
                                                 <option key={hour} value={hour}>
                                                     {hourLabel(hour)}
                                                 </option>
                                             ))}
-                                        </select>
+                                        </NativeSelect>
                                         <InputError
                                             message={
                                                 errors[

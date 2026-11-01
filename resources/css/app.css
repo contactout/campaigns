@@ -9,13 +9,12 @@
 
 @theme {
     --font-sans:
-        'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
-        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
-        'Noto Color Emoji';
+        'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);
-    --radius-sm: calc(var(--radius) - 4px);
+    --radius-sm: calc(var(--radius) - 3px);
 
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -27,6 +26,7 @@
     --color-popover-foreground: var(--popover-foreground);
 
     --color-primary: var(--primary);
+    --color-primary-border: var(--primary-border);
     --color-primary-foreground: var(--primary-foreground);
 
     --color-secondary: var(--secondary);
@@ -45,11 +45,36 @@
     --color-input: var(--input);
     --color-ring: var(--ring);
 
-    --color-chart-1: var(--chart-1);
-    --color-chart-2: var(--chart-2);
-    --color-chart-3: var(--chart-3);
-    --color-chart-4: var(--chart-4);
-    --color-chart-5: var(--chart-5);
+    --color-success: var(--success);
+    --color-banner: var(--banner);
+    --color-banner-foreground: var(--banner-foreground);
+
+    --color-badge-success: var(--badge-success);
+    --color-badge-success-foreground: var(--badge-success-foreground);
+    --color-badge-warning: var(--badge-warning);
+    --color-badge-warning-foreground: var(--badge-warning-foreground);
+    --color-badge-danger: var(--badge-danger);
+    --color-badge-danger-foreground: var(--badge-danger-foreground);
+    --color-badge-neutral-foreground: var(--badge-neutral-foreground);
+    --color-badge-info-border: var(--badge-info-border);
+
+    /* Sizes only: line height stays an explicit leading-* at each call site so a
+       parent leading-tight keeps working inside the shell. */
+    --text-h1: 20px;
+    --text-h1--letter-spacing: -0.01em;
+    --text-h3: 16px;
+    /* Mobile-first: the 390 boards set body text one step up from the desktop
+       13px (a campaign row's name measures 169px at 390 against 158px at 1280
+       for the same string, and the 24px stat role is unchanged at both).
+       `--type-body` is the single switch; every primitive reads text-body, so
+       the mobile scale applies without per-page one-offs. */
+    --text-body: var(--type-body);
+    --text-label: 12px;
+    --text-stat: 24px;
+    --text-brand: 14px;
+    --text-caption: 11px;
+
+    --shadow-dialog: 0 8px 24px #18181b14;
 
     --color-sidebar: var(--sidebar);
     --color-sidebar-foreground: var(--sidebar-foreground);
@@ -62,39 +87,54 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.87 0 0);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.87 0 0);
+    --type-body: 14px;
+    --background: #ffffff;
+    --foreground: #18181b;
+    --card: #ffffff;
+    --card-foreground: #18181b;
+    --popover: #ffffff;
+    --popover-foreground: #18181b;
+    --primary: #3222b1;
+    --primary-border: #6552ff;
+    --primary-foreground: #ffffff;
+    --secondary: #f0eeff;
+    --secondary-foreground: #3222b1;
+    --muted: #f4f4f5;
+    /* 4.81:1 on `--muted` and 4.62:1 on the selected-row `--accent`; #71717a was
+       4.40 and 4.23, under 4.5 for the 12px sublines those two fills carry. */
+    --muted-foreground: #6b6b74;
+    --accent: #f0eeff;
+    --accent-foreground: #3222b1;
+    --destructive: #dc2626;
+    /* Kept as the red itself: dropdown and alert items read it as text colour. */
+    --destructive-foreground: #dc2626;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    /* 4.99:1 on white. The board's #b8afff is 1.98:1, under the 3:1 focus floor. */
+    --ring: #6552ff;
+    --success: #16a34a;
+    --success-foreground: #35754e;
+    --badge-success: #dcfce7;
+    --badge-success-foreground: #35754e;
+    --badge-warning: #fef3c7;
+    --badge-warning-foreground: #854d0e;
+    --badge-danger: #fef2f2;
+    --badge-danger-foreground: #b91c1c;
+    --badge-neutral-foreground: #52525b;
+    --badge-info-border: #b8afff;
+    --banner: #f8f7ff;
+    --banner-foreground: #3222b1;
+    --radius: 0.375rem;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #18181b;
+    --sidebar-primary: #3222b1;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f0eeff;
+    --sidebar-accent-foreground: #3222b1;
+    --sidebar-border: #e4e4e7;
+    /* 4.99:1 on white. The board pair was 1.98:1 and the sidebar group label,
+       group action, menu action and sub-button rings all read it. */
+    --sidebar-ring: #6552ff;
 }
 
 .dark {
@@ -116,20 +156,36 @@
     --destructive-foreground: oklch(0.637 0.237 25.331);
     --border: oklch(0.269 0 0);
     --input: oklch(0.269 0 0);
-    --ring: oklch(0.439 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
+    /* 6.10:1 on the page, 5.61:1 on the primary/5 focused cell fill and 4.67:1 on
+       a selected row: the grid cells moved to `ring-ring`, and shadcn's #525252
+       was 2.54:1 there. */
+    --ring: #8b7dff;
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
+    /* The logo tile is white-on-white in dark when both tokens are `0.985`
+       (1.00:1). The brand violet puts 10.50:1 under the white glyph. */
+    --sidebar-primary: #3222b1;
+    --sidebar-primary-foreground: #ffffff;
     --sidebar-accent: oklch(0.269 0 0);
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(0.269 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    --sidebar-ring: #8b7dff; /* 6.10:1 on the dark page */
+
+    /* Additive only: dark counterparts for the tokens phases 1-2 introduced.
+       Measured against oklch(0.145 0 0) = #0a0a0a unless noted. */
+    --primary-border: #8b7dff; /* 6.10:1 on #0a0a0a, 3.11:1 on the dark primary button */
+    --success: #4ade80; /* 11.36:1 */
+    --success-foreground: #86efac; /* 14.10:1 */
+    --badge-success: #14351f;
+    --badge-success-foreground: #86efac; /* 9.59:1 on its fill */
+    --badge-warning: #3a2c0a;
+    --badge-warning-foreground: #fcd34d; /* 9.43:1 on its fill */
+    --badge-danger: #3b1518;
+    --badge-danger-foreground: #fca5a5; /* 8.47:1 on its fill */
+    --badge-neutral-foreground: #d4d4d8; /* 10.24:1 on dark muted */
+    --badge-info-border: #8b7dff; /* 4.46:1 on the dark info fill, 6.10:1 on the page */
+    --banner: #221d3a;
+    --banner-foreground: #c9c2ff; /* 9.69:1 on the banner */
 }
 
 @layer base {
@@ -139,5 +195,17 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/* The 390 boards show 28-32px controls; a finger needs 44px. The mobile box is
+   raised to a real 44px (see the min-height in the Button, Input and
+   SelectTrigger primitives) rather than faking it with an overflowing pseudo
+   element, which later siblings paint over. Rows and the tab bar carry their
+   own 44px+ targets. */
+
+@media (width >= 64rem) {
+    :root {
+        --type-body: 13px;
     }
 }

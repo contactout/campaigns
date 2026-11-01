@@ -1,5 +1,6 @@
 import { Form, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
+import NativeSelect from '@/components/native-select';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -72,11 +73,10 @@ export default function ContactFieldFormModal({
 
                                 <div className="grid gap-2">
                                     <Label htmlFor="type">Type</Label>
-                                    <select
+                                    <NativeSelect
                                         id="type"
                                         name="type"
                                         defaultValue={field?.type ?? 'Text'}
-                                        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
                                     >
                                         {typeOptions.map((option) => (
                                             <option
@@ -86,7 +86,7 @@ export default function ContactFieldFormModal({
                                                 {option.label}
                                             </option>
                                         ))}
-                                    </select>
+                                    </NativeSelect>
                                     <InputError message={errors.type} />
                                 </div>
 

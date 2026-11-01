@@ -3,15 +3,32 @@ import type { ContactStatus } from '@/types';
 
 const variants: Record<
     ContactStatus,
-    'default' | 'secondary' | 'destructive' | 'outline'
+    'success' | 'warning' | 'info' | 'neutral' | 'destructive'
 > = {
-    NotContacted: 'outline',
-    Contacted: 'secondary',
-    Replied: 'default',
+    NotContacted: 'neutral',
+    Contacted: 'info',
+    Replied: 'success',
     Bounced: 'destructive',
-    Unsubscribed: 'destructive',
-    DoNotContact: 'destructive',
+    Unsubscribed: 'neutral',
+    DoNotContact: 'warning',
 };
+
+/**
+ * The board's copy for each enum value. The stored value stays `NotContacted`
+ * and `DoNotContact`; board 06 A labels them `New` and `Do not contact`.
+ */
+const labels: Record<ContactStatus, string> = {
+    NotContacted: 'New',
+    Contacted: 'Contacted',
+    Replied: 'Replied',
+    Bounced: 'Bounced',
+    Unsubscribed: 'Unsubscribed',
+    DoNotContact: 'Do not contact',
+};
+
+export function contactStatusLabel(status: string, fallback = ''): string {
+    return labels[status as ContactStatus] ?? (fallback || status);
+}
 
 type Props = {
     status: string;
@@ -20,8 +37,8 @@ type Props = {
 
 export default function ContactStatusBadge({ status, label }: Props) {
     return (
-        <Badge variant={variants[status as ContactStatus] ?? 'outline'}>
-            {label}
+        <Badge variant={variants[status as ContactStatus] ?? 'neutral'}>
+            {contactStatusLabel(status, label)}
         </Badge>
     );
 }
