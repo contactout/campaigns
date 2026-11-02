@@ -25,6 +25,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\WithoutRelations;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
@@ -110,8 +111,12 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
 
     /**
      * Create a new job instance.
+     *
+     * The email is queued without its relations: they would be re-queried
+     * when the job is unserialized, only to be thrown away when send()
+     * re-reads the row and loads the relations it needs.
      */
-    public function __construct(public CampaignEmail $email) {}
+    public function __construct(#[WithoutRelations] public CampaignEmail $email) {}
 
     /**
      * Allow only one queued job per campaign email.

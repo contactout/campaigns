@@ -1154,3 +1154,13 @@ test('persists the provider reply target returned by the mailer', function () {
 
     expect($fixture['email']->fresh()->reply_to_id)->toBe('graph-message-1');
 });
+
+test('queues the email without its loaded relations', function () {
+    $fixture = mmosSendEmailFixture();
+    $email = $fixture['email']->load(['campaign', 'step', 'recipient.contact', 'mailerConnection']);
+
+    $restored = unserialize(serialize(new SendEmail($email)));
+
+    expect($restored->email->is($email))->toBeTrue()
+        ->and(array_keys($restored->email->getRelations()))->toBe([]);
+});

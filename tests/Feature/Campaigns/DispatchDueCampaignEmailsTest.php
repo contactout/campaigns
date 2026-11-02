@@ -174,3 +174,16 @@ test('reports gracefully when nothing is due', function () {
 
     Queue::assertNothingPushed();
 });
+
+test('dispatches send jobs without eager-loading relations the job discards', function () {
+    Queue::fake();
+
+    $due = mmosDueEmail(Campaign::factory()->active()->create(), EmailStatus::Scheduled, now()->subMinute());
+
+    $this->artisan('campaigns:dispatch-due')->assertSuccessful();
+
+    Queue::assertPushed(
+        SendEmail::class,
+        fn (SendEmail $job): bool => $job->email->is($due) && $job->email->getRelations() === [],
+    );
+});

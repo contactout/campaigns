@@ -99,7 +99,6 @@ class DispatchDueCampaignEmails extends Command
     private function dueEmails(): Builder
     {
         return CampaignEmail::query()
-            ->with(['campaign', 'step', 'recipient.contact', 'mailerConnection'])
             ->where('status', EmailStatus::Scheduled)
             ->where('scheduled_at', '<=', now())
             ->whereHas('campaign', fn (Builder $query): Builder => $query->where('status', CampaignStatus::Active))
