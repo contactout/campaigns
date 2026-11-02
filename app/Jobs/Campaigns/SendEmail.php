@@ -23,6 +23,7 @@ use App\Services\Mail\SuppressionList;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -216,17 +217,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $this->refreshSendingWindow($connection);
 
         if ($this->isRateLimited($connection)) {
-            // The daily cap only lifts when the sending window rolls over, so
-            // retrying any sooner just pushes the same email back again.
-            // refreshSendingWindow() has set the rollover for a capped connection.
-            $retryAt = $connection->sending_limit_refreshed_at ?? CarbonImmutable::today('UTC')->addDay();
-
-            $email->scheduled_at = $this->nextAllowedAt($email, $retryAt, $scheduler, $window);
-            $email->save();
-
-            // When the connection may try again, not when it was throttled.
-            $connection->rate_limit_expired_at = $retryAt;
-            $connection->save();
+            $this->holdUntilLimitRefreshes($email, $connection, $scheduler, $window);
 
             return;
         }
@@ -244,9 +235,25 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $html = $renderer->render($email->step->body, $email->recipient, $connection);
         $html = $bodyBuilder->build($email, $html);
 
+        // The check above read this worker's copy of the counter; other
+        // workers sending through the connection may have used up the
+        // remaining quota since, so the send is only made once a slot is
+        // reserved.
+        if (! $this->reserveSend($connection)) {
+            $this->holdUntilLimitRefreshes($email, $connection, $scheduler, $window);
+
+            return;
+        }
+
+        // The window the slot was counted in, so a failed send gives it back
+        // to that window and never to the next day's.
+        $reservedIn = $connection->sending_limit_refreshed_at;
+
         try {
             $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
         } catch (Throwable $exception) {
+            $this->releaseSend($connection, $reservedIn);
+
             match ($classifier->classify($exception)) {
                 SendFailureType::Recipient => $this->markBounced($email, $to, $exception, $suppressionList),
                 SendFailureType::Transient => $this->retryLater($email, $exception, $scheduler, $window),
@@ -282,7 +289,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $email->recipient->last_delivered_at = now();
         $email->recipient->save();
 
-        $connection->increment('sent_count', 1, ['last_sent_at' => now()]);
+        $connection->update(['last_sent_at' => now()]);
 
         $scheduler->scheduleNextStep($email);
     }
@@ -376,18 +383,109 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $connection->sent_count = 0;
-        $connection->sending_limit_refreshed_at = CarbonImmutable::today('UTC')->addDay();
-        $connection->save();
+        // Only the first worker past the rollover resets the counter. Saving
+        // this copy would overwrite sends other workers have already counted
+        // in the new window with 0.
+        MailerConnection::query()
+            ->whereKey($connection->id)
+            ->where(fn (Builder $query): Builder => $query
+                ->whereNull('sending_limit_refreshed_at')
+                ->orWhere('sending_limit_refreshed_at', '<=', now()))
+            ->update([
+                'sent_count' => 0,
+                'sending_limit_refreshed_at' => CarbonImmutable::today('UTC')->addDay(),
+            ]);
+
+        $connection->refresh();
     }
 
     /**
      * Determine whether the connection has hit its sending limit.
+     *
+     * A cheap early check on the loaded counter; {@see self::reserveSend()} is
+     * what enforces the limit across workers.
      */
     private function isRateLimited(MailerConnection $connection): bool
     {
         return $connection->sending_limit !== null
             && $connection->sent_count >= $connection->sending_limit;
+    }
+
+    /**
+     * Count a send against the connection's limit before it is made.
+     *
+     * The counter is checked and incremented in one conditional update, so
+     * concurrent workers cannot all pass a check on the same stale count and
+     * send past the limit. Returns false when the limit has been reached.
+     *
+     * On success the connection's `sending_limit_refreshed_at` is the window
+     * the send was counted in.
+     */
+    private function reserveSend(MailerConnection $connection): bool
+    {
+        if ($this->incrementSentCount($connection)) {
+            return true;
+        }
+
+        // The window may have rolled over since this copy was loaded, so
+        // start or re-read the current one and try once more in it.
+        $this->refreshSendingWindow($connection);
+
+        return $this->incrementSentCount($connection);
+    }
+
+    /**
+     * Increment the counter if the loaded sending window is current and has room.
+     */
+    private function incrementSentCount(MailerConnection $connection): bool
+    {
+        return MailerConnection::query()
+            ->whereKey($connection->id)
+            ->where(fn (Builder $query): Builder => $query
+                ->whereNull('sending_limit')
+                ->orWhere(fn (Builder $query): Builder => $query
+                    ->whereColumn('sent_count', '<', 'sending_limit')
+                    ->where('sending_limit_refreshed_at', $connection->sending_limit_refreshed_at)
+                    ->where('sending_limit_refreshed_at', '>', now())))
+            ->increment('sent_count') === 1;
+    }
+
+    /**
+     * Give back a send reserved by {@see self::reserveSend()} that was not made.
+     *
+     * Only while the window it was counted in is still current: once the
+     * window has rolled over the counter belongs to sends of the new day.
+     */
+    private function releaseSend(MailerConnection $connection, ?CarbonImmutable $window): void
+    {
+        MailerConnection::query()
+            ->whereKey($connection->id)
+            ->where('sending_limit_refreshed_at', $window)
+            ->where('sent_count', '>', 0)
+            ->decrement('sent_count');
+    }
+
+    /**
+     * Hold the email until the connection's daily sending limit lifts.
+     *
+     * The cap only lifts when the sending window rolls over, so retrying any
+     * sooner just pushes the same email back again.
+     */
+    private function holdUntilLimitRefreshes(
+        CampaignEmail $email,
+        MailerConnection $connection,
+        CampaignStepScheduler $scheduler,
+        SendingWindow $window,
+    ): void {
+        // refreshSendingWindow() has set the rollover for a capped connection.
+        $retryAt = $connection->sending_limit_refreshed_at ?? CarbonImmutable::today('UTC')->addDay();
+
+        $email->scheduled_at = $this->nextAllowedAt($email, $retryAt, $scheduler, $window);
+        $email->save();
+
+        // When the connection may try again, not when it was throttled.
+        $connection->rate_limit_expired_at = $retryAt;
+        $connection->save();
     }
 
     /**
