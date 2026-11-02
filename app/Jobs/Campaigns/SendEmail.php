@@ -245,10 +245,14 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // The window the slot was counted in, so a failed send gives it back
+        // to that window and never to the next day's.
+        $reservedIn = $connection->sending_limit_refreshed_at;
+
         try {
             $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
         } catch (Throwable $exception) {
-            $this->releaseSend($connection);
+            $this->releaseSend($connection, $reservedIn);
 
             match ($classifier->classify($exception)) {
                 SendFailureType::Recipient => $this->markBounced($email, $to, $exception, $suppressionList),
@@ -413,24 +417,50 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * The counter is checked and incremented in one conditional update, so
      * concurrent workers cannot all pass a check on the same stale count and
      * send past the limit. Returns false when the limit has been reached.
+     *
+     * On success the connection's `sending_limit_refreshed_at` is the window
+     * the send was counted in.
      */
     private function reserveSend(MailerConnection $connection): bool
+    {
+        if ($this->incrementSentCount($connection)) {
+            return true;
+        }
+
+        // The window may have rolled over since this copy was loaded, so
+        // start or re-read the current one and try once more in it.
+        $this->refreshSendingWindow($connection);
+
+        return $this->incrementSentCount($connection);
+    }
+
+    /**
+     * Increment the counter if the loaded sending window is current and has room.
+     */
+    private function incrementSentCount(MailerConnection $connection): bool
     {
         return MailerConnection::query()
             ->whereKey($connection->id)
             ->where(fn (Builder $query): Builder => $query
                 ->whereNull('sending_limit')
-                ->orWhereColumn('sent_count', '<', 'sending_limit'))
+                ->orWhere(fn (Builder $query): Builder => $query
+                    ->whereColumn('sent_count', '<', 'sending_limit')
+                    ->where('sending_limit_refreshed_at', $connection->sending_limit_refreshed_at)
+                    ->where('sending_limit_refreshed_at', '>', now())))
             ->increment('sent_count') === 1;
     }
 
     /**
      * Give back a send reserved by {@see self::reserveSend()} that was not made.
+     *
+     * Only while the window it was counted in is still current: once the
+     * window has rolled over the counter belongs to sends of the new day.
      */
-    private function releaseSend(MailerConnection $connection): void
+    private function releaseSend(MailerConnection $connection, ?CarbonImmutable $window): void
     {
         MailerConnection::query()
             ->whereKey($connection->id)
+            ->where('sending_limit_refreshed_at', $window)
             ->where('sent_count', '>', 0)
             ->decrement('sent_count');
     }
