@@ -2,6 +2,8 @@
 
 namespace App\Contracts\Mail;
 
+use Carbon\CarbonImmutable;
+
 /**
  * Thin Gmail API surface used by campaign mailers and verifiers.
  *
@@ -42,11 +44,14 @@ interface GmailApi
     public function listMessageIds(string $accessToken, string $query, ?string $pageToken = null, int $maxResults = 100): array;
 
     /**
-     * Fetch headers and body text for a single message.
+     * Fetch headers, body text and received time for a single message.
      *
-     * @return array{messageId: string, inReplyTo: string|null, references: array<int, string>, fromEmail: string|null, subject: string, text: string|null}
+     * Returns null when the message no longer exists, for example because it
+     * was deleted after it was listed.
+     *
+     * @return array{messageId: string, inReplyTo: string|null, references: array<int, string>, fromEmail: string|null, subject: string, text: string|null, receivedAt: CarbonImmutable|null}|null
      *
      * @throws \RuntimeException When the API rejects the request.
      */
-    public function getMessage(string $accessToken, string $messageId): array;
+    public function getMessage(string $accessToken, string $messageId): ?array;
 }

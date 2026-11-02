@@ -3,7 +3,9 @@
 namespace App\Services\Mail;
 
 use App\Contracts\Mail\GmailApi;
+use Carbon\CarbonImmutable;
 use Google\Client as GoogleClient;
+use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use RuntimeException;
@@ -101,16 +103,22 @@ class GoogleGmailApi implements GmailApi
     }
 
     /**
-     * Fetch headers and body text for a single message.
+     * Fetch headers, body text and received time for a single message.
      *
-     * @return array{messageId: string, inReplyTo: string|null, references: array<int, string>, fromEmail: string|null, subject: string, text: string|null}
+     * @return array{messageId: string, inReplyTo: string|null, references: array<int, string>, fromEmail: string|null, subject: string, text: string|null, receivedAt: CarbonImmutable|null}|null
      */
-    public function getMessage(string $accessToken, string $messageId): array
+    public function getMessage(string $accessToken, string $messageId): ?array
     {
         try {
             $message = $this->gmail($accessToken)->users_messages->get('me', $messageId, [
                 'format' => 'full',
             ]);
+        } catch (GoogleServiceException $exception) {
+            if ($exception->getCode() === 404) {
+                return null;
+            }
+
+            throw new RuntimeException('Gmail message fetch failed: '.$exception->getMessage(), 0, $exception);
         } catch (Throwable $exception) {
             throw new RuntimeException('Gmail message fetch failed: '.$exception->getMessage(), 0, $exception);
         }
@@ -130,6 +138,7 @@ class GoogleGmailApi implements GmailApi
         }
 
         $inReplyTo = trim($headers['in-reply-to'] ?? '');
+        $internalDate = (string) $message->getInternalDate();
 
         return [
             'messageId' => $headers['message-id'] ?? $messageId,
@@ -139,6 +148,9 @@ class GoogleGmailApi implements GmailApi
             'subject' => $headers['subject'] ?? '',
             'text' => $this->extractText($message->getPayload()?->getBody()?->getData())
                 ?? $message->getSnippet(),
+            'receivedAt' => ctype_digit($internalDate)
+                ? CarbonImmutable::createFromTimestampMs((int) $internalDate)
+                : null,
         ];
     }
 

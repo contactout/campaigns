@@ -3,7 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Contracts\Mail\MailboxReader;
-use App\Data\InboundMessage;
+use App\Data\MailboxBatch;
 use App\Enums\MailerType;
 use App\Models\MailerConnection;
 use Carbon\CarbonInterface;
@@ -24,15 +24,13 @@ class MailboxReaderResolver implements MailboxReader
 
     /**
      * Fetch inbound messages through the reader matching the connection's type.
-     *
-     * @return array<int, InboundMessage>
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
     {
         return match ($connection->mailer_type) {
-            MailerType::Gmail => $this->gmail->fetch($connection, $since),
-            MailerType::Outlook => $this->outlook->fetch($connection, $since),
-            MailerType::Smtp => $this->imap->fetch($connection, $since),
+            MailerType::Gmail => $this->gmail->fetch($connection, $since, $limit),
+            MailerType::Outlook => $this->outlook->fetch($connection, $since, $limit),
+            MailerType::Smtp => $this->imap->fetch($connection, $since, $limit),
         };
     }
 }

@@ -4,10 +4,12 @@ namespace App\Services\Mail;
 
 use App\Contracts\Mail\MailboxReader;
 use App\Data\InboundMessage;
+use App\Data\MailboxBatch;
 use App\Enums\MailerType;
 use App\Exceptions\Mail\MailerHttpException;
 use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -25,31 +27,30 @@ class OutlookMailboxReader implements MailboxReader
     /**
      * Fetch inbox messages received after the given time, or the latest messages.
      *
-     * Every result page is followed via `@odata.nextLink`, and token or Graph
-     * failures are thrown rather than returned as an empty mailbox, so the
-     * caller never moves its cursor past messages that were not fetched.
-     *
-     * @return array<int, InboundMessage>
+     * Messages are read oldest first, following `@odata.nextLink` until
+     * `$limit` messages are in hand. Token or Graph failures are thrown rather
+     * than returned as an empty mailbox, so the caller never moves its cursor
+     * past messages that were not fetched.
      *
      * @throws MailerHttpException When a Graph request fails.
      * @throws RuntimeException When the access token cannot be obtained.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
     {
         if ($connection->mailer_type !== MailerType::Outlook) {
-            return [];
+            return new MailboxBatch([]);
         }
 
         $settings = $connection->smtp_setting ?? [];
 
         if (empty($settings['access_token']) && empty($settings['refresh_token'])) {
-            return [];
+            return new MailboxBatch([]);
         }
 
         $accessToken = $this->tokens->accessToken($connection);
 
         $query = [
-            '$top' => 100,
+            '$top' => $limit,
             '$select' => 'internetMessageId,conversationId,subject,from,bodyPreview,body,receivedDateTime,internetMessageHeaders',
             '$orderby' => 'receivedDateTime asc',
         ];
@@ -83,9 +84,12 @@ class OutlookMailboxReader implements MailboxReader
             $next = $payload['@odata.nextLink'] ?? null;
             $url = is_string($next) && $next !== '' ? $next : null;
             $query = null;
-        } while ($url !== null);
+        } while ($url !== null && count($inbound) < $limit);
 
-        return $inbound;
+        return new MailboxBatch(
+            array_slice($inbound, 0, $limit),
+            $url !== null || count($inbound) > $limit,
+        );
     }
 
     /**
@@ -120,6 +124,7 @@ class OutlookMailboxReader implements MailboxReader
 
         $inReplyTo = trim($headers['in-reply-to'] ?? '');
         $from = $message['from']['emailAddress']['address'] ?? null;
+        $receivedAt = $message['receivedDateTime'] ?? null;
         $body = $message['body']['content'] ?? null;
         $text = is_string($body) && $body !== ''
             ? $body
@@ -132,6 +137,7 @@ class OutlookMailboxReader implements MailboxReader
             fromEmail: is_string($from) ? strtolower($from) : null,
             subject: (string) ($message['subject'] ?? ''),
             text: $text,
+            receivedAt: is_string($receivedAt) && $receivedAt !== '' ? CarbonImmutable::parse($receivedAt) : null,
         );
     }
 }

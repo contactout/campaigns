@@ -5,6 +5,7 @@ namespace App\Services\Mail;
 use App\Contracts\Mail\GmailApi;
 use App\Contracts\Mail\MailboxReader;
 use App\Data\InboundMessage;
+use App\Data\MailboxBatch;
 use App\Enums\MailerType;
 use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
@@ -31,24 +32,25 @@ class GmailMailboxReader implements MailboxReader
      * is excluded: a threaded follow-up carries `In-Reply-To` for the previous
      * step and would otherwise be recorded as the recipient's reply.
      *
-     * Every result page is read, and API failures are thrown rather than
-     * returned as an empty mailbox, so the caller never moves its cursor past
-     * messages that were not fetched.
-     *
-     * @return array<int, InboundMessage>
+     * Gmail lists newest first, so every page of ids is listed (ids are
+     * cheap) and only the oldest `$limit` messages are fetched, letting a
+     * backlog drain in order across polls. A message deleted after it was
+     * listed is skipped; any other API failure is thrown rather than returned
+     * as an empty mailbox, so the caller never moves its cursor past messages
+     * that were not fetched.
      *
      * @throws RuntimeException When the token or Gmail API request fails.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
-            return [];
+            return new MailboxBatch([]);
         }
 
         $settings = $connection->smtp_setting ?? [];
 
         if (empty($settings['access_token']) && empty($settings['refresh_token'])) {
-            return [];
+            return new MailboxBatch([]);
         }
 
         $accessToken = $this->tokens->accessToken($connection);
@@ -60,15 +62,21 @@ class GmailMailboxReader implements MailboxReader
         $pageToken = null;
 
         do {
-            $page = $this->gmail->listMessageIds($accessToken, $query, $pageToken);
+            $page = $this->gmail->listMessageIds($accessToken, $query, $pageToken, 500);
             array_push($ids, ...$page['ids']);
             $pageToken = $page['nextPageToken'];
         } while ($pageToken !== null);
 
+        $hasMore = count($ids) > $limit;
+        $oldest = array_reverse(array_slice($ids, -$limit));
         $inbound = [];
 
-        foreach ($ids as $id) {
+        foreach ($oldest as $id) {
             $message = $this->gmail->getMessage($accessToken, $id);
+
+            if ($message === null) {
+                continue;
+            }
 
             $inbound[] = new InboundMessage(
                 messageId: $message['messageId'],
@@ -77,9 +85,10 @@ class GmailMailboxReader implements MailboxReader
                 fromEmail: $message['fromEmail'],
                 subject: $message['subject'],
                 text: $message['text'],
+                receivedAt: $message['receivedAt'],
             );
         }
 
-        return $inbound;
+        return new MailboxBatch($inbound, $hasMore);
     }
 }

@@ -2,7 +2,7 @@
 
 namespace App\Contracts\Mail;
 
-use App\Data\InboundMessage;
+use App\Data\MailboxBatch;
 use App\Models\MailerConnection;
 use Carbon\CarbonInterface;
 
@@ -15,17 +15,16 @@ use Carbon\CarbonInterface;
 interface MailboxReader
 {
     /**
-     * Fetch inbound messages received after the given time.
+     * Fetch the oldest inbound messages received after the given time.
      *
      * When no `$since` is supplied, implementations should read unseen
-     * messages instead. Implementations must return every matching message,
-     * paging through the provider as needed, and must throw rather than
-     * return a partial or empty result when the provider fails: the caller
-     * advances its read cursor past whatever window this call covered.
-     *
-     * @return array<int, InboundMessage>
+     * messages instead. At most `$limit` messages are returned, oldest first,
+     * each with its `receivedAt`; `hasMore` reports that the window held more.
+     * Implementations must throw rather than return a partial or empty result
+     * when the provider fails, since the caller moves its read cursor past
+     * whatever the batch says it covered.
      *
      * @throws \Throwable When the mailbox cannot be read.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since): array;
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch;
 }

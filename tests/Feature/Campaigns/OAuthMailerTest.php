@@ -46,7 +46,7 @@ class FakeGmailApi implements GmailApi
         return ['ids' => [], 'nextPageToken' => null];
     }
 
-    public function getMessage(string $accessToken, string $messageId): array
+    public function getMessage(string $accessToken, string $messageId): ?array
     {
         return [
             'messageId' => $messageId,
@@ -55,6 +55,7 @@ class FakeGmailApi implements GmailApi
             'fromEmail' => null,
             'subject' => '',
             'text' => null,
+            'receivedAt' => null,
         ];
     }
 }
@@ -194,8 +195,8 @@ test('gmail mailbox reader excludes the connections own sent mail from the poll'
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
     $since = CarbonImmutable::parse('2026-01-01 00:00:00');
 
-    $reader->fetch($connection, $since);
-    $reader->fetch($connection, null);
+    $reader->fetch($connection, $since, 100);
+    $reader->fetch($connection, null, 100);
 
     expect($api->queries)->toBe([
         'after:'.$since->getTimestamp().' -from:me',
