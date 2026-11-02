@@ -216,6 +216,20 @@ test('addresses on the team suppression list are skipped', function () {
         ->and(importedContact($team, 'gone@example.com'))->toBeNull();
 });
 
+test('addresses on a suppressed domain are skipped', function () {
+    [$team, $user] = importTeamWithMember();
+    Unsubscribe::factory()->forTeam($team)->create(['email' => '@Blocked.example']);
+
+    postImport($team, $user, "Name,Email\nGone,gone@blocked.example\nAda,ada@example.com\n");
+
+    $import = ContactImport::sole();
+
+    expect($import->created_count)->toBe(1)
+        ->and($import->skipped_count)->toBe(1)
+        ->and($import->failures)->toBe([['row' => 2, 'reason' => 'Email is on the suppression list.']])
+        ->and(importedContact($team, 'gone@blocked.example'))->toBeNull();
+});
+
 test('created and updated contacts are attached to the chosen list', function () {
     [$team, $user] = importTeamWithMember();
     $list = ContactList::factory()->create(['team_id' => $team->id]);

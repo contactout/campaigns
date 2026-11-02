@@ -98,6 +98,33 @@ test('a signed store records the unsubscribe and stops the recipient', function 
         ->and($recipient->contact->fresh()->do_not_contact_at)->not->toBeNull();
 });
 
+test('a signed store for a contact without an email adds no blank suppression entry', function () {
+    $recipient = mmosUnsubscribeRecipient();
+    $recipient->contact->identities()->delete();
+
+    $this->post(URL::signedRoute('unsubscribe.store', ['recipient' => $recipient]))
+        ->assertRedirect(route('unsubscribe.done'));
+
+    expect(Unsubscribe::query()->count())->toBe(0)
+        ->and($recipient->fresh()->status)->toBe(RecipientStatus::Unsubscribed)
+        ->and($recipient->contact->fresh()->status)->toBe(ContactStatus::Unsubscribed);
+});
+
+test('a repeated signed store keeps the original suppression entry', function () {
+    $recipient = mmosUnsubscribeRecipient();
+    $original = Unsubscribe::factory()->forTeam($recipient->campaign->team)->create([
+        'email' => 'Ada@Example.com',
+        'reason' => 'manual',
+    ]);
+
+    $this->post(URL::signedRoute('unsubscribe.store', ['recipient' => $recipient]))
+        ->assertRedirect(route('unsubscribe.done'));
+
+    expect(Unsubscribe::query()->sole())
+        ->id->toBe($original->id)
+        ->reason->toBe('manual');
+});
+
 /**
  * Build an active campaign ready to send for a single recipient.
  *
