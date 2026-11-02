@@ -86,27 +86,27 @@ class ProcessInboundMessage
 
     /**
      * Find the campaign email a reply is answering, if any.
+     *
+     * The `In-Reply-To` and `References` ids are matched with and without
+     * angle brackets: IMAP strips them while sent ids are stored with them.
      */
     private function findReply(MailerConnection $connection, InboundMessage $message): ?CampaignEmail
     {
-        $inReplyTo = $message->inReplyTo;
-        $references = $message->references;
+        $ids = $message->references;
 
-        if (($inReplyTo === null || $inReplyTo === '') && $references === []) {
+        if ($message->inReplyTo !== null && $message->inReplyTo !== '') {
+            $ids[] = $message->inReplyTo;
+        }
+
+        $messageIds = $this->messageIdVariants($ids);
+
+        if ($messageIds === []) {
             return null;
         }
 
         return CampaignEmail::query()
             ->where('mailer_connection_id', $connection->id)
-            ->where(function (Builder $query) use ($inReplyTo, $references): void {
-                if ($inReplyTo !== null && $inReplyTo !== '') {
-                    $query->where('message_id', $inReplyTo);
-                }
-
-                if ($references !== []) {
-                    $query->orWhereIn('message_id', $references);
-                }
-            })
+            ->whereIn('message_id', $messageIds)
             ->first();
     }
 
@@ -331,9 +331,6 @@ class ProcessInboundMessage
     /**
      * Collect the Message-IDs a bounce report refers to.
      *
-     * Ids are kept both with and without angle brackets, since stored ids and
-     * headers do not agree on the format across providers.
-     *
      * @return array<int, string>
      */
     private function referencedMessageIds(InboundMessage $message): array
@@ -348,6 +345,20 @@ class ProcessInboundMessage
             array_push($ids, ...$matches[1]);
         }
 
+        return $this->messageIdVariants($ids);
+    }
+
+    /**
+     * Expand Message-IDs into both their bare and angle-bracketed forms.
+     *
+     * Stored ids and headers do not agree on the format across providers, so
+     * matching on both keeps a reader that strips brackets from losing it.
+     *
+     * @param  array<int, string>  $ids
+     * @return array<int, string>
+     */
+    private function messageIdVariants(array $ids): array
+    {
         $variants = [];
 
         foreach ($ids as $id) {
