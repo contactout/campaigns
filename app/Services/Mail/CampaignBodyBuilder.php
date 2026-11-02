@@ -43,13 +43,17 @@ class CampaignBodyBuilder
 
     /**
      * Rewrite every absolute http(s) anchor href to a tracked redirect URL.
+     *
+     * The captured href is attribute text, so entities such as "&amp;" are
+     * decoded to get the real URL the recipient is redirected to.
      */
     private function rewriteLinks(CampaignEmail $email, string $html): string
     {
         return (string) preg_replace_callback(
             '/(<a\b[^>]*?\bhref=)(["\'])(https?:\/\/[^"\']*)\2/i',
             function (array $matches) use ($email): string {
-                $url = $this->trackedUrl($email, $matches[3]);
+                $href = html_entity_decode($matches[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $url = $this->trackedUrl($email, $href);
 
                 return $matches[1].$matches[2].$url.$matches[2];
             },

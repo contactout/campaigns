@@ -47,6 +47,28 @@ test('reuses a tracked link when the same url is built again', function () {
         ->and(substr_count($second, 't/c/'))->toBe(1);
 });
 
+test('decodes html entities in the tracked url', function () {
+    $email = CampaignEmail::factory()->create();
+
+    (new CampaignBodyBuilder)->build(
+        $email,
+        '<a href="https://example.com/page?a=1&amp;b=2">Visit us</a>',
+    );
+
+    expect(TrackedLink::query()->sole()->url)->toBe('https://example.com/page?a=1&b=2');
+});
+
+test('tracks an encoded and a plain href for the same url as one link', function () {
+    $email = CampaignEmail::factory()->create();
+
+    (new CampaignBodyBuilder)->build(
+        $email,
+        '<a href="https://example.com/page?a=1&amp;b=2">One</a><a href="https://example.com/page?a=1&b=2">Two</a>',
+    );
+
+    expect(TrackedLink::query()->count())->toBe(1);
+});
+
 test('leaves mailto and relative links untouched', function () {
     $email = CampaignEmail::factory()->create();
 
