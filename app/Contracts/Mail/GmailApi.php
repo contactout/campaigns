@@ -30,13 +30,16 @@ interface GmailApi
     public function getProfileEmail(string $accessToken): string;
 
     /**
-     * List message ids matching the given query.
+     * List one page of message ids matching the given query.
      *
-     * @return array<int, string>
+     * Pass the returned `nextPageToken` back in to read the following page;
+     * it is null once the last page has been read.
+     *
+     * @return array{ids: array<int, string>, nextPageToken: string|null}
      *
      * @throws \RuntimeException When the API rejects the request.
      */
-    public function listMessageIds(string $accessToken, string $query, int $maxResults = 50): array;
+    public function listMessageIds(string $accessToken, string $query, ?string $pageToken = null, int $maxResults = 100): array;
 
     /**
      * Fetch headers and body text for a single message.

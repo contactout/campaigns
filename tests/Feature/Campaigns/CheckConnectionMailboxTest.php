@@ -16,6 +16,7 @@ use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Team;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Tests\Support\FakeMailboxReader;
 
 /**
@@ -132,4 +133,46 @@ test('the job reads messages since the previously checked time', function () {
 
     expect($reader->fetched)->toHaveCount(1)
         ->and($reader->fetched[0]['since']?->equalTo($since))->toBeTrue();
+});
+
+test('the job advances the cursor to when the fetch started, not when it finished', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
+
+    $fixture = mmosMailboxFixture();
+
+    $this->app->instance(MailboxReader::class, new class implements MailboxReader
+    {
+        public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+        {
+            // A slow poll: mail arriving now must be read again next time.
+            CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-03-01 10:07:00'));
+
+            return [];
+        }
+    });
+
+    app()->call([new CheckConnectionMailbox($fixture['connection']), 'handle']);
+
+    expect($fixture['connection']->fresh()->last_checked_at->toDateTimeString())->toBe('2026-03-01 10:00:00');
+});
+
+test('the job keeps the cursor when the mailbox cannot be read', function () {
+    $since = CarbonImmutable::parse('2026-03-01 09:00:00');
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
+
+    $fixture = mmosMailboxFixture();
+    $fixture['connection']->update(['last_checked_at' => $since]);
+
+    $this->app->instance(MailboxReader::class, new class implements MailboxReader
+    {
+        public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+        {
+            throw new RuntimeException('Graph returned 503.');
+        }
+    });
+
+    expect(fn () => app()->call([new CheckConnectionMailbox($fixture['connection']), 'handle']))
+        ->toThrow(RuntimeException::class, 'Graph returned 503.');
+
+    expect($fixture['connection']->fresh()->last_checked_at->equalTo($since))->toBeTrue();
 });

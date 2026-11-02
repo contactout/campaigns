@@ -10,7 +10,6 @@ use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
 use Carbon\CarbonInterface;
 use RuntimeException;
-use Throwable;
 
 /**
  * Reads inbound mail from Gmail via the Gmail API.
@@ -32,7 +31,13 @@ class GmailMailboxReader implements MailboxReader
      * is excluded: a threaded follow-up carries `In-Reply-To` for the previous
      * step and would otherwise be recorded as the recipient's reply.
      *
+     * Every result page is read, and API failures are thrown rather than
+     * returned as an empty mailbox, so the caller never moves its cursor past
+     * messages that were not fetched.
+     *
      * @return array<int, InboundMessage>
+     *
+     * @throws RuntimeException When the token or Gmail API request fails.
      */
     public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
     {
@@ -46,25 +51,24 @@ class GmailMailboxReader implements MailboxReader
             return [];
         }
 
-        try {
-            $accessToken = $this->tokens->accessToken($connection);
-            $query = ($since instanceof CarbonInterface
-                ? 'after:'.$since->getTimestamp()
-                : 'is:unread').' -from:me';
+        $accessToken = $this->tokens->accessToken($connection);
+        $query = ($since instanceof CarbonInterface
+            ? 'after:'.$since->getTimestamp()
+            : 'is:unread').' -from:me';
 
-            $ids = $this->gmail->listMessageIds($accessToken, $query, 50);
-        } catch (Throwable) {
-            return [];
-        }
+        $ids = [];
+        $pageToken = null;
+
+        do {
+            $page = $this->gmail->listMessageIds($accessToken, $query, $pageToken);
+            array_push($ids, ...$page['ids']);
+            $pageToken = $page['nextPageToken'];
+        } while ($pageToken !== null);
 
         $inbound = [];
 
         foreach ($ids as $id) {
-            try {
-                $message = $this->gmail->getMessage($accessToken, $id);
-            } catch (RuntimeException) {
-                continue;
-            }
+            $message = $this->gmail->getMessage($accessToken, $id);
 
             $inbound[] = new InboundMessage(
                 messageId: $message['messageId'],

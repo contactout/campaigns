@@ -5,11 +5,12 @@ namespace App\Services\Mail;
 use App\Contracts\Mail\MailboxReader;
 use App\Data\InboundMessage;
 use App\Enums\MailerType;
+use App\Exceptions\Mail\MailerHttpException;
 use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Http;
-use Throwable;
+use RuntimeException;
 
 /**
  * Reads inbound mail from Outlook via Microsoft Graph.
@@ -24,7 +25,14 @@ class OutlookMailboxReader implements MailboxReader
     /**
      * Fetch inbox messages received after the given time, or the latest messages.
      *
+     * Every result page is followed via `@odata.nextLink`, and token or Graph
+     * failures are thrown rather than returned as an empty mailbox, so the
+     * caller never moves its cursor past messages that were not fetched.
+     *
      * @return array<int, InboundMessage>
+     *
+     * @throws MailerHttpException When a Graph request fails.
+     * @throws RuntimeException When the access token cannot be obtained.
      */
     public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
     {
@@ -38,45 +46,44 @@ class OutlookMailboxReader implements MailboxReader
             return [];
         }
 
-        try {
-            $accessToken = $this->tokens->accessToken($connection);
-        } catch (Throwable) {
-            return [];
-        }
+        $accessToken = $this->tokens->accessToken($connection);
 
         $query = [
-            '$top' => 50,
+            '$top' => 100,
             '$select' => 'internetMessageId,conversationId,subject,from,bodyPreview,body,receivedDateTime,internetMessageHeaders',
-            '$orderby' => 'receivedDateTime desc',
+            '$orderby' => 'receivedDateTime asc',
         ];
 
         if ($since instanceof CarbonInterface) {
             $query['$filter'] = 'receivedDateTime ge '.$since->toIso8601String();
         }
 
-        $response = Http::withToken($accessToken)
-            ->get('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages', $query);
-
-        if (! $response->successful()) {
-            return [];
-        }
-
-        $payload = $response->json();
-        $values = is_array($payload) ? ($payload['value'] ?? []) : [];
-
-        if (! is_array($values)) {
-            return [];
-        }
-
+        $url = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages';
         $inbound = [];
 
-        foreach ($values as $message) {
-            if (! is_array($message)) {
-                continue;
+        do {
+            $response = Http::withToken($accessToken)->get($url, $query);
+
+            if (! $response->successful()) {
+                throw MailerHttpException::fromResponse('Outlook mailbox read failed.', $response);
             }
 
-            $inbound[] = $this->toInboundMessage($message);
-        }
+            $payload = $response->json();
+            $payload = is_array($payload) ? $payload : [];
+            $values = $payload['value'] ?? [];
+
+            foreach (is_array($values) ? $values : [] as $message) {
+                if (is_array($message)) {
+                    $inbound[] = $this->toInboundMessage($message);
+                }
+            }
+
+            // The next link already carries the query, and passing any query
+            // array (even an empty one) would replace its query string.
+            $next = $payload['@odata.nextLink'] ?? null;
+            $url = is_string($next) && $next !== '' ? $next : null;
+            $query = null;
+        } while ($url !== null);
 
         return $inbound;
     }

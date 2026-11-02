@@ -41,9 +41,9 @@ class FakeGmailApi implements GmailApi
         return $this->profileEmail;
     }
 
-    public function listMessageIds(string $accessToken, string $query, int $maxResults = 50): array
+    public function listMessageIds(string $accessToken, string $query, ?string $pageToken = null, int $maxResults = 100): array
     {
-        return [];
+        return ['ids' => [], 'nextPageToken' => null];
     }
 
     public function getMessage(string $accessToken, string $messageId): array
@@ -183,11 +183,11 @@ test('gmail mailbox reader excludes the connections own sent mail from the poll'
          */
         public array $queries = [];
 
-        public function listMessageIds(string $accessToken, string $query, int $maxResults = 50): array
+        public function listMessageIds(string $accessToken, string $query, ?string $pageToken = null, int $maxResults = 100): array
         {
             $this->queries[] = $query;
 
-            return [];
+            return ['ids' => [], 'nextPageToken' => null];
         }
     };
 

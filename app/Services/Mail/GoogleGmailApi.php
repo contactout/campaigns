@@ -61,17 +61,23 @@ class GoogleGmailApi implements GmailApi
     }
 
     /**
-     * List message ids matching the given query.
+     * List one page of message ids matching the given query.
      *
-     * @return array<int, string>
+     * @return array{ids: array<int, string>, nextPageToken: string|null}
      */
-    public function listMessageIds(string $accessToken, string $query, int $maxResults = 50): array
+    public function listMessageIds(string $accessToken, string $query, ?string $pageToken = null, int $maxResults = 100): array
     {
+        $params = [
+            'q' => $query,
+            'maxResults' => $maxResults,
+        ];
+
+        if ($pageToken !== null && $pageToken !== '') {
+            $params['pageToken'] = $pageToken;
+        }
+
         try {
-            $list = $this->gmail($accessToken)->users_messages->listUsersMessages('me', [
-                'q' => $query,
-                'maxResults' => $maxResults,
-            ]);
+            $list = $this->gmail($accessToken)->users_messages->listUsersMessages('me', $params);
         } catch (Throwable $exception) {
             throw new RuntimeException('Gmail message list failed: '.$exception->getMessage(), 0, $exception);
         }
@@ -86,7 +92,12 @@ class GoogleGmailApi implements GmailApi
             }
         }
 
-        return $ids;
+        $nextPageToken = (string) $list->getNextPageToken();
+
+        return [
+            'ids' => $ids,
+            'nextPageToken' => $nextPageToken !== '' ? $nextPageToken : null,
+        ];
     }
 
     /**
