@@ -270,7 +270,7 @@ class ProcessInboundMessage
     private function reportText(InboundMessage $message): string
     {
         $parts = preg_split(
-            '/^\s*(?:-{2,}.*\b(?:original|copy of the|undelivered|returned)\b.*message|Original message headers:|Content-Type:\s*message\/rfc822)/im',
+            '/^\s*(?:-{2,}.*\b(?:original|copy of the|undelivered|returned)\b.*message|Original message headers:|Content-Type:\s*(?:message\/rfc822|text\/rfc822-headers))/im',
             $message->text ?? '',
             2,
         );

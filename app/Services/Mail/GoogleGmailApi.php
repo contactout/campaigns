@@ -8,6 +8,9 @@ use Google\Client as GoogleClient;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
+use Google\Service\Gmail\MessagePart;
+use Google\Service\Gmail\MessagePartBody;
+use GuzzleHttp\ClientInterface;
 use RuntimeException;
 use Throwable;
 
@@ -16,6 +19,13 @@ use Throwable;
  */
 class GoogleGmailApi implements GmailApi
 {
+    /**
+     * Create a new adapter, optionally over a custom HTTP client.
+     */
+    public function __construct(
+        private readonly ?ClientInterface $http = null,
+    ) {}
+
     /**
      * Send a raw RFC822 message and return the provider ids.
      *
@@ -146,8 +156,7 @@ class GoogleGmailApi implements GmailApi
             'references' => $references,
             'fromEmail' => $this->extractEmail($headers['from'] ?? null),
             'subject' => $headers['subject'] ?? '',
-            'text' => $this->extractText($message->getPayload()?->getBody()?->getData())
-                ?? $message->getSnippet(),
+            'text' => $this->bodyText($message->getPayload()) ?? $message->getSnippet(),
             'receivedAt' => ctype_digit($internalDate)
                 ? CarbonImmutable::createFromTimestampMs((int) $internalDate)
                 : null,
@@ -161,6 +170,10 @@ class GoogleGmailApi implements GmailApi
     {
         $client = new GoogleClient;
         $client->setAccessToken(['access_token' => $accessToken]);
+
+        if ($this->http instanceof ClientInterface) {
+            $client->setHttpClient($this->http);
+        }
 
         return new Gmail($client);
     }
@@ -186,10 +199,86 @@ class GoogleGmailApi implements GmailApi
     }
 
     /**
-     * Decode a base64url body part when present.
+     * Get the readable text of a message payload.
+     *
+     * A multipart message, such as every `multipart/report` bounce, has no
+     * top-level body, so its parts are walked in order. Plain text wins over
+     * HTML alternatives, delivery status fields are kept, and attachments are
+     * skipped. An embedded copy of the original message is written after a
+     * `Content-Type` line with its headers, so its Message-ID can be matched
+     * while the bounce report itself still ends where the copy starts.
      */
-    private function extractText(?string $data): ?string
+    private function bodyText(?MessagePart $payload): ?string
     {
+        $text = $payload instanceof MessagePart ? trim($this->partText($payload)) : '';
+
+        return $text !== '' ? $text : null;
+    }
+
+    /**
+     * Collect the readable text of a MIME part and its children.
+     */
+    private function partText(MessagePart $part): string
+    {
+        $mimeType = strtolower((string) $part->getMimeType());
+        $children = $part->getParts();
+
+        if (str_starts_with($mimeType, 'multipart/')) {
+            if ($mimeType === 'multipart/alternative') {
+                $plain = array_filter(
+                    $children,
+                    fn (MessagePart $child): bool => strtolower((string) $child->getMimeType()) === 'text/plain',
+                );
+
+                $children = $plain !== [] ? $plain : $children;
+            }
+
+            return $this->joinText(array_map(fn (MessagePart $child): string => $this->partText($child), $children));
+        }
+
+        if ($mimeType === 'message/rfc822' || $mimeType === 'text/rfc822-headers') {
+            $texts = ['Content-Type: '.$mimeType, $this->extractText($part->getBody()) ?? ''];
+
+            foreach ($children as $child) {
+                foreach ($child->getHeaders() as $header) {
+                    $texts[] = $header->getName().': '.$header->getValue();
+                }
+
+                $texts[] = $this->partText($child);
+            }
+
+            return $this->joinText($texts);
+        }
+
+        $readable = str_starts_with($mimeType, 'text/') || $mimeType === 'message/delivery-status';
+
+        if (! $readable || (string) $part->getFilename() !== '') {
+            return '';
+        }
+
+        return $this->extractText($part->getBody()) ?? '';
+    }
+
+    /**
+     * Join non-empty text pieces, one per line.
+     *
+     * @param  array<int, string>  $texts
+     */
+    private function joinText(array $texts): string
+    {
+        return implode("\n", array_filter($texts, fn (string $text): bool => trim($text) !== ''));
+    }
+
+    /**
+     * Decode a base64url body part when present.
+     *
+     * The client leaves the body null when Gmail omits it, despite its
+     * docblock.
+     */
+    private function extractText(?MessagePartBody $body): ?string
+    {
+        $data = $body?->getData();
+
         if ($data === null || $data === '') {
             return null;
         }
