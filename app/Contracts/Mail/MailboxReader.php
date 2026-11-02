@@ -2,6 +2,7 @@
 
 namespace App\Contracts\Mail;
 
+use App\Data\InboundMessage;
 use App\Data\MailboxBatch;
 use App\Models\MailerConnection;
 use Carbon\CarbonInterface;
@@ -18,18 +19,19 @@ interface MailboxReader
      * Fetch the oldest inbound messages received in the given window.
      *
      * The window runs from `$since` (inclusive) to `$before` (exclusive) when
-     * given. A reader may return extra messages around the edges, for example
-     * when the provider only searches by the second, but must never miss one
-     * inside the window. When no `$since` is supplied, implementations should
-     * read unseen messages instead.
+     * given. When no `$since` is supplied, implementations should read unseen
+     * messages instead. Messages whose resume id is in `$skip` were already
+     * processed and are left out.
      *
-     * At most `$limit` messages are returned (all of them when null), oldest
-     * first, each with its `receivedAt`; `hasMore` reports that the window
-     * held more. Implementations must throw rather than return a partial or
-     * empty result when the provider fails, since the caller moves its read
-     * cursor past whatever the batch says it covered.
+     * At most `$limit` messages are returned, oldest first, each with its
+     * `receivedAt`; `hasMore` reports that the window held more.
+     * Implementations must throw rather than return a partial or empty result
+     * when the provider fails, since the caller moves its read cursor past
+     * whatever the batch says it covered.
+     *
+     * @param  array<int, string>  $skip  Resume ids ({@see InboundMessage::resumeId()}) to leave out.
      *
      * @throws \Throwable When the mailbox cannot be read.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch;
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch;
 }

@@ -21,6 +21,7 @@ use App\Services\Mail\SendFailureClassifier;
 use App\Services\Mail\SuppressionList;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 use Tests\Support\FakeMailboxReader;
 use Tests\Support\SimulatedMailboxReader;
 
@@ -161,7 +162,7 @@ test('the job advances the cursor to when the fetch started, not when it finishe
 
     $this->app->instance(MailboxReader::class, new class implements MailboxReader
     {
-        public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
+        public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
         {
             // A slow poll: mail arriving now must be read again next time.
             CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-03-01 10:07:00'));
@@ -184,7 +185,7 @@ test('the job keeps the cursor when the mailbox cannot be read', function () {
 
     $this->app->instance(MailboxReader::class, new class implements MailboxReader
     {
-        public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
+        public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
         {
             throw new RuntimeException('Graph returned 503.');
         }
@@ -255,23 +256,31 @@ function mmosRecordingProcessor(): ProcessInboundMessage
 }
 
 /**
- * Poll the fixture connection until its cursor stops moving.
+ * Poll the fixture connection until its cursor reaches the current time.
+ *
+ * Returns how many messages each poll processed.
  *
  * @param  array<string, mixed>  $fixture
+ * @param  object{handled: array<int, string>}  $process
+ * @return array<int, int>
  */
-function mmosPollUntilSettled(array $fixture, int $maxPolls = 10): int
+function mmosPollUntilCaughtUp(array $fixture, object $process, int $maxPolls = 10): array
 {
+    $perPoll = [];
+
     for ($poll = 1; $poll <= $maxPolls; $poll++) {
-        $before = $fixture['connection']->fresh()->last_checked_at?->toDateTimeString();
+        $handledBefore = count($process->handled);
 
         app()->call([new CheckConnectionMailbox($fixture['connection']->fresh()), 'handle']);
 
-        if ($fixture['connection']->fresh()->last_checked_at?->toDateTimeString() === $before) {
-            return $poll;
+        $perPoll[] = count($process->handled) - $handledBefore;
+
+        if ($fixture['connection']->fresh()->last_checked_at?->equalTo(CarbonImmutable::now())) {
+            break;
         }
     }
 
-    return $maxPolls;
+    return $perPoll;
 }
 
 test('more mail in one second than a run takes is all processed across polls', function (string $tieTime) {
@@ -291,7 +300,7 @@ test('more mail in one second than a run takes is all processed across polls', f
     $this->app->instance(MailboxReader::class, new SimulatedMailboxReader($mailbox));
     $process = mmosRecordingProcessor();
 
-    mmosPollUntilSettled($fixture);
+    mmosPollUntilCaughtUp($fixture, $process);
 
     $expected = array_map(fn (InboundMessage $message) => $message->messageId, $mailbox);
 
@@ -317,11 +326,80 @@ test('a large backlog spread over time is drained in order across polls', functi
     $this->app->instance(MailboxReader::class, new SimulatedMailboxReader($mailbox));
     $process = mmosRecordingProcessor();
 
-    $polls = mmosPollUntilSettled($fixture);
+    $perPoll = mmosPollUntilCaughtUp($fixture, $process);
 
     expect(array_values(array_unique($process->handled)))->toEqualCanonicalizing(
         array_map(fn (InboundMessage $message) => $message->messageId, $mailbox),
-    )->and($polls)->toBeLessThanOrEqual(5);
+    )->and(count($perPoll))->toBeLessThanOrEqual(5);
+});
+
+test('a second holding several runs of mail drains over several runs, a batch at a time, skipping nothing', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
+
+    $fixture = mmosMailboxFixture();
+    $fixture['connection']->update(['last_checked_at' => CarbonImmutable::parse('2026-03-01 07:00:00')]);
+
+    $mailbox = [];
+
+    foreach (range(1, CheckConnectionMailbox::MESSAGES_PER_RUN * 2 + 50) as $i) {
+        $mailbox[] = mmosMessageAt("tie-{$i}", '2026-03-01 07:00:00.500');
+    }
+
+    $mailbox[] = mmosMessageAt('later', '2026-03-01 07:00:05');
+
+    $this->app->instance(MailboxReader::class, new SimulatedMailboxReader($mailbox));
+    $process = mmosRecordingProcessor();
+
+    $perPoll = mmosPollUntilCaughtUp($fixture, $process);
+
+    // 100 from the first poll, then the checkpointed drain: 100, then the last 50, then the later mail.
+    expect($perPoll)->toBe([100, 100, 50, 1])
+        ->and($process->handled)->toHaveCount(251)
+        ->and(array_values(array_unique($process->handled)))->toEqualCanonicalizing(
+            array_map(fn (InboundMessage $message) => $message->messageId, $mailbox),
+        )
+        ->and(Cache::has('mailbox-boundary:'.$fixture['connection']->id.':'.CarbonImmutable::parse('2026-03-01 07:00:00')->getTimestamp()))->toBeFalse();
+});
+
+test('a drain interrupted before its checkpoint is saved redoes only that batch', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
+
+    $fixture = mmosMailboxFixture();
+    $fixture['connection']->update(['last_checked_at' => CarbonImmutable::parse('2026-03-01 07:00:00')]);
+
+    $mailbox = [];
+
+    foreach (range(1, CheckConnectionMailbox::MESSAGES_PER_RUN * 2 + 50) as $i) {
+        $mailbox[] = mmosMessageAt("tie-{$i}", '2026-03-01 07:00:00');
+    }
+
+    $this->app->instance(MailboxReader::class, new SimulatedMailboxReader($mailbox));
+    $process = mmosRecordingProcessor();
+
+    // First poll checkpoints the first 100. The second dies part-way, as a worker timeout would.
+    app()->call([new CheckConnectionMailbox($fixture['connection']->fresh()), 'handle']);
+
+    $failing = new class(app(SuppressionList::class), app(SendFailureClassifier::class)) extends ProcessInboundMessage
+    {
+        public int $calls = 0;
+
+        public function handle(MailerConnection $connection, InboundMessage $message): void
+        {
+            if (++$this->calls === 40) {
+                throw new RuntimeException('Worker timed out.');
+            }
+        }
+    };
+
+    expect(fn () => app()->call([new CheckConnectionMailbox($fixture['connection']->fresh()), 'handle'], ['process' => $failing]))
+        ->toThrow(RuntimeException::class, 'Worker timed out.');
+
+    $perPoll = mmosPollUntilCaughtUp($fixture, $process);
+
+    expect($perPoll)->toBe([100, 50, 0])
+        ->and(array_values(array_unique($process->handled)))->toEqualCanonicalizing(
+            array_map(fn (InboundMessage $message) => $message->messageId, $mailbox),
+        );
 });
 
 test('a truncated batch without received times leaves the cursor for the next run', function () {

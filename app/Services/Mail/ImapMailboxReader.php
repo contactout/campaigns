@@ -24,12 +24,14 @@ class ImapMailboxReader implements MailboxReader
     /**
      * Fetch inbox messages received after the given time, or unseen messages.
      *
-     * Everything from `$since` onwards is always returned, and `$limit` and
-     * `$before` are not applied: IMAP `SINCE` only has day precision, so a
-     * truncated batch could not be resumed part-way through a day without
-     * tracking UIDs.
+     * Everything from `$since` onwards is always returned, and `$limit`,
+     * `$before` and `$skip` are not applied: IMAP `SINCE` only has day
+     * precision, so a truncated batch could not be resumed part-way through
+     * a day without tracking UIDs.
+     *
+     * @param  array<int, string>  $skip
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
     {
         $settings = $connection->smtp_setting ?? [];
         $host = trim((string) ($settings['imap_host'] ?? ''));

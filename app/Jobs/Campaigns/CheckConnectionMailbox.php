@@ -9,6 +9,7 @@ use App\Models\MailerConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Polls a single mailer connection's mailbox for replies and bounces.
@@ -22,6 +23,12 @@ class CheckConnectionMailbox implements ShouldQueue
      * over several polls instead of outlasting the worker timeout.
      */
     public const int MESSAGES_PER_RUN = 100;
+
+    /**
+     * How long the ids processed in a crowded boundary second are kept. Losing
+     * them only means re-reading that second, since processing is idempotent.
+     */
+    private const int BOUNDARY_TTL_SECONDS = 86_400;
 
     /**
      * Create a new job instance.
@@ -43,8 +50,11 @@ class CheckConnectionMailbox implements ShouldQueue
      * - A truncated batch moves it to the second of the newest message
      *   processed, so the next run re-reads that second and carries on.
      * - A truncated batch that never left the cursor's own second (more mail
-     *   in one second than one run takes) drains that second without a limit
-     *   and moves past it, so ties are neither skipped nor re-read forever.
+     *   in one second than one run takes) starts draining that second: the
+     *   ids processed in it are checkpointed in the cache, each later run
+     *   processes at most a batch of the rest, and the cursor only moves past
+     *   the second once it is empty. Ties are neither skipped nor re-read
+     *   forever, and no run does more than a batch of work.
      *
      * A failed fetch throws and leaves the cursor where it was. Processing is
      * idempotent, so re-reading overlap is safe.
@@ -54,6 +64,12 @@ class CheckConnectionMailbox implements ShouldQueue
         $connection = $this->mailerConnection;
         $startedAt = now()->toImmutable()->startOfSecond();
         $since = ($connection->last_checked_at ?? $connection->created_at)?->toImmutable()->startOfSecond();
+
+        if ($since !== null && Cache::has($this->boundaryKey($since))) {
+            $this->drainBoundary($reader, $process, $since);
+
+            return;
+        }
 
         $batch = $reader->fetch($connection, $since, self::MESSAGES_PER_RUN);
         $this->process($process, $batch->messages);
@@ -76,11 +92,52 @@ class CheckConnectionMailbox implements ShouldQueue
             return;
         }
 
-        $boundaryEnd = $since->addSecond();
-        $boundary = $reader->fetch($connection, $since, null, $boundaryEnd);
-        $this->process($process, $boundary->messages);
+        $this->checkpointBoundary($since, $batch->messages);
+    }
 
-        $this->advance($boundaryEnd);
+    /**
+     * Process the next batch of a crowded boundary second, moving past the
+     * second once nothing in it is left.
+     */
+    private function drainBoundary(MailboxReader $reader, ProcessInboundMessage $process, CarbonImmutable $since): void
+    {
+        /** @var array<int, string> $seen */
+        $seen = Cache::get($this->boundaryKey($since), []);
+
+        $batch = $reader->fetch($this->mailerConnection, $since, self::MESSAGES_PER_RUN, $since->addSecond(), $seen);
+        $this->process($process, $batch->messages);
+
+        if ($batch->hasMore) {
+            $this->checkpointBoundary($since, $batch->messages, $seen);
+
+            return;
+        }
+
+        Cache::forget($this->boundaryKey($since));
+        $this->advance($since->addSecond());
+    }
+
+    /**
+     * Remember which messages of the boundary second have been processed.
+     *
+     * @param  array<int, InboundMessage>  $messages
+     * @param  array<int, string>  $seen
+     */
+    private function checkpointBoundary(CarbonImmutable $since, array $messages, array $seen = []): void
+    {
+        foreach ($messages as $message) {
+            $seen[] = $message->resumeId();
+        }
+
+        Cache::put($this->boundaryKey($since), array_values(array_unique($seen)), self::BOUNDARY_TTL_SECONDS);
+    }
+
+    /**
+     * Get the cache key for a connection's boundary-second checkpoint.
+     */
+    private function boundaryKey(CarbonImmutable $since): string
+    {
+        return 'mailbox-boundary:'.$this->mailerConnection->id.':'.$since->getTimestamp();
     }
 
     /**

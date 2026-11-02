@@ -23,20 +23,23 @@ class SimulatedMailboxReader implements MailboxReader
     public function __construct(public array $mailbox) {}
 
     /**
-     * Return the oldest messages in the window, keeping ties in mailbox order.
+     * Return the oldest unskipped messages in the window, keeping ties in mailbox order.
+     *
+     * @param  array<int, string>  $skip
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
     {
         $window = array_values(array_filter(
             $this->mailbox,
             fn (InboundMessage $message): bool => $message->receivedAt !== null
+                && ! in_array($message->resumeId(), $skip, true)
                 && ($since === null || $message->receivedAt->greaterThanOrEqualTo($since))
                 && ($before === null || $message->receivedAt->lessThan($before)),
         ));
 
         usort($window, fn (InboundMessage $a, InboundMessage $b): int => $a->receivedAt <=> $b->receivedAt);
 
-        if ($limit === null || count($window) <= $limit) {
+        if (count($window) <= $limit) {
             return new MailboxBatch($window);
         }
 

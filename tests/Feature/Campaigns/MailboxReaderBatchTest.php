@@ -37,10 +37,11 @@ function mrpOAuthConnection(MailerType $type): MailerConnection
  *
  * @param  array<int, array<int, string>>  $pages
  * @param  array<int, string>  $vanishedIds  Ids deleted after they were listed.
+ * @param  array<string, string>  $receivedAt  Received time per id; 07:00:00 when not given.
  */
-function mrpGmailApi(array $pages, ?string $failingId = null, bool $failList = false, array $vanishedIds = []): GmailApi
+function mrpGmailApi(array $pages, ?string $failingId = null, bool $failList = false, array $vanishedIds = [], array $receivedAt = []): GmailApi
 {
-    return new class($pages, $failingId, $failList, $vanishedIds) implements GmailApi
+    return new class($pages, $failingId, $failList, $vanishedIds, $receivedAt) implements GmailApi
     {
         /**
          * @var array<int, string|null>
@@ -60,8 +61,9 @@ function mrpGmailApi(array $pages, ?string $failingId = null, bool $failList = f
         /**
          * @param  array<int, array<int, string>>  $pages
          * @param  array<int, string>  $vanishedIds
+         * @param  array<string, string>  $receivedAt
          */
-        public function __construct(private array $pages, private ?string $failingId, private bool $failList, private array $vanishedIds) {}
+        public function __construct(private array $pages, private ?string $failingId, private bool $failList, private array $vanishedIds, private array $receivedAt) {}
 
         public function sendRaw(string $accessToken, string $raw, ?string $threadId = null): array
         {
@@ -108,7 +110,7 @@ function mrpGmailApi(array $pages, ?string $failingId = null, bool $failList = f
                 'fromEmail' => 'someone@example.com',
                 'subject' => '',
                 'text' => null,
-                'receivedAt' => CarbonImmutable::parse('2026-03-01 07:00:00'),
+                'receivedAt' => CarbonImmutable::parse($this->receivedAt[$messageId] ?? '2026-03-01 07:00:00'),
             ];
         }
     };
@@ -128,7 +130,7 @@ test('gmail mailbox reader lists every page and fetches all messages when they f
     $api = mrpGmailApi([['d', 'c'], ['b'], ['a']]);
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
 
-    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::now()->subHour(), 10);
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 06:00:00'), 10);
 
     expect(mrpIds($batch))->toBe([
         '<a@mail.gmail.com>',
@@ -144,7 +146,7 @@ test('gmail mailbox reader fetches only the oldest messages up to the limit', fu
     $api = mrpGmailApi([['e', 'd', 'c'], ['b', 'a']]);
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
 
-    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::now()->subHour(), 2);
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 06:00:00'), 2);
 
     expect(mrpIds($batch))->toBe(['<a@mail.gmail.com>', '<b@mail.gmail.com>'])
         ->and($batch->hasMore)->toBeTrue()
@@ -154,36 +156,68 @@ test('gmail mailbox reader fetches only the oldest messages up to the limit', fu
 test('gmail mailbox reader skips a message deleted after it was listed', function () {
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), mrpGmailApi([['c', 'b', 'a']], vanishedIds: ['b']));
 
-    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::now()->subHour(), 10);
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 06:00:00'), 10);
 
     expect(mrpIds($batch))->toBe(['<a@mail.gmail.com>', '<c@mail.gmail.com>'])
         ->and($batch->hasMore)->toBeFalse();
 });
 
-test('gmail mailbox reader widens the window to whole seconds so nothing at its edges is missed', function () {
-    $api = mrpGmailApi([['c', 'b', 'a']]);
+test('gmail mailbox reader widens its search to whole seconds and drops what falls outside the window', function () {
+    $api = mrpGmailApi([['after', 'in', 'early']], receivedAt: [
+        'early' => '2026-03-01 06:59:59.500',
+        'in' => '2026-03-01 07:00:00.250',
+        'after' => '2026-03-01 07:00:01',
+    ]);
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
     $since = CarbonImmutable::parse('2026-03-01 07:00:00');
 
-    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), $since, null, $since->addSecond());
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), $since, 10, $since->addSecond());
 
     expect($api->queries)->toBe([
         'after:'.($since->getTimestamp() - 1).' -from:me before:'.($since->getTimestamp() + 1),
-    ])->and(mrpIds($batch))->toHaveCount(3)
+    ])->and(mrpIds($batch))->toBe(['<in@mail.gmail.com>'])
+        ->and($batch->messages[0]->mailboxId)->toBe('in')
         ->and($batch->hasMore)->toBeFalse();
+});
+
+test('gmail mailbox reader does not let mail from before the cursor fill the batch', function () {
+    $early = array_map(fn (int $i) => "early-{$i}", range(1, 150));
+    $receivedAt = array_fill_keys($early, '2026-03-01 06:59:59.500') + [
+        'x' => '2026-03-01 07:00:10',
+        'y' => '2026-03-01 07:00:20',
+    ];
+
+    $api = mrpGmailApi([['y', 'x', ...array_reverse($early)]], receivedAt: $receivedAt);
+    $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
+
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 07:00:00'), 100);
+
+    expect(mrpIds($batch))->toBe(['<x@mail.gmail.com>', '<y@mail.gmail.com>'])
+        ->and($batch->hasMore)->toBeFalse();
+});
+
+test('gmail mailbox reader skips already processed ids without fetching them', function () {
+    $api = mrpGmailApi([['c', 'b', 'a']]);
+    $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
+
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 06:00:00'), 1, skip: ['a']);
+
+    expect(mrpIds($batch))->toBe(['<b@mail.gmail.com>'])
+        ->and($batch->hasMore)->toBeTrue()
+        ->and($api->fetchedIds)->toBe(['b']);
 });
 
 test('gmail mailbox reader throws instead of returning an empty mailbox when listing fails', function () {
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), mrpGmailApi([], failList: true));
 
-    expect(fn () => $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::now()->subHour(), 10))
+    expect(fn () => $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 06:00:00'), 10))
         ->toThrow(RuntimeException::class, 'Gmail message list failed');
 });
 
 test('gmail mailbox reader throws instead of skipping a message it could not fetch', function () {
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), mrpGmailApi([['c', 'b', 'a']], failingId: 'b'));
 
-    expect(fn () => $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::now()->subHour(), 10))
+    expect(fn () => $reader->fetch(mrpOAuthConnection(MailerType::Gmail), CarbonImmutable::parse('2026-03-01 06:00:00'), 10))
         ->toThrow(RuntimeException::class, 'Gmail message fetch failed');
 });
 
@@ -247,15 +281,15 @@ test('outlook mailbox reader stops at the limit and reports that more mail is wa
         ->and($requests)->toHaveCount(1);
 });
 
-test('outlook mailbox reader reads a bounded window without a limit', function () {
+test('outlook mailbox reader reads a bounded window and skips ids already processed while paging', function () {
     $requests = [];
     mrpFakeGraphPages($requests);
 
     $since = CarbonImmutable::parse('2026-03-01 07:00:00');
     $batch = (new OutlookMailboxReader(app(OAuthTokenManager::class)))
-        ->fetch(mrpOAuthConnection(MailerType::Outlook), $since, null, $since->addSecond());
+        ->fetch(mrpOAuthConnection(MailerType::Outlook), $since, 2, $since->addSecond(), ['<one@outlook.com>']);
 
-    expect(mrpIds($batch))->toHaveCount(3)
+    expect(mrpIds($batch))->toBe(['<two@outlook.com>', '<three@outlook.com>'])
         ->and($batch->hasMore)->toBeFalse()
         ->and($requests)->toHaveCount(2)
         ->and(urldecode($requests[0]))->toContain(
@@ -270,6 +304,6 @@ test('outlook mailbox reader throws instead of returning an empty mailbox when g
 
     $reader = new OutlookMailboxReader(app(OAuthTokenManager::class));
 
-    expect(fn () => $reader->fetch(mrpOAuthConnection(MailerType::Outlook), CarbonImmutable::now()->subHour(), 10))
+    expect(fn () => $reader->fetch(mrpOAuthConnection(MailerType::Outlook), CarbonImmutable::parse('2026-03-01 06:00:00'), 10))
         ->toThrow(MailerHttpException::class, 'Outlook mailbox read failed.');
 });

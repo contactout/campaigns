@@ -33,19 +33,22 @@ class GmailMailboxReader implements MailboxReader
      * step and would otherwise be recorded as the recipient's reply.
      *
      * Gmail search only has second precision and may treat `after:` as
-     * exclusive, so the window starts a second early and `before:` rounds up:
-     * a little overlap is returned, but nothing inside the window is missed.
+     * exclusive, so the search starts a second early and `before:` rounds up.
+     * The overlap is dropped once each message's received time is known, so
+     * it never takes a slot in the batch.
      *
      * Gmail lists newest first, so every page of ids is listed (ids are
-     * cheap) and only the oldest `$limit` messages are fetched, letting a
-     * backlog drain in order across polls. A message deleted after it was
-     * listed is skipped; any other API failure is thrown rather than returned
-     * as an empty mailbox, so the caller never moves its cursor past messages
-     * that were not fetched.
+     * cheap) and messages are fetched oldest first, skipping `$skip` ids
+     * before fetching, until `$limit` in-window messages are in hand. A
+     * message deleted after it was listed is skipped; any other API failure is
+     * thrown rather than returned as an empty mailbox, so the caller never
+     * moves its cursor past messages that were not fetched.
+     *
+     * @param  array<int, string>  $skip  Gmail message ids already processed.
      *
      * @throws RuntimeException When the token or Gmail API request fails.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
             return new MailboxBatch([]);
@@ -75,14 +78,24 @@ class GmailMailboxReader implements MailboxReader
             $pageToken = $page['nextPageToken'];
         } while ($pageToken !== null);
 
-        $hasMore = $limit !== null && count($ids) > $limit;
-        $oldest = array_reverse($hasMore ? array_slice($ids, -$limit) : $ids);
+        $skip = array_flip($skip);
         $inbound = [];
+        $hasMore = false;
 
-        foreach ($oldest as $id) {
+        foreach (array_reverse($ids) as $id) {
+            if (isset($skip[$id])) {
+                continue;
+            }
+
+            if (count($inbound) >= $limit) {
+                $hasMore = true;
+
+                break;
+            }
+
             $message = $this->gmail->getMessage($accessToken, $id);
 
-            if ($message === null) {
+            if ($message === null || ! $this->inWindow($message['receivedAt'], $since, $before)) {
                 continue;
             }
 
@@ -94,9 +107,25 @@ class GmailMailboxReader implements MailboxReader
                 subject: $message['subject'],
                 text: $message['text'],
                 receivedAt: $message['receivedAt'],
+                mailboxId: $id,
             );
         }
 
         return new MailboxBatch($inbound, $hasMore);
+    }
+
+    /**
+     * Determine whether a received time falls inside the requested window.
+     *
+     * A message without a received time is kept, since it cannot be placed.
+     */
+    private function inWindow(?CarbonInterface $receivedAt, ?CarbonInterface $since, ?CarbonInterface $before): bool
+    {
+        if ($receivedAt === null) {
+            return true;
+        }
+
+        return ($since === null || $receivedAt->greaterThanOrEqualTo($since))
+            && ($before === null || $receivedAt->lessThan($before));
     }
 }

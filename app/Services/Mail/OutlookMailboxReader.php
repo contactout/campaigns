@@ -27,15 +27,17 @@ class OutlookMailboxReader implements MailboxReader
     /**
      * Fetch inbox messages received after the given time, or the latest messages.
      *
-     * Messages are read oldest first, following `@odata.nextLink` until
-     * `$limit` messages are in hand, or every page when there is no limit. Token or Graph failures are thrown rather
+     * Messages are read oldest first, following `@odata.nextLink` and
+     * skipping `$skip` ids, until `$limit` messages are in hand. Token or Graph failures are thrown rather
      * than returned as an empty mailbox, so the caller never moves its cursor
      * past messages that were not fetched.
+     *
+     * @param  array<int, string>  $skip  Internet message ids already processed.
      *
      * @throws MailerHttpException When a Graph request fails.
      * @throws RuntimeException When the access token cannot be obtained.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
     {
         if ($connection->mailer_type !== MailerType::Outlook) {
             return new MailboxBatch([]);
@@ -50,7 +52,7 @@ class OutlookMailboxReader implements MailboxReader
         $accessToken = $this->tokens->accessToken($connection);
 
         $query = [
-            '$top' => min($limit ?? 100, 100),
+            '$top' => min($limit, 100),
             '$select' => 'internetMessageId,conversationId,subject,from,bodyPreview,body,receivedDateTime,internetMessageHeaders',
             '$orderby' => 'receivedDateTime asc',
         ];
@@ -70,6 +72,7 @@ class OutlookMailboxReader implements MailboxReader
         }
 
         $url = 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages';
+        $skip = array_flip($skip);
         $inbound = [];
 
         do {
@@ -84,8 +87,14 @@ class OutlookMailboxReader implements MailboxReader
             $values = $payload['value'] ?? [];
 
             foreach (is_array($values) ? $values : [] as $message) {
-                if (is_array($message)) {
-                    $inbound[] = $this->toInboundMessage($message);
+                if (! is_array($message)) {
+                    continue;
+                }
+
+                $inboundMessage = $this->toInboundMessage($message);
+
+                if (! isset($skip[$inboundMessage->resumeId()])) {
+                    $inbound[] = $inboundMessage;
                 }
             }
 
@@ -94,11 +103,7 @@ class OutlookMailboxReader implements MailboxReader
             $next = $payload['@odata.nextLink'] ?? null;
             $url = is_string($next) && $next !== '' ? $next : null;
             $query = null;
-        } while ($url !== null && ($limit === null || count($inbound) < $limit));
-
-        if ($limit === null) {
-            return new MailboxBatch($inbound);
-        }
+        } while ($url !== null && count($inbound) < $limit);
 
         return new MailboxBatch(
             array_slice($inbound, 0, $limit),
