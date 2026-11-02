@@ -2,6 +2,7 @@
 
 namespace App\Services\Mail;
 
+use App\Actions\Campaigns\DeleteCampaignStep;
 use App\Data\CampaignSettings;
 use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
@@ -10,12 +11,25 @@ use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Recipient;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Works out when campaign steps should send and materialises the queue rows.
  */
 class CampaignStepScheduler
 {
+    /**
+     * Attempts for the next-step transaction before it gives up.
+     *
+     * On SQLite `lockForUpdate()` is a no-op, so two workers can both read in
+     * a deferred transaction and one then fails to upgrade to a writer with
+     * "database is locked". Laravel retries the whole closure, reads included,
+     * when it detects a concurrency error. Without retries the exception would
+     * surface after the email was already marked Sent, and the recipient
+     * would never advance.
+     */
+    public const int TRANSACTION_ATTEMPTS = 5;
+
     public function __construct(private readonly SendingWindow $sendingWindow) {}
 
     /**
@@ -136,37 +150,52 @@ class CampaignStepScheduler
      *
      * When no later step exists the recipient is marked completed and its
      * `last_delivered_at` timestamp is refreshed.
+     *
+     * Deleting a step locks the campaign row while it moves the recipients
+     * waiting on that step along (see {@see DeleteCampaignStep}). Taking the
+     * same lock here means the next step is read either before a deletion or
+     * after it has renumbered the sequence, never in between: an email queued
+     * for a step that is about to go is always seen and moved on, rather than
+     * cascaded away with the step. The step is re-read under the lock for the
+     * same reason. If it is gone, the deletion has already moved this
+     * recipient on.
      */
     public function scheduleNextStep(CampaignEmail $email): void
     {
-        $campaign = $email->campaign;
-        $currentStep = $email->step;
+        DB::transaction(function () use ($email): void {
+            $campaign = Campaign::query()->lockForUpdate()->find($email->campaign_id);
+            $currentStep = CampaignStep::query()->find($email->campaign_step_id);
 
-        $nextStep = $campaign->steps()
-            ->where('sequence', '>', $currentStep->sequence)
-            ->orderBy('sequence')
-            ->first();
+            if ($campaign === null || $currentStep === null) {
+                return;
+            }
 
-        if ($nextStep === null) {
-            $recipient = $email->recipient;
-            $recipient->status = RecipientStatus::Completed;
-            $recipient->last_delivered_at = now();
-            $recipient->save();
+            $nextStep = $campaign->steps()
+                ->where('sequence', '>', $currentStep->sequence)
+                ->orderBy('sequence')
+                ->first();
 
-            return;
-        }
+            if ($nextStep === null) {
+                $recipient = $email->recipient;
+                $recipient->status = RecipientStatus::Completed;
+                $recipient->last_delivered_at = now();
+                $recipient->save();
 
-        CampaignEmail::query()->createOrFirst(
-            [
-                'recipient_id' => $email->recipient_id,
-                'campaign_step_id' => $nextStep->id,
-            ],
-            [
-                'campaign_id' => $campaign->id,
-                'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
-                'status' => EmailStatus::Scheduled,
-                'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $email->recipient),
-            ],
-        );
+                return;
+            }
+
+            CampaignEmail::query()->createOrFirst(
+                [
+                    'recipient_id' => $email->recipient_id,
+                    'campaign_step_id' => $nextStep->id,
+                ],
+                [
+                    'campaign_id' => $campaign->id,
+                    'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
+                    'status' => EmailStatus::Scheduled,
+                    'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $email->recipient),
+                ],
+            );
+        }, self::TRANSACTION_ATTEMPTS);
     }
 }
