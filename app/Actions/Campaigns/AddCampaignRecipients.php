@@ -14,6 +14,11 @@ use Illuminate\Support\Facades\DB;
 class AddCampaignRecipients
 {
     /**
+     * Contacts checked and inserted per query, keeping bindings under driver limits.
+     */
+    private const int CHUNK = 500;
+
+    /**
      * Create a new action instance.
      */
     public function __construct(private readonly SuppressionList $suppressionList) {}
@@ -47,34 +52,39 @@ class AddCampaignRecipients
                 return 0;
             }
 
-            $existingIds = $campaign->recipients()
-                ->whereIn('contact_id', $candidateIds)
-                ->pluck('contact_id')
-                ->map(intval(...))
-                ->all();
-
-            $newIds = array_values(array_diff($candidateIds, $existingIds));
-            $newIds = array_values(array_diff($newIds, $this->suppressionList->suppressedContactIds($campaign->team_id, $newIds)));
-
-            if ($newIds === []) {
-                return 0;
-            }
-
             $source = $contactIds !== [] ? 'manual' : 'list';
             $now = now();
+            $created = 0;
 
-            Recipient::query()->insert(array_map(fn (int $contactId): array => [
-                'campaign_id' => $campaign->id,
-                'contact_id' => $contactId,
-                'timezone' => $campaign->timezone,
-                'status' => RecipientStatus::Active->value,
-                'source' => $source,
-                'sequence' => 0,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ], $newIds));
+            foreach (array_chunk($candidateIds, self::CHUNK) as $chunk) {
+                $existingIds = $campaign->recipients()
+                    ->whereIn('contact_id', $chunk)
+                    ->pluck('contact_id')
+                    ->map(intval(...))
+                    ->all();
 
-            return count($newIds);
+                $newIds = array_values(array_diff($chunk, $existingIds));
+                $newIds = array_values(array_diff($newIds, $this->suppressionList->suppressedContactIds($campaign->team_id, $newIds)));
+
+                if ($newIds === []) {
+                    continue;
+                }
+
+                Recipient::query()->insert(array_map(fn (int $contactId): array => [
+                    'campaign_id' => $campaign->id,
+                    'contact_id' => $contactId,
+                    'timezone' => $campaign->timezone,
+                    'status' => RecipientStatus::Active->value,
+                    'source' => $source,
+                    'sequence' => 0,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ], $newIds));
+
+                $created += count($newIds);
+            }
+
+            return $created;
         });
 
         if ($created > 0 && $campaign->status === CampaignStatus::Active) {
