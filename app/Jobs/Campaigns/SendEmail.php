@@ -231,7 +231,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $subject = $renderer->render($email->step->subject, $email->recipient);
+        $subject = $renderer->renderText($email->step->subject, $email->recipient);
         $html = $renderer->render($email->step->body, $email->recipient, $connection);
         $html = $bodyBuilder->build($email, $html);
 

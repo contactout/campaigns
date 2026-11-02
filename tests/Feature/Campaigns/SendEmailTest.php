@@ -201,6 +201,21 @@ test('fills the signature tag from the sending connection', function () {
         ->and($fake->sent[0]['html'])->toStartWith('<p>Hello</p><p>Alex from Sales</p>');
 });
 
+test('escapes contact values in the body but not in the subject', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['contact']->update(['name' => 'Tom <Ops> & Co']);
+    $fixture['firstStep']->update(['body' => '<p>Hi {{name}}</p>']);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent)->toHaveCount(1)
+        ->and($fake->sent[0]['subject'])->toBe('Hello Tom <Ops> & Co')
+        ->and($fake->sent[0]['html'])->toStartWith('<p>Hi Tom &lt;Ops&gt; &amp; Co</p>');
+});
+
 test('marks the recipient completed after the last step', function () {
     $fake = new FakeCampaignMailer;
     $this->app->instance(CampaignMailer::class, $fake);

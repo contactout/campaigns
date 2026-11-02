@@ -14,9 +14,14 @@ use App\Models\Recipient;
  * case-insensitive and tolerant of optional surrounding whitespace; unknown
  * placeholders resolve to an empty string.
  *
+ * Contact values are untrusted text, often from a CSV import, so they are
+ * HTML-escaped when rendered into a body and substituted as-is only into
+ * plain text such as the subject line.
+ *
  * When rendered for a connection, `signature` resolves to that connection's
- * signature HTML (or the team default). A paragraph holding only the tag is
- * replaced whole, so the signature's own paragraphs are not nested in it.
+ * signature HTML (or the team default), which is trusted markup and inserted
+ * unescaped. A paragraph holding only the tag is replaced whole, so the
+ * signature's own paragraphs are not nested in it.
  */
 class PlaceholderRenderer
 {
@@ -29,14 +34,10 @@ class PlaceholderRenderer
      */
     public function render(string $html, Recipient $recipient, ?MailerConnection $connection = null): string
     {
-        $values = $this->valuesFor($recipient);
+        $values = array_map(e(...), $this->valuesFor($recipient));
 
         if ($connection === null) {
-            return (string) preg_replace_callback(
-                '/'.self::PLACEHOLDER.'/',
-                static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
-                $html,
-            );
+            return $this->replace($html, $values);
         }
 
         $values['signature'] = (string) $connection->resolveSignature()?->body;
@@ -47,6 +48,28 @@ class PlaceholderRenderer
                 ? $values[strtolower($matches[1])] ?? ''
                 : $values['signature'],
             $html,
+        );
+    }
+
+    /**
+     * Render plain text, such as a subject line, for a single recipient.
+     */
+    public function renderText(string $text, Recipient $recipient): string
+    {
+        return $this->replace($text, $this->valuesFor($recipient));
+    }
+
+    /**
+     * Replace every placeholder in the content with its value.
+     *
+     * @param  array<string, string>  $values
+     */
+    private function replace(string $content, array $values): string
+    {
+        return (string) preg_replace_callback(
+            '/'.self::PLACEHOLDER.'/',
+            static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
+            $content,
         );
     }
 
