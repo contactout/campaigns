@@ -23,12 +23,24 @@ class DeleteCampaignStep
      * recipient whose next email was on the step would otherwise never be
      * scheduled again, so it is moved on to the following step instead.
      *
+     * An email already being sent for the step when it is deleted can still
+     * lose its sent history. Recipients are never stranded by it, because
+     * they are moved on to the following step here.
+     *
      * @throws ValidationException when emails have already gone out for the step.
      */
     public function handle(CampaignStep $step): void
     {
         DB::transaction(function () use ($step): void {
-            $campaign = $step->campaign;
+            // Workers queueing a recipient's next step take the same lock (see
+            // CampaignStepScheduler::scheduleNextStep()), so no email can be
+            // added to this step between collecting its waiting recipients
+            // and deleting it.
+            $campaign = Campaign::query()->lockForUpdate()->findOrFail($step->campaign_id);
+
+            // Another deletion may have renumbered the sequence while this one
+            // waited for the lock.
+            $step->refresh();
 
             $hasHistory = $step->emails()
                 ->whereNotIn('status', [EmailStatus::Pending, EmailStatus::Scheduled])

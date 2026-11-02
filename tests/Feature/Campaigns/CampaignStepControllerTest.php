@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Campaigns\DeleteCampaignStep;
 use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Enums\TeamRole;
@@ -10,6 +11,7 @@ use App\Models\Contact;
 use App\Models\Recipient;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Mail\CampaignStepScheduler;
 use Carbon\CarbonImmutable;
 
 /**
@@ -241,6 +243,48 @@ test('a step whose emails have gone out cannot be deleted', function () {
         'campaign_step_id' => $first->id,
         'recipient_id' => $recipient->id,
     ]);
+});
+
+test('a send that finishes after a later step is deleted queues the step after it', function () {
+    $campaign = Campaign::factory()->active()->create();
+    $first = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+    $second = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2]);
+    $third = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 3]);
+
+    $recipient = campaignStepRecipientWithEmail($campaign, $first, EmailStatus::Sent);
+
+    // The worker loaded the step-1 email before step 2 was deleted.
+    $email = CampaignEmail::query()->with(['campaign', 'step', 'recipient'])->where('recipient_id', $recipient->id)->sole();
+
+    app(DeleteCampaignStep::class)->handle($second);
+
+    app(CampaignStepScheduler::class)->scheduleNextStep($email);
+
+    $next = CampaignEmail::query()->where('recipient_id', $recipient->id)->where('campaign_step_id', $third->id)->sole();
+
+    expect($next->status)->toBe(EmailStatus::Scheduled)
+        ->and($recipient->refresh()->status)->toBe(RecipientStatus::Active);
+});
+
+test('a send that finishes for a deleted step leaves the recipient on the following step', function () {
+    $campaign = Campaign::factory()->active()->create();
+    CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+    $second = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2]);
+    $third = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 3]);
+
+    $recipient = campaignStepRecipientWithEmail($campaign, $second, EmailStatus::Scheduled);
+
+    // The worker loaded the step-2 email and was mid-send when step 2 was
+    // deleted. The deletion moves the recipient on to step 3, and step 3 is
+    // renumbered to the sequence step 2 had.
+    $email = CampaignEmail::query()->with(['campaign', 'step', 'recipient'])->where('recipient_id', $recipient->id)->sole();
+
+    app(DeleteCampaignStep::class)->handle($second);
+
+    app(CampaignStepScheduler::class)->scheduleNextStep($email);
+
+    expect($recipient->refresh()->status)->toBe(RecipientStatus::Active)
+        ->and(CampaignEmail::query()->where('recipient_id', $recipient->id)->pluck('campaign_step_id')->all())->toBe([$third->id]);
 });
 
 test('members can reorder campaign steps', function () {
