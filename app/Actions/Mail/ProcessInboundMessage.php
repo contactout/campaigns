@@ -112,9 +112,16 @@ class ProcessInboundMessage
 
     /**
      * Mark the replied email, recipient and contact as replied.
+     *
+     * An email already marked replied is left alone: polls re-read a little
+     * overlap, and reading the same reply again must not move the timestamps.
      */
     private function markReplied(CampaignEmail $email): void
     {
+        if ($email->status === EmailStatus::Replied) {
+            return;
+        }
+
         $now = now();
 
         $email->status = EmailStatus::Replied;

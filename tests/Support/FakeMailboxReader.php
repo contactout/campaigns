@@ -4,6 +4,7 @@ namespace Tests\Support;
 
 use App\Contracts\Mail\MailboxReader;
 use App\Data\InboundMessage;
+use App\Data\MailboxBatch;
 use App\Models\MailerConnection;
 use Carbon\CarbonInterface;
 
@@ -18,14 +19,15 @@ class FakeMailboxReader implements MailboxReader
     public array $messages = [];
 
     /**
-     * @var array<int, array{connection: MailerConnection, since: CarbonInterface|null}>
+     * @var array<int, array{connection: MailerConnection, since: CarbonInterface|null, limit: int, before: CarbonInterface|null, skip: array<int, string>}>
      */
     public array $fetched = [];
 
     /**
      * @param  array<int, InboundMessage>  $messages
+     * @param  bool  $hasMore  Whether to report the batch as truncated.
      */
-    public function __construct(array $messages = [])
+    public function __construct(array $messages = [], public bool $hasMore = false)
     {
         $this->messages = $messages;
     }
@@ -33,12 +35,12 @@ class FakeMailboxReader implements MailboxReader
     /**
      * Record the call and return the queued messages.
      *
-     * @return array<int, InboundMessage>
+     * @param  array<int, string>  $skip
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
     {
-        $this->fetched[] = ['connection' => $connection, 'since' => $since];
+        $this->fetched[] = ['connection' => $connection, 'since' => $since, 'limit' => $limit, 'before' => $before, 'skip' => $skip];
 
-        return $this->messages;
+        return new MailboxBatch($this->messages, $this->hasMore);
     }
 }

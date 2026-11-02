@@ -4,6 +4,7 @@ namespace App\Services\Mail;
 
 use App\Contracts\Mail\MailboxReader;
 use App\Data\InboundMessage;
+use App\Data\MailboxBatch;
 use App\Models\MailerConnection;
 use Carbon\CarbonInterface;
 use Webklex\PHPIMAP\Address;
@@ -23,15 +24,20 @@ class ImapMailboxReader implements MailboxReader
     /**
      * Fetch inbox messages received after the given time, or unseen messages.
      *
-     * @return array<int, InboundMessage>
+     * Everything from `$since` onwards is always returned, and `$limit`,
+     * `$before` and `$skip` are not applied: IMAP `SINCE` only has day
+     * precision, so a truncated batch could not be resumed part-way through
+     * a day without tracking UIDs.
+     *
+     * @param  array<int, string>  $skip
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit, ?CarbonInterface $before = null, array $skip = []): MailboxBatch
     {
         $settings = $connection->smtp_setting ?? [];
         $host = trim((string) ($settings['imap_host'] ?? ''));
 
         if ($host === '') {
-            return [];
+            return new MailboxBatch([]);
         }
 
         $client = new Client(Config::make([
@@ -52,7 +58,7 @@ class ImapMailboxReader implements MailboxReader
         $folder = $client->connect()->getFolder('INBOX');
 
         if ($folder === null) {
-            return [];
+            return new MailboxBatch([]);
         }
 
         $query = $folder->query();
@@ -71,7 +77,7 @@ class ImapMailboxReader implements MailboxReader
             $inbound[] = $this->toInboundMessage($message);
         }
 
-        return $inbound;
+        return new MailboxBatch($inbound);
     }
 
     /**

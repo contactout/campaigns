@@ -3,7 +3,9 @@
 namespace App\Services\Mail;
 
 use App\Contracts\Mail\GmailApi;
+use Carbon\CarbonImmutable;
 use Google\Client as GoogleClient;
+use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use RuntimeException;
@@ -61,17 +63,23 @@ class GoogleGmailApi implements GmailApi
     }
 
     /**
-     * List message ids matching the given query.
+     * List one page of message ids matching the given query.
      *
-     * @return array<int, string>
+     * @return array{ids: array<int, string>, nextPageToken: string|null}
      */
-    public function listMessageIds(string $accessToken, string $query, int $maxResults = 50): array
+    public function listMessageIds(string $accessToken, string $query, ?string $pageToken = null, int $maxResults = 100): array
     {
+        $params = [
+            'q' => $query,
+            'maxResults' => $maxResults,
+        ];
+
+        if ($pageToken !== null && $pageToken !== '') {
+            $params['pageToken'] = $pageToken;
+        }
+
         try {
-            $list = $this->gmail($accessToken)->users_messages->listUsersMessages('me', [
-                'q' => $query,
-                'maxResults' => $maxResults,
-            ]);
+            $list = $this->gmail($accessToken)->users_messages->listUsersMessages('me', $params);
         } catch (Throwable $exception) {
             throw new RuntimeException('Gmail message list failed: '.$exception->getMessage(), 0, $exception);
         }
@@ -86,20 +94,31 @@ class GoogleGmailApi implements GmailApi
             }
         }
 
-        return $ids;
+        $nextPageToken = (string) $list->getNextPageToken();
+
+        return [
+            'ids' => $ids,
+            'nextPageToken' => $nextPageToken !== '' ? $nextPageToken : null,
+        ];
     }
 
     /**
-     * Fetch headers and body text for a single message.
+     * Fetch headers, body text and received time for a single message.
      *
-     * @return array{messageId: string, inReplyTo: string|null, references: array<int, string>, fromEmail: string|null, subject: string, text: string|null}
+     * @return array{messageId: string, inReplyTo: string|null, references: array<int, string>, fromEmail: string|null, subject: string, text: string|null, receivedAt: CarbonImmutable|null}|null
      */
-    public function getMessage(string $accessToken, string $messageId): array
+    public function getMessage(string $accessToken, string $messageId): ?array
     {
         try {
             $message = $this->gmail($accessToken)->users_messages->get('me', $messageId, [
                 'format' => 'full',
             ]);
+        } catch (GoogleServiceException $exception) {
+            if ($exception->getCode() === 404) {
+                return null;
+            }
+
+            throw new RuntimeException('Gmail message fetch failed: '.$exception->getMessage(), 0, $exception);
         } catch (Throwable $exception) {
             throw new RuntimeException('Gmail message fetch failed: '.$exception->getMessage(), 0, $exception);
         }
@@ -119,6 +138,7 @@ class GoogleGmailApi implements GmailApi
         }
 
         $inReplyTo = trim($headers['in-reply-to'] ?? '');
+        $internalDate = (string) $message->getInternalDate();
 
         return [
             'messageId' => $headers['message-id'] ?? $messageId,
@@ -128,6 +148,9 @@ class GoogleGmailApi implements GmailApi
             'subject' => $headers['subject'] ?? '',
             'text' => $this->extractText($message->getPayload()?->getBody()?->getData())
                 ?? $message->getSnippet(),
+            'receivedAt' => ctype_digit($internalDate)
+                ? CarbonImmutable::createFromTimestampMs((int) $internalDate)
+                : null,
         ];
     }
 
