@@ -3,6 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Actions\Campaigns\DeleteCampaignStep;
+use App\Actions\Campaigns\UpdateCampaign;
 use App\Data\CampaignSettings;
 use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
@@ -29,6 +30,12 @@ class CampaignStepScheduler
      * would never advance.
      */
     public const int TRANSACTION_ATTEMPTS = 5;
+
+    /**
+     * Recipients seeded per transaction, so the campaign row is not held
+     * locked for the whole enrolment.
+     */
+    private const int SEED_CHUNK_SIZE = 200;
 
     public function __construct(private readonly SendingWindow $sendingWindow) {}
 
@@ -107,6 +114,11 @@ class CampaignStepScheduler
      * index on (recipient_id, campaign_step_id) settles which insert wins and
      * `createOrFirst` returns the row that landed.
      *
+     * Each chunk of recipients is inserted under the campaign row lock that
+     * {@see UpdateCampaign} takes to switch connections, with the connection
+     * re-read there: a chunk inserted before a switch is moved by it, and one
+     * inserted after it lands on the new connection.
+     *
      * @return int The number of emails created.
      */
     public function scheduleFirstSteps(Campaign $campaign): int
@@ -123,23 +135,33 @@ class CampaignStepScheduler
 
         $created = 0;
 
-        foreach ($recipients as $recipient) {
-            $email = CampaignEmail::query()->createOrFirst(
-                [
-                    'recipient_id' => $recipient->id,
-                    'campaign_step_id' => $firstStep->id,
-                ],
-                [
-                    'campaign_id' => $campaign->id,
-                    'mailer_connection_id' => $campaign->mailer_connection_id,
-                    'status' => EmailStatus::Scheduled,
-                    'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $recipient),
-                ],
-            );
+        foreach ($recipients->chunk(self::SEED_CHUNK_SIZE) as $chunk) {
+            $created += DB::transaction(function () use ($campaign, $firstStep, $chunk): int {
+                $connectionId = Campaign::query()->lockForUpdate()->whereKey($campaign->id)->value('mailer_connection_id');
 
-            if ($email->wasRecentlyCreated) {
-                $created++;
-            }
+                $created = 0;
+
+                foreach ($chunk as $recipient) {
+                    $email = CampaignEmail::query()->createOrFirst(
+                        [
+                            'recipient_id' => $recipient->id,
+                            'campaign_step_id' => $firstStep->id,
+                        ],
+                        [
+                            'campaign_id' => $campaign->id,
+                            'mailer_connection_id' => $connectionId,
+                            'status' => EmailStatus::Scheduled,
+                            'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $recipient),
+                        ],
+                    );
+
+                    if ($email->wasRecentlyCreated) {
+                        $created++;
+                    }
+                }
+
+                return $created;
+            }, self::TRANSACTION_ATTEMPTS);
         }
 
         return $created;
@@ -159,6 +181,12 @@ class CampaignStepScheduler
      * cascaded away with the step. The step is re-read under the lock for the
      * same reason. If it is gone, the deletion has already moved this
      * recipient on.
+     *
+     * The next step sends through the campaign's current connection, read
+     * under the same lock {@see UpdateCampaign} takes to switch it, so an
+     * email sent just before a switch does not schedule its follow-up on the
+     * old connection. Only a campaign with no connection falls back to the
+     * one the email went out through.
      */
     public function scheduleNextStep(CampaignEmail $email): void
     {
@@ -191,7 +219,7 @@ class CampaignStepScheduler
                 ],
                 [
                     'campaign_id' => $campaign->id,
-                    'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
+                    'mailer_connection_id' => $campaign->mailer_connection_id ?? $email->mailer_connection_id,
                     'status' => EmailStatus::Scheduled,
                     'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $email->recipient),
                 ],

@@ -1042,6 +1042,73 @@ test('a threaded follow-up replies to the previous sent step', function () {
         ->and($sentFollowUp->thread_id)->toBe('thread-1');
 });
 
+test('records the connection that sent even when a switch repoints the row mid-send', function () {
+    $fixture = mmosSendEmailFixture();
+
+    $other = MailerConnection::factory()->forTeam($fixture['team'])->create();
+
+    $mailer = new class($fixture['email'], $other) implements CampaignMailer
+    {
+        public function __construct(
+            private readonly CampaignEmail $email,
+            private readonly MailerConnection $other,
+        ) {}
+
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+        {
+            // Stand in for the campaign switching connection while the
+            // provider call is in flight: the still-Scheduled row is moved.
+            CampaignEmail::query()->whereKey($this->email->id)->update(['mailer_connection_id' => $this->other->id]);
+
+            return new SendResult(messageId: '<sent@example.com>');
+        }
+    };
+
+    $this->app->instance(CampaignMailer::class, $mailer);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Sent)
+        ->and($email->mailer_connection_id)->toBe($fixture['connection']->id);
+});
+
+test('a threaded follow-up on a new connection keeps only the portable message id', function () {
+    $fake = new FakeCampaignMailer(new SendResult(
+        messageId: '<first@example.com>',
+        threadId: 'thread-1',
+        replyToId: 'provider-reply-1',
+    ));
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $followUp = mmosSendFollowUp($fixture, threaded: true);
+
+    mmosRunSendEmail($fixture['email']);
+
+    // The campaign moved to another mailbox, which cannot see the first
+    // email's provider thread or message.
+    $other = MailerConnection::factory()->forTeam($fixture['team'])->create([
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => null,
+        'sent_count' => 0,
+    ]);
+    $followUp->update(['mailer_connection_id' => $other->id]);
+
+    mmosRunSendEmail($followUp);
+
+    expect($fake->sent)->toHaveCount(2)
+        ->and($fake->sent[1]['connection']->id)->toBe($other->id);
+
+    $thread = $fake->sent[1]['thread'];
+
+    expect($thread)->toBeInstanceOf(EmailThread::class)
+        ->and($thread->messageId)->toBe('<first@example.com>')
+        ->and($thread->threadId)->toBeNull()
+        ->and($thread->replyToId)->toBeNull();
+});
+
 test('an unthreaded follow-up starts a new conversation', function () {
     $fake = new FakeCampaignMailer(new SendResult(
         messageId: '<first@example.com>',

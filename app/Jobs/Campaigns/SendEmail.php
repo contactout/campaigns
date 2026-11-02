@@ -259,7 +259,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $reservedIn = $connection->sending_limit_refreshed_at;
 
         try {
-            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
+            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email, $connection));
         } catch (Throwable $exception) {
             $this->releaseSend($connection, $reservedIn);
 
@@ -293,7 +293,15 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             $email->reply_to_id = $result->replyToId;
         }
 
-        $email->save();
+        // Switching the campaign's connection repoints unsent rows in bulk,
+        // and may have done so while the provider call was in flight. The
+        // model still holds the connection it was loaded with, so Eloquent
+        // would see no change and leave the column out of the update; it is
+        // written explicitly so the row records the mailbox that really sent.
+        DB::transaction(function () use ($email, $connection): void {
+            $email->newQuery()->whereKey($email->getKey())->update(['mailer_connection_id' => $connection->id]);
+            $email->save();
+        });
 
         $email->recipient->last_delivered_at = now();
         $email->recipient->save();
@@ -309,8 +317,17 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * Only threaded steps reply; the previous sent email for the recipient
      * supplies the message id and provider thread id. A threaded step with no
      * previous message, or one that carries no ids, starts a new conversation.
+     *
+     * Provider thread and message ids only exist in the mailbox that sent the
+     * previous email. After the campaign moves to another connection only the
+     * portable Message-ID is kept, so the follow-up still threads on headers
+     * instead of failing against a conversation the new mailbox cannot see.
+     * Gmail and SMTP set `In-Reply-To`/`References` from it. Outlook only
+     * threads by replying to a Graph message (Graph's JSON send accepts only
+     * custom `x-` headers), so an Outlook follow-up that moved mailboxes
+     * starts a new conversation.
      */
-    private function resolveThread(CampaignEmail $email): ?EmailThread
+    private function resolveThread(CampaignEmail $email, MailerConnection $connection): ?EmailThread
     {
         if (! $email->step->is_threaded) {
             return null;
@@ -333,10 +350,12 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return null;
         }
 
+        $sameMailbox = $previous->mailer_connection_id === $connection->id;
+
         $thread = new EmailThread(
             messageId: filled($previous->message_id) ? $previous->message_id : null,
-            threadId: filled($previous->thread_id) ? $previous->thread_id : null,
-            replyToId: filled($previous->reply_to_id) ? $previous->reply_to_id : null,
+            threadId: $sameMailbox && filled($previous->thread_id) ? $previous->thread_id : null,
+            replyToId: $sameMailbox && filled($previous->reply_to_id) ? $previous->reply_to_id : null,
         );
 
         return $thread->isThreaded() ? $thread : null;
