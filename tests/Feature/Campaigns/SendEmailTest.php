@@ -634,6 +634,146 @@ test('starts a new sending window when the utc day rolls over', function () {
         ->and($connection->sending_limit_refreshed_at->toDateTimeString())->toBe('2026-02-02 00:00:00');
 });
 
+/**
+ * Add a second due email for another recipient on the fixture's campaign.
+ *
+ * @param  array<string, mixed>  $fixture
+ */
+function mmosSecondEmail(array $fixture): CampaignEmail
+{
+    $contact = Contact::factory()->forTeam($fixture['team'])->create(['name' => 'Grace Hopper']);
+
+    ContactIdentity::factory()->create([
+        'team_id' => $fixture['team']->id,
+        'contact_id' => $contact->id,
+        'identity_type' => ContactIdentityType::Email,
+        'normalized_value' => 'grace@example.com',
+    ]);
+
+    $recipient = Recipient::factory()->create([
+        'campaign_id' => $fixture['campaign']->id,
+        'contact_id' => $contact->id,
+        'status' => RecipientStatus::Active,
+    ]);
+
+    return CampaignEmail::factory()->create([
+        'campaign_id' => $fixture['campaign']->id,
+        'campaign_step_id' => $fixture['firstStep']->id,
+        'recipient_id' => $recipient->id,
+        'mailer_connection_id' => $fixture['email']->mailer_connection_id,
+        'status' => EmailStatus::Scheduled,
+        'scheduled_at' => CarbonImmutable::now(),
+    ]);
+}
+
+test('does not let concurrent workers send past the connection sending limit', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['connection']->update([
+        'sending_limit' => 2,
+        'sent_count' => 1,
+        'sending_limit_refreshed_at' => CarbonImmutable::parse('2026-02-03 00:00:00'),
+    ]);
+
+    $other = mmosSecondEmail($fixture);
+
+    $mailer = new class($other) implements CampaignMailer
+    {
+        /**
+         * @var array<int, string>
+         */
+        public array $sent = [];
+
+        public function __construct(private readonly CampaignEmail $other) {}
+
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+        {
+            $this->sent[] = $to;
+
+            // Stand in for a second worker sending another email through the
+            // same connection while this send is still in flight. Both read
+            // the counter below the limit before either send completes.
+            if (count($this->sent) === 1) {
+                app()->call([new SendEmail($this->other), 'handle']);
+            }
+
+            return new SendResult;
+        }
+    };
+
+    $this->app->instance(CampaignMailer::class, $mailer);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($mailer->sent)->toBe(['ada@example.com'])
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
+        ->and($other->fresh()->status)->toBe(EmailStatus::Scheduled)
+        ->and($other->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-03 00:00:00')
+        ->and($fixture['connection']->fresh()->sent_count)->toBe(2);
+});
+
+test('releases the reserved send when the send fails', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $fake->exception = new TransportException('Connection timed out');
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['connection']->update([
+        'sending_limit' => 5,
+        'sent_count' => 3,
+        'sending_limit_refreshed_at' => CarbonImmutable::parse('2026-02-03 00:00:00'),
+    ]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Scheduled)
+        ->and($fixture['connection']->fresh()->sent_count)->toBe(3);
+});
+
+test('does not reset sends another worker counted in the new sending window', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-02-02 12:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    // Yesterday's window, already capped. Both emails fall back to the
+    // campaign's connection so each worker loads it exactly once.
+    $fixture['connection']->update([
+        'sending_limit' => 5,
+        'sent_count' => 5,
+        'sending_limit_refreshed_at' => CarbonImmutable::parse('2026-02-02 00:00:00'),
+    ]);
+    $fixture['email']->update(['mailer_connection_id' => null]);
+
+    $other = mmosSecondEmail($fixture);
+
+    // Once the first worker holds its stale copy of the connection, a second
+    // worker opens the new window and sends before the first one continues.
+    $interleaved = false;
+
+    MailerConnection::retrieved(function () use (&$interleaved, $other): void {
+        if ($interleaved) {
+            return;
+        }
+
+        $interleaved = true;
+        app()->call([new SendEmail($other), 'handle']);
+    });
+
+    mmosRunSendEmail($fixture['email']);
+
+    $connection = $fixture['connection']->fresh();
+
+    expect($fake->sent)->toHaveCount(2)
+        ->and($connection->sent_count)->toBe(2)
+        ->and($connection->sending_limit_refreshed_at->toDateTimeString())->toBe('2026-02-03 00:00:00');
+});
+
 test('opens a sending window on the first send for a connection', function () {
     $this->travelTo(CarbonImmutable::parse('2026-02-01 12:00:00'));
 
