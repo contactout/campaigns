@@ -284,7 +284,15 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             $email->reply_to_id = $result->replyToId;
         }
 
-        $email->save();
+        // Switching the campaign's connection repoints unsent rows in bulk,
+        // and may have done so while the provider call was in flight. The
+        // model still holds the connection it was loaded with, so Eloquent
+        // would see no change and leave the column out of the update; it is
+        // written explicitly so the row records the mailbox that really sent.
+        DB::transaction(function () use ($email, $connection): void {
+            $email->newQuery()->whereKey($email->getKey())->update(['mailer_connection_id' => $connection->id]);
+            $email->save();
+        });
 
         $email->recipient->last_delivered_at = now();
         $email->recipient->save();
@@ -305,6 +313,10 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * previous email. After the campaign moves to another connection only the
      * portable Message-ID is kept, so the follow-up still threads on headers
      * instead of failing against a conversation the new mailbox cannot see.
+     * Gmail and SMTP set `In-Reply-To`/`References` from it. Outlook only
+     * threads by replying to a Graph message (Graph's JSON send accepts only
+     * custom `x-` headers), so an Outlook follow-up that moved mailboxes
+     * starts a new conversation.
      */
     private function resolveThread(CampaignEmail $email, MailerConnection $connection): ?EmailThread
     {

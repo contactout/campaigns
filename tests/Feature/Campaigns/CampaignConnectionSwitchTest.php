@@ -152,3 +152,23 @@ test('the next step is scheduled on the campaign connection after a switch', fun
 
     expect($next->mailer_connection_id)->toBe($fixture['new']->id);
 });
+
+test('first steps are seeded on the connection the campaign has when they are inserted', function () {
+    $fixture = connectionSwitchFixture();
+
+    // The seeding run loaded the campaign before the switch committed.
+    $stale = $fixture['campaign']->fresh();
+
+    CampaignStep::factory()->forCampaign($stale)->create(['sequence' => 1, 'day' => 0]);
+    Recipient::factory()->count(2)->create([
+        'campaign_id' => $stale->id,
+        'status' => RecipientStatus::Active,
+    ]);
+
+    switchCampaignConnection($fixture, $fixture['new']->id);
+
+    expect($stale->mailer_connection_id)->toBe($fixture['old']->id)
+        ->and(app(CampaignStepScheduler::class)->scheduleFirstSteps($stale))->toBe(2)
+        ->and(CampaignEmail::query()->where('campaign_id', $stale->id)->pluck('mailer_connection_id')->unique()->all())
+        ->toBe([$fixture['new']->id]);
+});
