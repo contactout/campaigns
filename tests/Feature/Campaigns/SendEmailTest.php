@@ -1007,6 +1007,41 @@ test('a threaded follow-up replies to the previous sent step', function () {
         ->and($sentFollowUp->thread_id)->toBe('thread-1');
 });
 
+test('a threaded follow-up on a new connection keeps only the portable message id', function () {
+    $fake = new FakeCampaignMailer(new SendResult(
+        messageId: '<first@example.com>',
+        threadId: 'thread-1',
+        replyToId: 'provider-reply-1',
+    ));
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $followUp = mmosSendFollowUp($fixture, threaded: true);
+
+    mmosRunSendEmail($fixture['email']);
+
+    // The campaign moved to another mailbox, which cannot see the first
+    // email's provider thread or message.
+    $other = MailerConnection::factory()->forTeam($fixture['team'])->create([
+        'status' => MailerConnectionStatus::Active,
+        'sending_limit' => null,
+        'sent_count' => 0,
+    ]);
+    $followUp->update(['mailer_connection_id' => $other->id]);
+
+    mmosRunSendEmail($followUp);
+
+    expect($fake->sent)->toHaveCount(2)
+        ->and($fake->sent[1]['connection']->id)->toBe($other->id);
+
+    $thread = $fake->sent[1]['thread'];
+
+    expect($thread)->toBeInstanceOf(EmailThread::class)
+        ->and($thread->messageId)->toBe('<first@example.com>')
+        ->and($thread->threadId)->toBeNull()
+        ->and($thread->replyToId)->toBeNull();
+});
+
 test('an unthreaded follow-up starts a new conversation', function () {
     $fake = new FakeCampaignMailer(new SendResult(
         messageId: '<first@example.com>',

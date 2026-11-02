@@ -3,6 +3,7 @@
 namespace App\Services\Mail;
 
 use App\Actions\Campaigns\DeleteCampaignStep;
+use App\Actions\Campaigns\UpdateCampaign;
 use App\Data\CampaignSettings;
 use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
@@ -159,6 +160,12 @@ class CampaignStepScheduler
      * cascaded away with the step. The step is re-read under the lock for the
      * same reason. If it is gone, the deletion has already moved this
      * recipient on.
+     *
+     * The next step sends through the campaign's current connection, read
+     * under the same lock {@see UpdateCampaign} takes to switch it, so an
+     * email sent just before a switch does not schedule its follow-up on the
+     * old connection. Only a campaign with no connection falls back to the
+     * one the email went out through.
      */
     public function scheduleNextStep(CampaignEmail $email): void
     {
@@ -191,7 +198,7 @@ class CampaignStepScheduler
                 ],
                 [
                     'campaign_id' => $campaign->id,
-                    'mailer_connection_id' => $email->mailer_connection_id ?? $campaign->mailer_connection_id,
+                    'mailer_connection_id' => $campaign->mailer_connection_id ?? $email->mailer_connection_id,
                     'status' => EmailStatus::Scheduled,
                     'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $email->recipient),
                 ],

@@ -250,7 +250,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $reservedIn = $connection->sending_limit_refreshed_at;
 
         try {
-            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email));
+            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email, $connection));
         } catch (Throwable $exception) {
             $this->releaseSend($connection, $reservedIn);
 
@@ -300,8 +300,13 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
      * Only threaded steps reply; the previous sent email for the recipient
      * supplies the message id and provider thread id. A threaded step with no
      * previous message, or one that carries no ids, starts a new conversation.
+     *
+     * Provider thread and message ids only exist in the mailbox that sent the
+     * previous email. After the campaign moves to another connection only the
+     * portable Message-ID is kept, so the follow-up still threads on headers
+     * instead of failing against a conversation the new mailbox cannot see.
      */
-    private function resolveThread(CampaignEmail $email): ?EmailThread
+    private function resolveThread(CampaignEmail $email, MailerConnection $connection): ?EmailThread
     {
         if (! $email->step->is_threaded) {
             return null;
@@ -324,10 +329,12 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return null;
         }
 
+        $sameMailbox = $previous->mailer_connection_id === $connection->id;
+
         $thread = new EmailThread(
             messageId: filled($previous->message_id) ? $previous->message_id : null,
-            threadId: filled($previous->thread_id) ? $previous->thread_id : null,
-            replyToId: filled($previous->reply_to_id) ? $previous->reply_to_id : null,
+            threadId: $sameMailbox && filled($previous->thread_id) ? $previous->thread_id : null,
+            replyToId: $sameMailbox && filled($previous->reply_to_id) ? $previous->reply_to_id : null,
         );
 
         return $thread->isThreaded() ? $thread : null;
