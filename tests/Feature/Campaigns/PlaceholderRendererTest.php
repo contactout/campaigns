@@ -124,3 +124,45 @@ test('renders the signature tag empty without a connection or any signature', fu
     expect($renderer->render('<p>Bye</p><p>{{signature}}</p>', $recipient))->toBe('<p>Bye</p><p></p>')
         ->and($renderer->render('<p>Bye</p><p>{{signature}}</p>', $recipient, $connection))->toBe('<p>Bye</p>');
 });
+
+/**
+ * Build a recipient whose contact name and custom field hold HTML-significant text.
+ */
+function rendererMarkupRecipient(Team $team): Recipient
+{
+    $contact = Contact::factory()->forTeam($team)->create(['name' => 'Tom <Ops> & Co']);
+    $field = ContactField::factory()->forTeam($team)->create(['name' => 'website']);
+
+    ContactProperty::factory()->create([
+        'contact_id' => $contact->id,
+        'contact_field_id' => $field->id,
+        'value' => '"><a href="https://evil.example">click</a>',
+    ]);
+
+    return Recipient::factory()->create([
+        'campaign_id' => Campaign::factory()->forTeam($team)->create()->id,
+        'contact_id' => $contact->id,
+    ]);
+}
+
+test('escapes contact values rendered into the html body', function () {
+    $team = Team::factory()->create();
+    $signature = Signature::factory()->forTeam($team)->create(['body' => '<p>Alex &amp; <b>Sales</b></p>']);
+    $connection = MailerConnection::factory()->forTeam($team)->create(['signature_id' => $signature->id]);
+    $recipient = rendererMarkupRecipient($team);
+
+    $renderer = app(PlaceholderRenderer::class);
+    $template = '<p>Hi {{name}}, <a href="https://example.com/?ref={{website}}">link</a></p>';
+    $escaped = '<p>Hi Tom &lt;Ops&gt; &amp; Co, <a href="https://example.com/?ref=&quot;&gt;&lt;a href=&quot;https://evil.example&quot;&gt;click&lt;/a&gt;">link</a></p>';
+
+    expect($renderer->render($template, $recipient))->toBe($escaped)
+        ->and($renderer->render($template.'<p>{{signature}}</p>', $recipient, $connection))
+        ->toBe($escaped.'<p>Alex &amp; <b>Sales</b></p>');
+});
+
+test('substitutes contact values unescaped into plain text', function () {
+    $recipient = rendererMarkupRecipient(Team::factory()->create());
+
+    expect(app(PlaceholderRenderer::class)->renderText('Hi {{ name }} {{nope}}', $recipient))
+        ->toBe('Hi Tom <Ops> & Co ');
+});
