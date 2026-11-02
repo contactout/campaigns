@@ -313,7 +313,7 @@ test('reschedules the email when the connection is rate limited', function () {
     $email = $fixture['email']->fresh();
 
     expect($email->status)->toBe(EmailStatus::Scheduled)
-        ->and($email->scheduled_at->equalTo(CarbonImmutable::now()->addMinutes(15)))->toBeTrue();
+        ->and($email->scheduled_at->equalTo(CarbonImmutable::now()->addDay()))->toBeTrue();
 
     $connection = $fixture['connection']->fresh();
 
@@ -323,7 +323,7 @@ test('reschedules the email when the connection is rate limited', function () {
 });
 
 test('reschedules the email within the sending window when the connection is rate limited', function () {
-    // Friday 16:50; the 15 minute retry lands after the 17:00 close.
+    // Friday 16:50; the cap lifts at midnight, after the 17:00 close.
     $this->travelTo(CarbonImmutable::parse('2026-02-06 16:50:00'));
 
     $this->app->instance(CampaignMailer::class, new FakeCampaignMailer);
@@ -333,13 +333,59 @@ test('reschedules the email within the sending window when the connection is rat
     $fixture['connection']->update([
         'sending_limit' => 1,
         'sent_count' => 1,
-        'sending_limit_refreshed_at' => CarbonImmutable::now()->addDay(),
+        'sending_limit_refreshed_at' => CarbonImmutable::parse('2026-02-07 00:00:00'),
     ]);
 
     mmosRunSendEmail($fixture['email']);
 
     expect($fixture['email']->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00')
-        ->and($fixture['connection']->fresh()->rate_limit_expired_at->toDateTimeString())->toBe('2026-02-06 17:05:00');
+        ->and($fixture['connection']->fresh()->rate_limit_expired_at->toDateTimeString())->toBe('2026-02-07 00:00:00');
+});
+
+test('reschedules an overdue email instead of sending it outside the sending window', function () {
+    // Saturday just after the UTC rollover; the email came due on Friday.
+    $this->travelTo(CarbonImmutable::parse('2026-02-07 00:05:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['campaign']->update(['settings' => mmosWeekdayWindow()]);
+    $fixture['email']->update(['scheduled_at' => CarbonImmutable::parse('2026-02-06 16:00:00')]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00')
+        ->and($fake->sent)->toBeEmpty();
+});
+
+test('holds a capped email until the daily sending limit refreshes', function () {
+    // Mid-morning: the cap does not lift until the next UTC midnight, so a
+    // short retry would only push the same email back again and again.
+    $this->travelTo(CarbonImmutable::parse('2026-02-03 10:00:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['connection']->update([
+        'sending_limit' => 50,
+        'sent_count' => 50,
+        'sending_limit_refreshed_at' => CarbonImmutable::parse('2026-02-04 00:00:00'),
+    ]);
+    $fixture['email']->update(['scheduled_at' => CarbonImmutable::now()]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-04 00:00:00')
+        ->and($fixture['connection']->fresh()->rate_limit_expired_at->toDateTimeString())->toBe('2026-02-04 00:00:00')
+        ->and($fake->sent)->toBeEmpty();
 });
 
 test('defers the email within the sending window while the connection is spacing out sends', function () {

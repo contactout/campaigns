@@ -67,11 +67,6 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     private const int LOCK_SECONDS = 300;
 
     /**
-     * Minutes to wait before retrying an email the connection is throttling.
-     */
-    private const int RATE_LIMIT_RETRY_MINUTES = 15;
-
-    /**
      * Minutes to wait before retrying an email whose connection is not active.
      */
     private const int CONNECTION_DEFER_MINUTES = 60;
@@ -207,10 +202,24 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // An email can come due outside its window, e.g. once a capped
+        // connection's backlog is released at the UTC rollover.
+        $allowedAt = $this->nextAllowedAt($email, CarbonImmutable::now(), $scheduler, $window);
+
+        if ($allowedAt->isFuture()) {
+            $email->scheduled_at = $allowedAt;
+            $email->save();
+
+            return;
+        }
+
         $this->refreshSendingWindow($connection);
 
         if ($this->isRateLimited($connection)) {
-            $retryAt = CarbonImmutable::now()->addMinutes(self::RATE_LIMIT_RETRY_MINUTES);
+            // The daily cap only lifts when the sending window rolls over, so
+            // retrying any sooner just pushes the same email back again.
+            // refreshSendingWindow() has set the rollover for a capped connection.
+            $retryAt = $connection->sending_limit_refreshed_at ?? CarbonImmutable::today('UTC')->addDay();
 
             $email->scheduled_at = $this->nextAllowedAt($email, $retryAt, $scheduler, $window);
             $email->save();
