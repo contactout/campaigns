@@ -47,10 +47,27 @@ stateDiagram-v2
     Stopped --> Archived: archive
 ```
 
-Starting a campaign records `started_at` and queues `SeedCampaignEmails`; only `Active` campaigns
-send. Stopping keeps scheduled emails in place, so starting again picks up where it left off.
-Duplicating creates a new `Draft`. `CampaignStatus` also defines `Completed`, which no action sets
-yet.
+Starting a campaign records `started_at` the first time and queues `SeedCampaignEmails`; only
+`Active` campaigns send. Stopping keeps scheduled emails in place, and starting again keeps the
+original `started_at`, so later steps stay on the days they were planned for. Duplicating creates a
+new `Draft`. `CampaignStatus` also defines `Completed`, which no action sets yet.
+
+### Editing a running campaign
+
+- **Reordering steps** (`ReorderCampaignSteps`) must list every step of the campaign exactly once.
+  Steps are ordered by `sequence`, then by id.
+- **Deleting a step** (`DeleteCampaignStep`) is refused once any of its emails has gone out, so
+  sent history and thread ids are kept. Recipients still waiting on the step move to the following
+  step, or are completed if it was the last one.
+- **Switching the connection** (`UpdateCampaign`) moves the campaign's pending and scheduled emails
+  to the new connection and clears any deferral for the old one. Clearing the connection leaves them
+  where they are. Next steps are scheduled on the campaign's current connection, falling back to
+  the previous email's connection only when the campaign has none.
+
+Deleting a step, switching the connection, and `CampaignStepScheduler` (seeding first steps and
+scheduling next steps) lock the campaign row, so an edit can't strand a recipient whose next step is being scheduled
+at the same moment. Their transactions retry on deadlocks and SQLite `database is locked` errors.
+One race remains: an email already being sent when its step is deleted loses its sent record.
 
 ## Sending pipeline
 
@@ -65,7 +82,7 @@ flowchart TD
     checks -->|no| failed([Failed or skipped])
     checks -->|yes| conn{Connection usable now?}
     conn -->|inactive| deferConn([Deferred: re-checked hourly])
-    conn -->|rate limited or inside<br/>minimum interval| deferLater([Deferred: rescheduled within the sending window])
+    conn -->|outside the sending window, at the<br/>daily limit, or inside the minimum interval| deferLater([Deferred: rescheduled within the sending window])
     conn -->|yes| render[Render placeholders, rewrite links,<br/>add unsubscribe link and open pixel]
     render --> mailer[CampaignMailer: SMTP, Gmail, or Outlook]
     mailer -->|sent| next([Sent: next step scheduled])
@@ -74,23 +91,36 @@ flowchart TD
     mailer -->|auth or connection error| deactivated([Connection deactivated, email deferred])
 ```
 
-In detail, `campaigns:dispatch-due` takes due, scheduled emails of active campaigns in batches of 200. Connections with a minimum interval stay out of the batch and get their oldest due email
-instead, once their last send is outside the interval. Each `SendEmail` job then:
+In detail, `campaigns:dispatch-due` takes due, scheduled emails of active campaigns, oldest first,
+in batches of 200. Connections at their daily sending limit are left out until the limit
+refreshes, so their backlog can't crowd out other connections. Connections with a minimum
+interval also stay out of the batch; each gets its oldest due email instead, once its last send
+is outside the interval. Jobs are queued with the email only, without its relations. Each
+`SendEmail` job then:
 
-- skips unless the email is still scheduled and due (one queued job per email)
+- skips unless the email is still scheduled and due (one queued job per email); a job whose email
+  was deleted while queued is dropped
 - skips if the campaign is not active
-- fails if the address is missing or suppressed, or no connection is set
+- fails if the address is missing or suppressed, or no connection is set (the email's own
+  connection, else the campaign's)
 - defers an hour if the connection is not active (flagged for resume)
+- reschedules to the next allowed moment if the recipient's sending window is closed right now
 - resets the connection's daily send counter when the UTC day rolls over
-- defers 15 minutes if the connection is rate limited (within the sending window)
+- holds the email until the limit refreshes (the next UTC midnight, moved onto the sending window)
+  if the connection is at its daily limit
 - defers to the end of the connection's minimum interval since its last send (within the sending window)
-- renders placeholders (`PlaceholderRenderer`)
-- rewrites links, adds the unsubscribe link and the open pixel (`CampaignBodyBuilder`)
+- renders placeholders (`PlaceholderRenderer`): contact values are HTML-escaped in the body and
+  filled as plain text in the subject; `{{signature}}` inserts the connection's signature HTML
+- rewrites links, decoding HTML entities in each `href` first, and adds the unsubscribe link and
+  the open pixel (`CampaignBodyBuilder`)
+- reserves the send against the daily limit with a conditional increment, tied to the current UTC
+  day, so concurrent workers can't exceed it; a failed send gives the slot back to that same day
 - sends via the `CampaignMailer` for the connection type
-- schedules the recipient's next step (`CampaignStepScheduler`)
+- records the connection that sent the email, which replies and bounces are matched on
+- schedules the recipient's next step on the campaign's current connection (`CampaignStepScheduler`)
 
-`SuppressionList` holds the suppression rules for both sending and enrollment
-(`AddCampaignRecipients`): a contact is skipped when it has `do_not_contact_at` set, a bounced,
+`SuppressionList` holds the suppression rules for sending, enrollment (`AddCampaignRecipients`),
+CSV import (`ImportContacts`), and the unsubscribe page: a contact is skipped when it has `do_not_contact_at` set, a bounced,
 unsubscribed, or do-not-contact status, or any of its addresses matches the team's `unsubscribes`
 list exactly or by an `@domain` entry (entries are stored lowercased). Hard bounces, from a send-time rejection or an
 inbound report with a `Status: 5.x.x` line, a `55x 5.x.x` reply, or a bare `55x` reply opening a
@@ -103,6 +133,9 @@ report.
 `CampaignStepScheduler` counts a step's `day` from the later of the campaign start and the moment
 the recipient joined, then moves the result onto the campaign's sending window (`SendingWindow`):
 the allowed weekdays and hour range, evaluated in the recipient's timezone when it has one.
+Seeding reads only recipients that are still missing their first-step email, in chunks of 200.
+Adding recipients checks and inserts them in chunks of 500, so a large list stays under the
+database's placeholder limit.
 
 `CampaignMailerResolver` picks the implementation of the `CampaignMailer` contract:
 `SmtpCampaignMailer`, `GmailCampaignMailer` (Gmail API), or `OutlookCampaignMailer`.
@@ -135,6 +168,11 @@ SMTP sets `In-Reply-To`/`References`; Gmail files the message into the thread id
 the reply on the previous message. An unthreaded step, or a threaded step whose previous email has
 no ids, starts a new conversation.
 
+Provider thread and message ids only exist in the mailbox that sent the previous email. If the
+campaign has since moved to another connection, only the Message-ID is passed on: SMTP and Gmail
+still thread the follow-up through `In-Reply-To`/`References`. Outlook starts a new conversation,
+because Graph's JSON `sendMail` only accepts custom `x-` headers.
+
 ## Replies and bounces
 
 ```mermaid
@@ -155,11 +193,33 @@ flowchart TD
 The scheduler runs `campaigns:check-mailboxes` every ten minutes, which queues a
 `CheckConnectionMailbox` job per connection. `MailboxReaderResolver` selects a reader
 (`ImapMailboxReader`, `GmailMailboxReader`, or `OutlookMailboxReader`) that produces
-`InboundMessage` objects. The `ProcessInboundMessage` action first checks for a bounce report and
-matches it to the latest email the connection sent, by the Message-ID it refers to or else by the
-failed recipient address. Bounce reports often carry `In-Reply-To`/`References`, so this runs before
-reply matching. Other messages are matched to a sent email via those headers (a reply). Either way
-the email, recipient, and contact status is updated. Unmatched messages are ignored.
+`InboundMessage` objects. The `ProcessInboundMessage` action first skips mail sent from the
+connection's own address: a threaded follow-up references the previous step and would otherwise
+count as a reply. The Gmail query excludes it as well (`-from:me`). Next it checks for a bounce
+report and matches it to the latest email the connection sent, by the Message-ID it refers to or
+else by the failed recipient address. Bounce reports often carry `In-Reply-To`/`References`, so this
+runs before reply matching. Other messages are matched to a sent email via those headers (a reply).
+Message-IDs match with or without angle brackets, because IMAP strips them. Either way the email,
+recipient, and contact status is updated, and processing the same message twice changes nothing.
+Unmatched messages are ignored.
+
+For Gmail, the reader walks the message's whole MIME tree. It prefers plain text over HTML, and
+fetches delivery-status parts that Gmail stores as attachments, so multipart bounce reports keep
+their `Status:` line.
+
+`last_checked_at` is the poll cursor: everything received before it has been processed. A
+connection that was never polled starts from when it was created. A failed read throws and leaves
+the cursor where it was. The Gmail and Outlook readers return at most 100 messages per run, oldest
+first:
+
+- A complete batch moves the cursor to when the fetch started, so mail that arrives during a slow
+  poll is read again next time.
+- A truncated batch moves the cursor to the second of the newest message processed, and the next
+  run carries on from there.
+- If more mail landed in one second than a run takes, the processed message ids for that second are
+  checkpointed in the cache. The second is drained over several runs before the cursor moves past it.
+
+The IMAP reader is not bounded this way, because IMAP `SINCE` only has day precision.
 
 ## Tracking and unsubscribe
 
