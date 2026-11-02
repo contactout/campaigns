@@ -60,6 +60,15 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
     public int $timeout = 120;
 
     /**
+     * Discard the job if its email was deleted while it waited in the queue.
+     *
+     * Removing a recipient or deleting a campaign cascades to its queued
+     * emails, and the model is restored before handle() runs, so the job
+     * would otherwise fail with a ModelNotFoundException.
+     */
+    public bool $deleteWhenMissingModels = true;
+
+    /**
      * Seconds the send lock is held while the email is being sent.
      *
      * Must outlast {@see self::timeout} so a slow send is never joined by a

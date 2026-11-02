@@ -962,6 +962,26 @@ test('queues only one job per campaign email', function () {
     expect(DB::table('jobs')->count())->toBe(2);
 });
 
+test('drops a queued job whose email was deleted before it ran', function () {
+    config(['queue.default' => 'database']);
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+
+    SendEmail::dispatch($fixture['email']);
+
+    // Removing the recipient cascades to its queued campaign emails.
+    $fixture['recipient']->delete();
+
+    $this->artisan('queue:work', ['--once' => true, '--stop-when-empty' => true])->assertSuccessful();
+
+    expect(DB::table('jobs')->count())->toBe(0)
+        ->and(DB::table('failed_jobs')->count())->toBe(0)
+        ->and($fake->sent)->toBeEmpty();
+});
+
 /**
  * Create a follow-up step for the fixture and return the scheduled email.
  *
