@@ -1,10 +1,16 @@
 <?php
 
+use App\Enums\EmailStatus;
+use App\Enums\RecipientStatus;
 use App\Enums\TeamRole;
 use App\Models\Campaign;
+use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
+use App\Models\Contact;
+use App\Models\Recipient;
 use App\Models\Team;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 
 /**
  * Create a team with the given user attached as a member.
@@ -114,6 +120,126 @@ test('deleting a step normalises the remaining sequence', function () {
     expect($campaign->steps()->pluck('subject', 'sequence')->all())->toBe([
         1 => 'B',
         2 => 'C',
+    ]);
+});
+
+/**
+ * Create an active recipient of the campaign with an email for the given step.
+ */
+function campaignStepRecipientWithEmail(Campaign $campaign, CampaignStep $step, EmailStatus $status, RecipientStatus $recipientStatus = RecipientStatus::Active): Recipient
+{
+    $recipient = Recipient::factory()->create([
+        'campaign_id' => $campaign->id,
+        'contact_id' => Contact::factory()->create()->id,
+        'status' => $recipientStatus,
+    ]);
+
+    CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'campaign_step_id' => $step->id,
+        'recipient_id' => $recipient->id,
+        'status' => $status,
+    ]);
+
+    return $recipient;
+}
+
+test('deleting a step moves recipients waiting on it on to the following step', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-01 00:00:00'));
+
+    [$team, $user] = campaignStepTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->active()->create([
+        'timezone' => 'UTC',
+        'started_at' => CarbonImmutable::parse('2026-01-01 00:00:00'),
+    ]);
+    $first = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1, 'day' => 0, 'time' => '09:00:00']);
+    $second = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2, 'day' => 3, 'time' => '09:00:00']);
+    $third = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 3, 'day' => 7, 'time' => '09:00:00']);
+
+    // Step 1 went out; step 2 is the next email waiting to send.
+    $waiting = campaignStepRecipientWithEmail($campaign, $first, EmailStatus::Sent);
+    CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'campaign_step_id' => $second->id,
+        'recipient_id' => $waiting->id,
+        'status' => EmailStatus::Scheduled,
+    ]);
+
+    // A recipient that replied is out of the sequence and stays out.
+    $replied = campaignStepRecipientWithEmail($campaign, $second, EmailStatus::Scheduled, RecipientStatus::Replied);
+
+    $this->actingAs($user)
+        ->delete(route('campaigns.steps.destroy', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+            'step' => $second,
+        ]))
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $this->assertDatabaseMissing('campaign_steps', ['id' => $second->id]);
+
+    $next = CampaignEmail::query()
+        ->where('recipient_id', $waiting->id)
+        ->where('campaign_step_id', $third->id)
+        ->sole();
+
+    expect($next->status)->toBe(EmailStatus::Scheduled)
+        ->and($next->scheduled_at->toDateTimeString())->toBe('2026-01-08 09:00:00')
+        ->and(CampaignEmail::query()->where('recipient_id', $replied->id)->exists())->toBeFalse()
+        ->and($replied->refresh()->status)->toBe(RecipientStatus::Replied);
+});
+
+test('deleting the last step completes recipients waiting on it', function () {
+    [$team, $user] = campaignStepTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->active()->create();
+    $first = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+    $last = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2]);
+
+    $recipient = campaignStepRecipientWithEmail($campaign, $first, EmailStatus::Sent);
+    CampaignEmail::factory()->create([
+        'campaign_id' => $campaign->id,
+        'campaign_step_id' => $last->id,
+        'recipient_id' => $recipient->id,
+        'status' => EmailStatus::Scheduled,
+    ]);
+
+    $this->actingAs($user)
+        ->delete(route('campaigns.steps.destroy', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+            'step' => $last,
+        ]))
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($recipient->refresh()->status)->toBe(RecipientStatus::Completed);
+});
+
+test('a step whose emails have gone out cannot be deleted', function () {
+    [$team, $user] = campaignStepTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->active()->create();
+    $first = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+    CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2]);
+
+    $recipient = campaignStepRecipientWithEmail($campaign, $first, EmailStatus::Sent);
+
+    $this->actingAs($user)
+        ->delete(route('campaigns.steps.destroy', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+            'step' => $first,
+        ]))
+        ->assertRedirect()
+        ->assertSessionHasErrors('campaign');
+
+    $this->assertDatabaseHas('campaign_steps', ['id' => $first->id, 'sequence' => 1]);
+    $this->assertDatabaseHas('campaign_emails', [
+        'campaign_step_id' => $first->id,
+        'recipient_id' => $recipient->id,
     ]);
 });
 
