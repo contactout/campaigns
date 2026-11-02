@@ -5,6 +5,7 @@ namespace App\Services\Mail;
 use App\Models\ContactField;
 use App\Models\MailerConnection;
 use App\Models\Recipient;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Renders campaign email content by replacing recipient placeholders.
@@ -28,6 +29,18 @@ class PlaceholderRenderer
     private const string PLACEHOLDER = '\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}';
 
     private const string SIGNATURE_PARAGRAPH = '<p\b[^>]*>\s*\{\{\s*signature\s*\}\}\s*<\/p>';
+
+    /**
+     * The contact fields already read, keyed by team id.
+     *
+     * A send renders the subject and the body for the same recipient, so the
+     * team's fields are read once per renderer rather than once per render.
+     * The renderer is resolved per job, so a field added later is still seen
+     * by the next send.
+     *
+     * @var array<int, Collection<int, ContactField>>
+     */
+    private array $fields = [];
 
     /**
      * Render the given HTML for a single recipient.
@@ -94,14 +107,22 @@ class PlaceholderRenderer
             'phone' => (string) ($contact->phone() ?? ''),
         ];
 
-        $fields = ContactField::query()
-            ->where('team_id', $contact->team_id)
-            ->get();
-
-        foreach ($fields as $field) {
+        foreach ($this->fieldsFor($contact->team_id) as $field) {
             $values[strtolower($field->name)] = (string) ($contact->propertyValue($field->id) ?? '');
         }
 
         return $values;
+    }
+
+    /**
+     * Get the contact fields defined for the team.
+     *
+     * @return Collection<int, ContactField>
+     */
+    private function fieldsFor(int $teamId): Collection
+    {
+        return $this->fields[$teamId] ??= ContactField::query()
+            ->where('team_id', $teamId)
+            ->get();
     }
 }
