@@ -13,6 +13,8 @@ use App\Models\ContactList;
 use App\Models\Recipient;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /**
@@ -139,6 +141,54 @@ test('members can add all contacts from a list as recipients', function () {
 
     expect($campaign->recipients()->count())->toBe(2)
         ->and($campaign->recipients()->where('source', 'list')->count())->toBe(2);
+});
+
+test('a list larger than the driver binding limit is added in full', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+
+    // 5,000 rows at 8 bindings each would exceed SQLite's default 32,766 limit in one INSERT.
+    $now = now();
+
+    foreach (array_chunk(range(1, 5000), 500) as $chunk) {
+        Contact::query()->insert(array_map(fn (int $n): array => [
+            'team_id' => $team->id,
+            'name' => "Contact {$n}",
+            'created_at' => $now,
+            'updated_at' => $now,
+        ], $chunk));
+    }
+
+    $contactIds = Contact::query()->where('team_id', $team->id)->orderBy('id')->pluck('id')->all();
+
+    foreach (array_chunk($contactIds, 500) as $chunk) {
+        $list->contacts()->attach($chunk);
+    }
+
+    // An existing recipient past the first chunk must still be skipped.
+    Recipient::factory()->for($campaign)->create(['contact_id' => $contactIds[4321]]);
+
+    // Some SQLite builds raise the limit, so assert it directly rather than relying on the driver to fail.
+    $maxBindings = 0;
+    DB::listen(function (QueryExecuted $query) use (&$maxBindings): void {
+        $maxBindings = max($maxBindings, count($query->bindings));
+    });
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'lists' => [$list->id],
+        ])
+        ->assertRedirect()
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => '4999 recipients added.']);
+
+    expect($maxBindings)->toBeLessThanOrEqual(32766)
+        ->and($campaign->recipients()->count())->toBe(5000)
+        ->and($campaign->recipients()->where('source', 'list')->count())->toBe(4999);
 });
 
 test('contacts from another team cannot be added as recipients', function () {
