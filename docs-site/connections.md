@@ -47,6 +47,34 @@ Other failures leave the connection active:
 - A rejected address (for example SMTP 550 "user unknown") bounces that recipient only.
 - Temporary problems (timeouts, SMTP 4xx, provider throttling or outages) are retried with increasing delays, up to five attempts, before the email is marked failed.
 
+## Sending limits
+
+A connection's daily sending limit counts sends since midnight UTC. Once it is reached, that
+connection's due emails wait until the limit refreshes at the next UTC midnight and then go out
+within each campaign's sending window. Other connections keep sending in the meantime. The limit
+holds even with several queue workers sending at once.
+
+## Switching a campaign's connection
+
+Picking a different connection for a campaign moves its unsent emails, and all later steps, to the
+new connection. Emails that were waiting on an inactive connection go out at the next moment the
+sending window allows. Emails that were already sent stay recorded on the connection that sent them,
+so replies and bounces to them still match.
+
+A threaded follow-up sent from the new connection still replies in the same conversation over
+SMTP and Gmail. On Outlook it starts a new conversation, because the new mailbox can't reply to a
+message it never sent.
+
+Clearing a campaign's connection leaves its unsent emails on the connection they already have.
+
+## Replies and bounces
+
+Mailboxes are checked every ten minutes. Each check reads Gmail and Outlook mail oldest first, at
+most 100 messages per connection, and a backlog is worked through over the following checks. A
+newly added connection only reads mail received after it was added. If the provider can't be
+reached, nothing is skipped: the next check reads the same messages again. Mail you send from the
+connected inbox yourself never counts as a reply.
+
 ## If the buttons are missing
 
 Gmail/Outlook buttons stay hidden when credentials are not set, or when containers were not recreated after editing `.env`.

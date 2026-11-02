@@ -48,6 +48,28 @@ All notable changes to this project are documented here. The format is based on
 - "Sending" copy renamed to "Connections".
 - Docker Compose host ports are configurable, and PHP 8.4 IMAP is installed via PECL.
 - README backup instructions use `mysqldump` with credentials read from the container.
+- Restarting a stopped campaign keeps its original start time, so later steps stay on the days
+  they were planned for instead of shifting by however long the campaign was stopped.
+- Switching a campaign to another connection moves its unsent emails to the new connection and
+  releases any that were waiting on the old one. Later steps are scheduled on the campaign's current
+  connection. Clearing the connection leaves unsent emails where they are. A threaded follow-up
+  sent from a different mailbox than the previous step keeps only the Message-ID: SMTP and Gmail
+  still thread it through headers, while Outlook starts a new conversation.
+- A step can no longer be deleted once any of its emails has gone out. Deleting a step moves
+  recipients waiting on it to the following step, or completes them if it was the last step.
+- Reordering steps must list every step of the campaign exactly once.
+- A connection that reaches its daily sending limit holds its due emails until the limit refreshes
+  at midnight UTC, instead of retrying every 15 minutes. `campaigns:dispatch-due` leaves capped
+  connections out of the batch, so their backlog no longer delays other connections. Every email is
+  checked against its sending window again just before it is sent.
+- Mailbox polling for Gmail and Outlook reads at most 100 messages per connection per run, oldest
+  first, and resumes where it stopped. A connection that was never polled starts from when it was
+  created rather than reading the whole inbox.
+- Faster sending and enrollment on large campaigns: first-step seeding reads only recipients that
+  are still missing their first email, `campaign_emails` has indexes for dispatch and reply/bounce
+  lookups, send jobs are queued without their relations, the contacts added to a campaign are
+  validated in one query, and a send reads the team's contact fields once instead of once per
+  render.
 
 ### Fixed
 
@@ -82,6 +104,30 @@ All notable changes to this project are documented here. The format is based on
   matched to an arbitrary email of the contact. Bounces are now checked first and matched to the
   latest sent email by Message-ID, then by address.
 - Docker build for PHP 8.4 IMAP support.
+- Gmail polls picked up the connection's own sent follow-ups as replies, so every Gmail sequence
+  with a threaded step stopped after that step. Mail sent from the connection's own address is no
+  longer treated as a reply or a bounce.
+- The mailbox cursor moved past replies and bounces that were never read: provider errors returned
+  an empty mailbox, each poll read at most 50 messages, and the cursor was set after the fetch.
+  A failed read now leaves the cursor in place, and the cursor only moves past mail that was
+  processed.
+- Replies and bounces did not match emails seeded before the campaign had a connection. A sent
+  email now records the connection it actually went out through.
+- Adding a list of several thousand contacts to a campaign failed with too many query
+  placeholders. Recipients are now checked and inserted in chunks of 500.
+- Concurrent send workers could exceed a connection's daily limit, and the daily reset could wipe
+  out sends that other workers had just counted. Each send now reserves its slot atomically before
+  it goes out and gives it back if the send fails.
+- Reordering only some of a campaign's steps could give two steps the same position, so one of them
+  was never sent.
+- Multipart Gmail bounce reports were read from the snippet, so 5.1.1 bounces did not suppress the
+  address. The full MIME tree is now read, including delivery-status parts that Gmail stores as
+  attachments.
+- Replies read over IMAP did not match, because IMAP strips the angle brackets from Message-IDs.
+- Tracked links kept HTML entities such as `&amp;` in the redirect URL.
+- Send jobs for emails deleted while queued (a removed recipient or a deleted campaign) failed
+  instead of being dropped.
+- CSV import ignored `@domain` suppression entries, so it created contacts on suppressed domains.
 
 ### Security
 
@@ -101,6 +147,9 @@ All notable changes to this project are documented here. The format is based on
   `TRUSTED_HOSTS`) are rejected outside local/testing. Production URLs are generated from `APP_URL`.
 - The Docker example enables secure session cookies and a one-year HSTS header in Caddy.
 - The CSRF exemption now covers only the one-click unsubscribe POST, not every `unsubscribe/*` route.
+- Contact values filled into placeholders are HTML-escaped in email bodies, so imported data can
+  no longer inject markup or links. Subjects are filled as plain text. The `{{signature}}` tag still
+  inserts the signature's HTML.
 
 ### Upgrade notes
 
@@ -112,3 +161,6 @@ All notable changes to this project are documented here. The format is based on
   installs: confirm HTTPS works before pulling the HSTS change into `docker/Caddyfile`. The header
   uses `includeSubDomains`, so drop that directive if any subdomain of `DOMAIN` is HTTP-only.
   `TRUSTED_HOSTS` only widens accepted hosts; links and cookies still use `APP_URL`.
+- A migration adds three indexes to `campaign_emails`. Migrations run when the app container
+  starts, so on a large table the first start after upgrading can take longer.
+- Contact fields whose values contain HTML now appear as literal text in email bodies.
