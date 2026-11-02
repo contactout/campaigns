@@ -161,6 +161,63 @@ test('reordering rejects steps from another campaign', function () {
         ->assertSessionHasErrors('steps.1');
 });
 
+test('reordering rejects a subset of the campaign steps', function () {
+    [$team, $user] = campaignStepTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $a = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1, 'subject' => 'A']);
+    $b = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2, 'subject' => 'B']);
+    $c = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 3, 'subject' => 'C']);
+
+    $this->actingAs($user)
+        ->post(route('campaigns.steps.reorder', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'steps' => [$c->id],
+        ])
+        ->assertSessionHasErrors('steps');
+
+    expect($campaign->steps()->pluck('subject', 'sequence')->all())->toBe([
+        1 => 'A',
+        2 => 'B',
+        3 => 'C',
+    ]);
+});
+
+test('reordering rejects duplicate step ids', function () {
+    [$team, $user] = campaignStepTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $a = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1, 'subject' => 'A']);
+    $b = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2, 'subject' => 'B']);
+
+    $this->actingAs($user)
+        ->post(route('campaigns.steps.reorder', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'steps' => [$b->id, $b->id, $a->id],
+        ])
+        ->assertSessionHasErrors('steps.0');
+
+    expect($campaign->steps()->pluck('subject', 'sequence')->all())->toBe([
+        1 => 'A',
+        2 => 'B',
+    ]);
+});
+
+test('campaign steps sharing a sequence are ordered by id', function () {
+    $campaign = Campaign::factory()->create();
+    $first = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+    $second = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+
+    expect($campaign->steps()->getQuery()->getQuery()->orders)->toBe([
+        ['column' => 'sequence', 'direction' => 'asc'],
+        ['column' => 'id', 'direction' => 'asc'],
+    ])->and($campaign->steps()->pluck('id')->all())->toBe([$first->id, $second->id]);
+});
+
 test('a step from another campaign or team is not found', function () {
     [$team, $user] = campaignStepTeamWithMember();
 

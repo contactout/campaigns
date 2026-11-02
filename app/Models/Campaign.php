@@ -77,7 +77,7 @@ class Campaign extends Model
      */
     public function steps(): HasMany
     {
-        return $this->hasMany(CampaignStep::class)->orderBy('sequence');
+        return $this->hasMany(CampaignStep::class)->orderBy('sequence')->orderBy('id');
     }
 
     /**
