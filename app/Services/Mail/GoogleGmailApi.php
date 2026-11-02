@@ -4,10 +4,14 @@ namespace App\Services\Mail;
 
 use App\Contracts\Mail\GmailApi;
 use Carbon\CarbonImmutable;
+use Closure;
 use Google\Client as GoogleClient;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
+use Google\Service\Gmail\MessagePart;
+use Google\Service\Gmail\MessagePartBody;
+use GuzzleHttp\ClientInterface;
 use RuntimeException;
 use Throwable;
 
@@ -16,6 +20,13 @@ use Throwable;
  */
 class GoogleGmailApi implements GmailApi
 {
+    /**
+     * Create a new adapter, optionally over a custom HTTP client.
+     */
+    public function __construct(
+        private readonly ?ClientInterface $http = null,
+    ) {}
+
     /**
      * Send a raw RFC822 message and return the provider ids.
      *
@@ -109,8 +120,10 @@ class GoogleGmailApi implements GmailApi
      */
     public function getMessage(string $accessToken, string $messageId): ?array
     {
+        $gmail = $this->gmail($accessToken);
+
         try {
-            $message = $this->gmail($accessToken)->users_messages->get('me', $messageId, [
+            $message = $gmail->users_messages->get('me', $messageId, [
                 'format' => 'full',
             ]);
         } catch (GoogleServiceException $exception) {
@@ -146,12 +159,32 @@ class GoogleGmailApi implements GmailApi
             'references' => $references,
             'fromEmail' => $this->extractEmail($headers['from'] ?? null),
             'subject' => $headers['subject'] ?? '',
-            'text' => $this->extractText($message->getPayload()?->getBody()?->getData())
-                ?? $message->getSnippet(),
+            'text' => $this->bodyText(
+                $message->getPayload(),
+                fn (string $attachmentId): ?MessagePartBody => $this->attachment($gmail, $messageId, $attachmentId),
+            ) ?? $message->getSnippet(),
             'receivedAt' => ctype_digit($internalDate)
                 ? CarbonImmutable::createFromTimestampMs((int) $internalDate)
                 : null,
         ];
+    }
+
+    /**
+     * Fetch a part body Gmail stored as an attachment, or null if it is gone.
+     */
+    private function attachment(Gmail $gmail, string $messageId, string $attachmentId): ?MessagePartBody
+    {
+        try {
+            return $gmail->users_messages_attachments->get('me', $messageId, $attachmentId);
+        } catch (GoogleServiceException $exception) {
+            if ($exception->getCode() === 404) {
+                return null;
+            }
+
+            throw new RuntimeException('Gmail attachment fetch failed: '.$exception->getMessage(), 0, $exception);
+        } catch (Throwable $exception) {
+            throw new RuntimeException('Gmail attachment fetch failed: '.$exception->getMessage(), 0, $exception);
+        }
     }
 
     /**
@@ -161,6 +194,10 @@ class GoogleGmailApi implements GmailApi
     {
         $client = new GoogleClient;
         $client->setAccessToken(['access_token' => $accessToken]);
+
+        if ($this->http instanceof ClientInterface) {
+            $client->setHttpClient($this->http);
+        }
 
         return new Gmail($client);
     }
@@ -186,10 +223,113 @@ class GoogleGmailApi implements GmailApi
     }
 
     /**
+     * Get the readable text of a message payload.
+     *
+     * A multipart message, such as every `multipart/report` bounce, has no
+     * top-level body, so its parts are walked in order. Plain text wins over
+     * HTML alternatives, delivery status fields are kept (fetched when Gmail
+     * stored them as an attachment), and named attachments are skipped. An
+     * embedded copy of the original message is written after a
+     * `Content-Type` line with its headers, so its Message-ID can be matched
+     * while the bounce report itself still ends where the copy starts.
+     *
+     * @param  Closure(string): ?MessagePartBody  $attachment  Fetches a body Gmail stored as an attachment.
+     */
+    private function bodyText(?MessagePart $payload, Closure $attachment): ?string
+    {
+        $text = $payload instanceof MessagePart ? trim($this->partText($payload, $attachment)) : '';
+
+        return $text !== '' ? $text : null;
+    }
+
+    /**
+     * Collect the readable text of a MIME part and its children.
+     *
+     * @param  Closure(string): ?MessagePartBody  $attachment
+     */
+    private function partText(MessagePart $part, Closure $attachment): string
+    {
+        $mimeType = strtolower((string) $part->getMimeType());
+        $children = $part->getParts();
+
+        if (str_starts_with($mimeType, 'multipart/')) {
+            if ($mimeType === 'multipart/alternative') {
+                $plain = array_filter(
+                    $children,
+                    fn (MessagePart $child): bool => strtolower((string) $child->getMimeType()) === 'text/plain',
+                );
+
+                $children = $plain !== [] ? $plain : $children;
+            }
+
+            return $this->joinText(array_map(fn (MessagePart $child): string => $this->partText($child, $attachment), $children));
+        }
+
+        if ($mimeType === 'message/rfc822' || $mimeType === 'text/rfc822-headers') {
+            $body = $mimeType === 'text/rfc822-headers'
+                ? $this->readableText($part->getBody(), (string) $part->getFilename(), $attachment)
+                : $this->extractText($part->getBody());
+
+            $texts = ['Content-Type: '.$mimeType, $body ?? ''];
+
+            foreach ($children as $child) {
+                foreach ($child->getHeaders() as $header) {
+                    $texts[] = $header->getName().': '.$header->getValue();
+                }
+
+                $texts[] = $this->partText($child, $attachment);
+            }
+
+            return $this->joinText($texts);
+        }
+
+        $readable = str_starts_with($mimeType, 'text/') || $mimeType === 'message/delivery-status';
+
+        if (! $readable || (string) $part->getFilename() !== '') {
+            return '';
+        }
+
+        return $this->readableText($part->getBody(), (string) $part->getFilename(), $attachment) ?? '';
+    }
+
+    /**
+     * Decode a readable part's body.
+     *
+     * Gmail may store even a delivery status body as an attachment, leaving
+     * only its id inline, so that is fetched. A part with a filename is a
+     * real attachment and is never fetched. The client leaves the body null
+     * when Gmail omits it, despite its docblock.
+     *
+     * @param  Closure(string): ?MessagePartBody  $attachment
+     */
+    private function readableText(?MessagePartBody $body, string $filename, Closure $attachment): ?string
+    {
+        $attachmentId = (string) $body?->getAttachmentId();
+
+        if ((string) $body?->getData() === '' && $attachmentId !== '' && $filename === '') {
+            $body = $attachment($attachmentId);
+        }
+
+        return $this->extractText($body);
+    }
+
+    /**
+     * Join non-empty text pieces, one per line.
+     *
+     * @param  array<int, string>  $texts
+     */
+    private function joinText(array $texts): string
+    {
+        return implode("\n", array_filter($texts, fn (string $text): bool => trim($text) !== ''));
+    }
+
+    /**
      * Decode a base64url body part when present.
      */
-    private function extractText(?string $data): ?string
+    private function extractText(?MessagePartBody $body): ?string
     {
+        $data = $body?->getData();
+
         if ($data === null || $data === '') {
             return null;
         }
