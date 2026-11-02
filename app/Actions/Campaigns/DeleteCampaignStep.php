@@ -57,7 +57,7 @@ class DeleteCampaignStep
             $step->delete();
 
             $this->normaliseSequence($campaign);
-        });
+        }, CampaignStepScheduler::TRANSACTION_ATTEMPTS);
     }
 
     /**

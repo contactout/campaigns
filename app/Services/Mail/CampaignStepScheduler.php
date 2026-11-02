@@ -18,6 +18,18 @@ use Illuminate\Support\Facades\DB;
  */
 class CampaignStepScheduler
 {
+    /**
+     * Attempts for the next-step transaction before it gives up.
+     *
+     * On SQLite `lockForUpdate()` is a no-op, so two workers can both read in
+     * a deferred transaction and one then fails to upgrade to a writer with
+     * "database is locked". Laravel retries the whole closure, reads included,
+     * when it detects a concurrency error. Without retries the exception would
+     * surface after the email was already marked Sent, and the recipient
+     * would never advance.
+     */
+    public const int TRANSACTION_ATTEMPTS = 5;
+
     public function __construct(private readonly SendingWindow $sendingWindow) {}
 
     /**
@@ -184,6 +196,6 @@ class CampaignStepScheduler
                     'scheduled_at' => $this->scheduledAtFor($campaign, $nextStep, $email->recipient),
                 ],
             );
-        });
+        }, self::TRANSACTION_ATTEMPTS);
     }
 }
