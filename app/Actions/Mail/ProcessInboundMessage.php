@@ -36,9 +36,16 @@ class ProcessInboundMessage
      *
      * A bounce report that matches no sent email falls through to reply
      * matching, so a human reply that merely looks like a bounce is kept.
+     * Mail sent from the connection's own address is never a reply or a
+     * bounce: a threaded follow-up references the previous step and would
+     * otherwise mark the recipient replied.
      */
     public function handle(MailerConnection $connection, InboundMessage $message): void
     {
+        if ($this->isOwnMessage($connection, $message)) {
+            return;
+        }
+
         DB::transaction(function () use ($connection, $message): void {
             // Bounce reports usually carry In-Reply-To/References pointing at
             // the original email, so they must be checked before replies or
@@ -53,6 +60,28 @@ class ProcessInboundMessage
                 $this->markReplied($reply);
             }
         });
+    }
+
+    /**
+     * Determine whether the message was sent from the connection's own address.
+     */
+    private function isOwnMessage(MailerConnection $connection, InboundMessage $message): bool
+    {
+        $from = strtolower(trim($message->fromEmail ?? ''));
+
+        if ($from === '') {
+            return false;
+        }
+
+        $settings = $connection->smtp_setting ?? [];
+
+        foreach (['from_email', 'email'] as $key) {
+            if ($from === strtolower(trim((string) ($settings[$key] ?? '')))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

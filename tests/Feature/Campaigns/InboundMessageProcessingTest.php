@@ -138,6 +138,23 @@ test('a reply matched through the references header is recorded', function () {
     expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Replied);
 });
 
+test('a threaded follow-up sent from the connections own address is not recorded as a reply', function () {
+    $fixture = mmosInboundFixture();
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'follow-up-message-id@example.com',
+        inReplyTo: 'sent-message-id@example.com',
+        references: ['sent-message-id@example.com'],
+        fromEmail: 'Sender@Example.com',
+        subject: 'Re: Hello',
+        text: 'Just following up on my last email.',
+    ));
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Active)
+        ->and($fixture['contact']->fresh()->status)->not->toBe(ContactStatus::Replied);
+});
+
 test('a replied recipient is not sent further campaign email', function () {
     $fixture = mmosInboundFixture();
 
