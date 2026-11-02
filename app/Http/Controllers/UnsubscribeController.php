@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ContactStatus;
 use App\Enums\RecipientStatus;
 use App\Models\Recipient;
-use App\Models\Unsubscribe;
+use App\Services\Mail\SuppressionList;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -35,22 +35,16 @@ class UnsubscribeController extends Controller
     /**
      * Record the unsubscribe and stop contacting the recipient.
      */
-    public function store(Request $request, Recipient $recipient): RedirectResponse|HttpResponse
+    public function store(Request $request, Recipient $recipient, SuppressionList $suppressionList): RedirectResponse|HttpResponse
     {
         $recipient->loadMissing(['campaign', 'contact.emailIdentity']);
 
-        $email = (string) ($recipient->contact->email() ?? '');
-
-        Unsubscribe::firstOrCreate(
-            [
-                'team_id' => $recipient->campaign->team_id,
-                'email' => $email,
-            ],
-            [
-                'campaign_id' => $recipient->campaign_id,
-                'recipient_id' => $recipient->id,
-                'reason' => 'recipient',
-            ],
+        $suppressionList->add(
+            $recipient->campaign->team_id,
+            (string) ($recipient->contact->email() ?? ''),
+            'recipient',
+            $recipient->campaign_id,
+            $recipient->id,
         );
 
         $recipient->status = RecipientStatus::Unsubscribed;

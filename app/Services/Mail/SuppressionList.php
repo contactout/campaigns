@@ -132,7 +132,7 @@ class SuppressionList
      * @param  array<int, string>  $emails
      * @return array<int, string>
      */
-    private function listedEmails(int $teamId, array $emails): array
+    public function listedEmails(int $teamId, array $emails): array
     {
         $emails = array_values(array_unique(array_filter(array_map(
             fn (string $email): string => ContactIdentityType::Email->normalize($email),

@@ -10,7 +10,7 @@ use App\Models\ContactField;
 use App\Models\ContactIdentity;
 use App\Models\ContactImport;
 use App\Models\ContactList;
-use App\Models\Unsubscribe;
+use App\Services\Mail\SuppressionList;
 use App\Support\CsvRows;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -44,6 +44,7 @@ class ImportContacts
         protected CreateContact $createContact,
         protected SaveContactProperty $saveContactProperty,
         protected AttachContactsToList $attachContactsToList,
+        protected SuppressionList $suppressionList,
     ) {}
 
     /**
@@ -51,8 +52,9 @@ class ImportContacts
      *
      * Rows are deduplicated on normalized email against the team's existing
      * identities and earlier rows of the same file, and addresses on the team's
-     * unsubscribe list are skipped. The counters, offset and status are saved on
-     * the import; it is completed once the end of the file is reached.
+     * suppression list, directly or through their domain, are skipped. The
+     * counters, offset and status are saved on the import; it is completed once
+     * the end of the file is reached.
      */
     public function handle(ContactImport $import, int $maxRows): void
     {
@@ -169,10 +171,7 @@ class ImportContacts
 
         $emails = array_column($rows, 'email');
 
-        $suppressed = Unsubscribe::forTeam($this->import->team_id)
-            ->whereIn('email', $emails)
-            ->pluck('email')
-            ->flip();
+        $suppressed = array_flip($this->suppressionList->listedEmails($this->import->team_id, $emails));
 
         /** @var Collection<string, ContactIdentity> $identities */
         $identities = ContactIdentity::query()
@@ -186,7 +185,7 @@ class ImportContacts
         $listContactIds = [];
 
         foreach ($rows as $row => $data) {
-            if ($suppressed->has($data['email'])) {
+            if (isset($suppressed[$data['email']])) {
                 $this->skip($row, __('Email is on the suppression list.'));
 
                 continue;
