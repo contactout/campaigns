@@ -53,6 +53,11 @@ function mrpGmailApi(array $pages, ?string $failingId = null, bool $failList = f
         public array $fetchedIds = [];
 
         /**
+         * @var array<int, string>
+         */
+        public array $queries = [];
+
+        /**
          * @param  array<int, array<int, string>>  $pages
          * @param  array<int, string>  $vanishedIds
          */
@@ -75,6 +80,7 @@ function mrpGmailApi(array $pages, ?string $failingId = null, bool $failList = f
             }
 
             $this->pageTokens[] = $pageToken;
+            $this->queries[] = $query;
             $index = $pageToken === null ? 0 : (int) $pageToken;
 
             return [
@@ -154,6 +160,19 @@ test('gmail mailbox reader skips a message deleted after it was listed', functio
         ->and($batch->hasMore)->toBeFalse();
 });
 
+test('gmail mailbox reader widens the window to whole seconds so nothing at its edges is missed', function () {
+    $api = mrpGmailApi([['c', 'b', 'a']]);
+    $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
+    $since = CarbonImmutable::parse('2026-03-01 07:00:00');
+
+    $batch = $reader->fetch(mrpOAuthConnection(MailerType::Gmail), $since, null, $since->addSecond());
+
+    expect($api->queries)->toBe([
+        'after:'.($since->getTimestamp() - 1).' -from:me before:'.($since->getTimestamp() + 1),
+    ])->and(mrpIds($batch))->toHaveCount(3)
+        ->and($batch->hasMore)->toBeFalse();
+});
+
 test('gmail mailbox reader throws instead of returning an empty mailbox when listing fails', function () {
     $reader = new GmailMailboxReader(app(OAuthTokenManager::class), mrpGmailApi([], failList: true));
 
@@ -226,6 +245,22 @@ test('outlook mailbox reader stops at the limit and reports that more mail is wa
     expect(mrpIds($batch))->toBe(['<one@outlook.com>', '<two@outlook.com>'])
         ->and($batch->hasMore)->toBeTrue()
         ->and($requests)->toHaveCount(1);
+});
+
+test('outlook mailbox reader reads a bounded window without a limit', function () {
+    $requests = [];
+    mrpFakeGraphPages($requests);
+
+    $since = CarbonImmutable::parse('2026-03-01 07:00:00');
+    $batch = (new OutlookMailboxReader(app(OAuthTokenManager::class)))
+        ->fetch(mrpOAuthConnection(MailerType::Outlook), $since, null, $since->addSecond());
+
+    expect(mrpIds($batch))->toHaveCount(3)
+        ->and($batch->hasMore)->toBeFalse()
+        ->and($requests)->toHaveCount(2)
+        ->and(urldecode($requests[0]))->toContain(
+            '$filter=receivedDateTime ge '.$since->toIso8601String().' and receivedDateTime lt '.$since->addSecond()->toIso8601String(),
+        );
 });
 
 test('outlook mailbox reader throws instead of returning an empty mailbox when graph fails', function () {

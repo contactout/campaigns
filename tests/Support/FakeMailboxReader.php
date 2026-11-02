@@ -19,7 +19,7 @@ class FakeMailboxReader implements MailboxReader
     public array $messages = [];
 
     /**
-     * @var array<int, array{connection: MailerConnection, since: CarbonInterface|null, limit: int}>
+     * @var array<int, array{connection: MailerConnection, since: CarbonInterface|null, limit: int|null, before: CarbonInterface|null}>
      */
     public array $fetched = [];
 
@@ -35,9 +35,9 @@ class FakeMailboxReader implements MailboxReader
     /**
      * Record the call and return the queued messages.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
     {
-        $this->fetched[] = ['connection' => $connection, 'since' => $since, 'limit' => $limit];
+        $this->fetched[] = ['connection' => $connection, 'since' => $since, 'limit' => $limit, 'before' => $before];
 
         return new MailboxBatch($this->messages, $this->hasMore);
     }

@@ -32,6 +32,10 @@ class GmailMailboxReader implements MailboxReader
      * is excluded: a threaded follow-up carries `In-Reply-To` for the previous
      * step and would otherwise be recorded as the recipient's reply.
      *
+     * Gmail search only has second precision and may treat `after:` as
+     * exclusive, so the window starts a second early and `before:` rounds up:
+     * a little overlap is returned, but nothing inside the window is missed.
+     *
      * Gmail lists newest first, so every page of ids is listed (ids are
      * cheap) and only the oldest `$limit` messages are fetched, letting a
      * backlog drain in order across polls. A message deleted after it was
@@ -41,7 +45,7 @@ class GmailMailboxReader implements MailboxReader
      *
      * @throws RuntimeException When the token or Gmail API request fails.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
             return new MailboxBatch([]);
@@ -55,8 +59,12 @@ class GmailMailboxReader implements MailboxReader
 
         $accessToken = $this->tokens->accessToken($connection);
         $query = ($since instanceof CarbonInterface
-            ? 'after:'.$since->getTimestamp()
+            ? 'after:'.($since->getTimestamp() - 1)
             : 'is:unread').' -from:me';
+
+        if ($before instanceof CarbonInterface) {
+            $query .= ' before:'.($before->getTimestamp() + ($before->micro > 0 ? 1 : 0));
+        }
 
         $ids = [];
         $pageToken = null;
@@ -67,8 +75,8 @@ class GmailMailboxReader implements MailboxReader
             $pageToken = $page['nextPageToken'];
         } while ($pageToken !== null);
 
-        $hasMore = count($ids) > $limit;
-        $oldest = array_reverse(array_slice($ids, -$limit));
+        $hasMore = $limit !== null && count($ids) > $limit;
+        $oldest = array_reverse($hasMore ? array_slice($ids, -$limit) : $ids);
         $inbound = [];
 
         foreach ($oldest as $id) {

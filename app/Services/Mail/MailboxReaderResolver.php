@@ -25,12 +25,12 @@ class MailboxReaderResolver implements MailboxReader
     /**
      * Fetch inbound messages through the reader matching the connection's type.
      */
-    public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
+    public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
     {
         return match ($connection->mailer_type) {
-            MailerType::Gmail => $this->gmail->fetch($connection, $since, $limit),
-            MailerType::Outlook => $this->outlook->fetch($connection, $since, $limit),
-            MailerType::Smtp => $this->imap->fetch($connection, $since, $limit),
+            MailerType::Gmail => $this->gmail->fetch($connection, $since, $limit, $before),
+            MailerType::Outlook => $this->outlook->fetch($connection, $since, $limit, $before),
+            MailerType::Smtp => $this->imap->fetch($connection, $since, $limit, $before),
         };
     }
 }

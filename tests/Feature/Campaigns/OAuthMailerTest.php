@@ -199,7 +199,7 @@ test('gmail mailbox reader excludes the connections own sent mail from the poll'
     $reader->fetch($connection, null, 100);
 
     expect($api->queries)->toBe([
-        'after:'.$since->getTimestamp().' -from:me',
+        'after:'.($since->getTimestamp() - 1).' -from:me',
         'is:unread -from:me',
     ]);
 });

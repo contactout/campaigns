@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Mail\ProcessInboundMessage;
 use App\Contracts\Mail\MailboxReader;
 use App\Data\InboundMessage;
 use App\Data\MailboxBatch;
@@ -16,9 +17,12 @@ use App\Models\ContactIdentity;
 use App\Models\MailerConnection;
 use App\Models\Recipient;
 use App\Models\Team;
+use App\Services\Mail\SendFailureClassifier;
+use App\Services\Mail\SuppressionList;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Tests\Support\FakeMailboxReader;
+use Tests\Support\SimulatedMailboxReader;
 
 /**
  * Build an active campaign with a connection, contact, recipient and sent email.
@@ -157,7 +161,7 @@ test('the job advances the cursor to when the fetch started, not when it finishe
 
     $this->app->instance(MailboxReader::class, new class implements MailboxReader
     {
-        public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
+        public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
         {
             // A slow poll: mail arriving now must be read again next time.
             CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-03-01 10:07:00'));
@@ -180,7 +184,7 @@ test('the job keeps the cursor when the mailbox cannot be read', function () {
 
     $this->app->instance(MailboxReader::class, new class implements MailboxReader
     {
-        public function fetch(MailerConnection $connection, ?CarbonInterface $since, int $limit): MailboxBatch
+        public function fetch(MailerConnection $connection, ?CarbonInterface $since, ?int $limit, ?CarbonInterface $before = null): MailboxBatch
         {
             throw new RuntimeException('Graph returned 503.');
         }
@@ -208,7 +212,7 @@ function mmosMessageAt(string $id, string $receivedAt): InboundMessage
     );
 }
 
-test('a truncated batch resumes from the newest message processed and the next run carries on from there', function () {
+test('a truncated batch resumes from the second of the newest message processed', function () {
     $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
 
     $fixture = mmosMailboxFixture();
@@ -216,38 +220,108 @@ test('a truncated batch resumes from the newest message processed and the next r
 
     $reader = new FakeMailboxReader([
         mmosMessageAt('a', '2026-03-01 07:00:00'),
-        mmosMessageAt('b', '2026-03-01 07:15:30'),
+        mmosMessageAt('b', '2026-03-01 07:15:30.750'),
     ], hasMore: true);
     $this->app->instance(MailboxReader::class, $reader);
 
     app()->call([new CheckConnectionMailbox($fixture['connection']), 'handle']);
 
-    // One second of overlap: Gmail's after: only has second precision.
-    expect($fixture['connection']->fresh()->last_checked_at->toDateTimeString())->toBe('2026-03-01 07:15:29');
-
-    $reader->messages = [mmosMessageAt('c', '2026-03-01 08:00:00')];
-    $reader->hasMore = false;
-
-    app()->call([new CheckConnectionMailbox($fixture['connection']->fresh()), 'handle']);
-
-    expect($reader->fetched[1]['since']?->toDateTimeString())->toBe('2026-03-01 07:15:29')
-        ->and($fixture['connection']->fresh()->last_checked_at->toDateTimeString())->toBe('2026-03-01 10:00:00');
+    // Whole seconds: what is stored is exactly what the next run reads from.
+    expect($fixture['connection']->fresh()->last_checked_at->format('Y-m-d H:i:s.v'))->toBe('2026-03-01 07:15:30.000')
+        ->and($reader->fetched)->toHaveCount(1);
 });
 
-test('a truncated batch packed into one second still moves the cursor forward', function () {
+/**
+ * Build a recording stand-in for the inbound processor.
+ */
+function mmosRecordingProcessor(): ProcessInboundMessage
+{
+    $process = new class(app(SuppressionList::class), app(SendFailureClassifier::class)) extends ProcessInboundMessage
+    {
+        /**
+         * @var array<int, string>
+         */
+        public array $handled = [];
+
+        public function handle(MailerConnection $connection, InboundMessage $message): void
+        {
+            $this->handled[] = $message->messageId;
+        }
+    };
+
+    app()->instance(ProcessInboundMessage::class, $process);
+
+    return $process;
+}
+
+/**
+ * Poll the fixture connection until its cursor stops moving.
+ *
+ * @param  array<string, mixed>  $fixture
+ */
+function mmosPollUntilSettled(array $fixture, int $maxPolls = 10): int
+{
+    for ($poll = 1; $poll <= $maxPolls; $poll++) {
+        $before = $fixture['connection']->fresh()->last_checked_at?->toDateTimeString();
+
+        app()->call([new CheckConnectionMailbox($fixture['connection']->fresh()), 'handle']);
+
+        if ($fixture['connection']->fresh()->last_checked_at?->toDateTimeString() === $before) {
+            return $poll;
+        }
+    }
+
+    return $maxPolls;
+}
+
+test('more mail in one second than a run takes is all processed across polls', function (string $tieTime) {
     $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
 
     $fixture = mmosMailboxFixture();
-    $fixture['connection']->update(['last_checked_at' => CarbonImmutable::parse('2026-03-01 07:00:00')]);
+    $fixture['connection']->update(['last_checked_at' => CarbonImmutable::parse('2026-03-01 06:00:00')]);
 
-    $this->app->instance(MailboxReader::class, new FakeMailboxReader([
-        mmosMessageAt('a', '2026-03-01 07:00:00'),
-        mmosMessageAt('b', '2026-03-01 07:00:00'),
-    ], hasMore: true));
+    $mailbox = [];
 
-    app()->call([new CheckConnectionMailbox($fixture['connection']), 'handle']);
+    foreach (range(1, CheckConnectionMailbox::MESSAGES_PER_RUN + 50) as $i) {
+        $mailbox[] = mmosMessageAt("tie-{$i}", $tieTime);
+    }
 
-    expect($fixture['connection']->fresh()->last_checked_at->toDateTimeString())->toBe('2026-03-01 07:00:01');
+    $mailbox[] = mmosMessageAt('later', '2026-03-01 07:00:05');
+
+    $this->app->instance(MailboxReader::class, new SimulatedMailboxReader($mailbox));
+    $process = mmosRecordingProcessor();
+
+    mmosPollUntilSettled($fixture);
+
+    $expected = array_map(fn (InboundMessage $message) => $message->messageId, $mailbox);
+
+    expect(array_values(array_unique($process->handled)))->toEqualCanonicalizing($expected)
+        ->and($fixture['connection']->fresh()->last_checked_at->toDateTimeString())->toBe('2026-03-01 10:00:00');
+})->with([
+    'whole seconds' => '2026-03-01 07:00:00',
+    'gmail milliseconds' => '2026-03-01 07:00:00.500',
+]);
+
+test('a large backlog spread over time is drained in order across polls', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-03-01 10:00:00'));
+
+    $fixture = mmosMailboxFixture();
+    $fixture['connection']->update(['last_checked_at' => CarbonImmutable::parse('2026-03-01 06:00:00')]);
+
+    $mailbox = [];
+
+    foreach (range(1, 250) as $i) {
+        $mailbox[] = mmosMessageAt("m-{$i}", CarbonImmutable::parse('2026-03-01 07:00:00.250')->addSeconds(intdiv($i, 3))->toDateTimeString('millisecond'));
+    }
+
+    $this->app->instance(MailboxReader::class, new SimulatedMailboxReader($mailbox));
+    $process = mmosRecordingProcessor();
+
+    $polls = mmosPollUntilSettled($fixture);
+
+    expect(array_values(array_unique($process->handled)))->toEqualCanonicalizing(
+        array_map(fn (InboundMessage $message) => $message->messageId, $mailbox),
+    )->and($polls)->toBeLessThanOrEqual(5);
 });
 
 test('a truncated batch without received times leaves the cursor for the next run', function () {
