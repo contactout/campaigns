@@ -11,6 +11,7 @@ use App\Exceptions\Mail\MailerHttpException;
 use App\Models\MailerConnection;
 use App\Models\Team;
 use App\Services\Mail\GmailCampaignMailer;
+use App\Services\Mail\GmailMailboxReader;
 use App\Services\Mail\OutlookCampaignMailer;
 use App\Services\Mail\SendFailureClassifier;
 use App\Services\OAuth\OAuthTokenManager;
@@ -160,6 +161,46 @@ test('gmail campaign mailer puts unsubscribe headers in the raw message', functi
 
     expect($mime)->toContain('List-Unsubscribe: <https://example.com/u>')
         ->and($mime)->toContain('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+});
+
+test('gmail mailbox reader excludes the connections own sent mail from the poll', function () {
+    $connection = MailerConnection::factory()->forTeam(Team::factory()->create())->create([
+        'mailer_type' => MailerType::Gmail,
+        'status' => MailerConnectionStatus::Active,
+        'smtp_setting' => [
+            'access_token' => 'g-access',
+            'refresh_token' => 'g-refresh',
+            'expires_at' => CarbonImmutable::now()->addHour()->toIso8601String(),
+            'email' => 'ada@gmail.com',
+            'from_email' => 'ada@gmail.com',
+        ],
+    ]);
+
+    $api = new class extends FakeGmailApi
+    {
+        /**
+         * @var array<int, string>
+         */
+        public array $queries = [];
+
+        public function listMessageIds(string $accessToken, string $query, int $maxResults = 50): array
+        {
+            $this->queries[] = $query;
+
+            return [];
+        }
+    };
+
+    $reader = new GmailMailboxReader(app(OAuthTokenManager::class), $api);
+    $since = CarbonImmutable::parse('2026-01-01 00:00:00');
+
+    $reader->fetch($connection, $since);
+    $reader->fetch($connection, null);
+
+    expect($api->queries)->toBe([
+        'after:'.$since->getTimestamp().' -from:me',
+        'is:unread -from:me',
+    ]);
 });
 
 test('verifying a gmail connection marks it active', function () {

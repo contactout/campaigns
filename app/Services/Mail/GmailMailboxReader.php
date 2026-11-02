@@ -28,6 +28,10 @@ class GmailMailboxReader implements MailboxReader
     /**
      * Fetch inbox messages received after the given time, or unread messages.
      *
+     * Gmail search also covers the Sent folder, so the connection's own mail
+     * is excluded: a threaded follow-up carries `In-Reply-To` for the previous
+     * step and would otherwise be recorded as the recipient's reply.
+     *
      * @return array<int, InboundMessage>
      */
     public function fetch(MailerConnection $connection, ?CarbonInterface $since): array
@@ -44,9 +48,9 @@ class GmailMailboxReader implements MailboxReader
 
         try {
             $accessToken = $this->tokens->accessToken($connection);
-            $query = $since instanceof CarbonInterface
+            $query = ($since instanceof CarbonInterface
                 ? 'after:'.$since->getTimestamp()
-                : 'is:unread';
+                : 'is:unread').' -from:me';
 
             $ids = $this->gmail->listMessageIds($accessToken, $query, 50);
         } catch (Throwable) {
