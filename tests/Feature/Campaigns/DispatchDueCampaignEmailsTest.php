@@ -118,6 +118,53 @@ test('a spaced connection backlog does not crowd out other connections', functio
     Queue::assertPushed(SendEmail::class, 2);
 });
 
+test('a capped connection backlog does not crowd out other connections', function () {
+    Queue::fake();
+
+    $capped = MailerConnection::factory()->create([
+        'sending_limit' => 50,
+        'sent_count' => 50,
+        'sending_limit_refreshed_at' => now()->addHours(14),
+    ]);
+    $other = MailerConnection::factory()->create();
+
+    // The backlog sends through its campaign's connection.
+    $campaign = Campaign::factory()->active()->create(['mailer_connection_id' => $capped->id]);
+    $step = CampaignStep::factory()->forCampaign($campaign)->create();
+
+    $backlog = Recipient::factory()->count(201)->create(['campaign_id' => $campaign->id])
+        ->map(fn (Recipient $recipient): CampaignEmail => CampaignEmail::factory()->create([
+            'campaign_id' => $campaign->id,
+            'campaign_step_id' => $step->id,
+            'recipient_id' => $recipient->id,
+            'mailer_connection_id' => null,
+            'status' => EmailStatus::Scheduled,
+            'scheduled_at' => now()->subMinutes(10),
+        ]));
+
+    $otherEmail = mmosDueEmail($campaign, EmailStatus::Scheduled, now()->subMinute());
+    $otherEmail->update(['mailer_connection_id' => $other->id]);
+
+    $this->artisan('campaigns:dispatch-due')
+        ->expectsOutputToContain('Dispatched 1')
+        ->assertSuccessful();
+
+    Queue::assertPushed(SendEmail::class, 1);
+    Queue::assertPushed(SendEmail::class, fn (SendEmail $job): bool => $job->email->is($otherEmail));
+
+    // Once the limit refreshes the backlog is dispatched again.
+    $this->travel(15)->hours();
+
+    $this->artisan('campaigns:dispatch-due')
+        ->expectsOutputToContain('Dispatched 200')
+        ->assertSuccessful();
+
+    Queue::assertPushed(
+        SendEmail::class,
+        fn (SendEmail $job): bool => $backlog->contains(fn (CampaignEmail $email): bool => $job->email->is($email)),
+    );
+});
+
 test('reports gracefully when nothing is due', function () {
     Queue::fake();
 

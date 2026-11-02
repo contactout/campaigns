@@ -342,6 +342,26 @@ test('reschedules the email within the sending window when the connection is rat
         ->and($fixture['connection']->fresh()->rate_limit_expired_at->toDateTimeString())->toBe('2026-02-07 00:00:00');
 });
 
+test('reschedules an overdue email instead of sending it outside the sending window', function () {
+    // Saturday just after the UTC rollover; the email came due on Friday.
+    $this->travelTo(CarbonImmutable::parse('2026-02-07 00:05:00'));
+
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['campaign']->update(['settings' => mmosWeekdayWindow()]);
+    $fixture['email']->update(['scheduled_at' => CarbonImmutable::parse('2026-02-06 16:00:00')]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Scheduled)
+        ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-09 09:00:00')
+        ->and($fake->sent)->toBeEmpty();
+});
+
 test('holds a capped email until the daily sending limit refreshes', function () {
     // Mid-morning: the cap does not lift until the next UTC midnight, so a
     // short retry would only push the same email back again and again.

@@ -27,6 +27,10 @@ class DispatchDueCampaignEmails extends Command
      * Connections with a minimum interval between sends stay out of the batch,
      * so their backlog cannot crowd out other connections. Each of them gets
      * its oldest due email instead, once its last send is outside the interval.
+     *
+     * Connections at their daily sending limit are left out entirely until the
+     * limit refreshes, so their backlog cannot crowd out other connections
+     * either. The send job moves held-back emails onto the sending window.
      */
     public function handle(): int
     {
@@ -34,12 +38,16 @@ class DispatchDueCampaignEmails extends Command
             ->whereNotNull('min_seconds_between_sends')
             ->get();
 
+        $capped = $this->cappedConnectionIds();
+        $heldBack = array_values(array_unique([...$spaced->modelKeys(), ...$capped]));
+
         $emails = $this->dueEmails()
-            ->when($spaced->isNotEmpty(), fn (Builder $query): Builder => $this->withoutConnections($query, $spaced->modelKeys()))
+            ->when($heldBack !== [], fn (Builder $query): Builder => $this->withoutConnections($query, $heldBack))
             ->limit(self::BATCH_SIZE)
             ->get();
 
         $spaced
+            ->reject(fn (MailerConnection $connection): bool => in_array($connection->id, $capped, true))
             ->filter(fn (MailerConnection $connection): bool => $this->mayDispatch($connection))
             ->each(function (MailerConnection $connection) use ($emails): void {
                 $email = $this->dueEmails()
@@ -62,6 +70,25 @@ class DispatchDueCampaignEmails extends Command
         $this->info(sprintf('Dispatched %d campaign email(s).', $emails->count()));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Get the ids of connections that have reached their daily sending limit.
+     *
+     * Mirrors the cap `SendEmail` enforces: `sent_count` counts towards
+     * `sending_limit` until `sending_limit_refreshed_at`, after which the next
+     * send starts a new day.
+     *
+     * @return array<int, int>
+     */
+    private function cappedConnectionIds(): array
+    {
+        return MailerConnection::query()
+            ->whereNotNull('sending_limit')
+            ->whereColumn('sent_count', '>=', 'sending_limit')
+            ->where('sending_limit_refreshed_at', '>', now())
+            ->pluck('id')
+            ->all();
     }
 
     /**

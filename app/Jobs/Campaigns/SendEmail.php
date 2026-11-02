@@ -202,6 +202,17 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // An email can come due outside its window, e.g. once a capped
+        // connection's backlog is released at the UTC rollover.
+        $allowedAt = $this->nextAllowedAt($email, CarbonImmutable::now(), $scheduler, $window);
+
+        if ($allowedAt->isFuture()) {
+            $email->scheduled_at = $allowedAt;
+            $email->save();
+
+            return;
+        }
+
         $this->refreshSendingWindow($connection);
 
         if ($this->isRateLimited($connection)) {
