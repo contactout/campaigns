@@ -11,6 +11,8 @@ use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Services\Mail\PlaceholderRenderer;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 
 test('renders built-in and custom placeholders case-insensitively', function () {
     $team = Team::factory()->create();
@@ -165,4 +167,26 @@ test('substitutes contact values unescaped into plain text', function () {
 
     expect(app(PlaceholderRenderer::class)->renderText('Hi {{ name }} {{nope}}', $recipient))
         ->toBe('Hi Tom <Ops> & Co ');
+});
+
+test('reads the team contact fields once when rendering a subject and body', function () {
+    $team = Team::factory()->create();
+    $recipient = rendererMarkupRecipient($team);
+    $connection = MailerConnection::factory()->forTeam($team)->create();
+
+    $fieldQueries = 0;
+
+    DB::listen(function (QueryExecuted $query) use (&$fieldQueries): void {
+        if (preg_match('/from [`"]?contact_fields[`"]?/i', $query->sql)) {
+            $fieldQueries++;
+        }
+    });
+
+    $renderer = app(PlaceholderRenderer::class);
+
+    expect($renderer->renderText('Hi {{name}} {{website}}', $recipient))
+        ->toBe('Hi Tom <Ops> & Co "><a href="https://evil.example">click</a>')
+        ->and($renderer->render('<p>{{website}}</p>', $recipient, $connection))
+        ->toBe('<p>&quot;&gt;&lt;a href=&quot;https://evil.example&quot;&gt;click&lt;/a&gt;</p>')
+        ->and($fieldQueries)->toBe(1);
 });
