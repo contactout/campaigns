@@ -139,6 +139,27 @@ test('a reply matched through the references header is recorded', function () {
     expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Replied);
 });
 
+test('a reply whose threading headers lost their angle brackets still matches the sent email', function (?string $inReplyTo, array $references) {
+    $fixture = mmosInboundFixture();
+    // SMTP sends store the Message-ID bracketed, while webklex/php-imap
+    // strips the brackets from In-Reply-To and References when reading.
+    $fixture['email']->update(['message_id' => '<sent-message-id@example.com>']);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], new InboundMessage(
+        messageId: 'reply-message-id@example.com',
+        inReplyTo: $inReplyTo,
+        references: $references,
+        fromEmail: 'ada@example.com',
+        subject: 'Re: Hello',
+        text: 'Sounds great, let us talk.',
+    ));
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Replied);
+})->with([
+    'in-reply-to' => ['sent-message-id@example.com', []],
+    'references' => [null, ['another-message@example.com', 'sent-message-id@example.com']],
+]);
+
 test('a threaded follow-up sent from the connections own address is not recorded as a reply', function () {
     $fixture = mmosInboundFixture();
 
