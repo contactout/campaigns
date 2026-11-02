@@ -210,6 +210,56 @@ test('contacts from another team cannot be added as recipients', function () {
     expect($campaign->recipients()->count())->toBe(0);
 });
 
+test('validating explicit contacts checks them all in one query', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $contactIds = Contact::factory()->forTeam($team)->count(25)->create()->modelKeys();
+
+    $contactQueries = 0;
+
+    DB::listen(function (QueryExecuted $query) use (&$contactQueries): void {
+        if (preg_match('/from [`"]?contacts[`"]?\s/i', $query->sql)) {
+            $contactQueries++;
+        }
+    });
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => $contactIds,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($contactQueries)->toBeLessThanOrEqual(2)
+        ->and($campaign->recipients()->count())->toBe(25);
+});
+
+test('only the invalid explicit contacts are rejected', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $valid = Contact::factory()->forTeam($team)->create();
+    $trashed = Contact::factory()->forTeam($team)->create();
+    $trashed->delete();
+    $foreign = Contact::factory()->forTeam(Team::factory()->create())->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => [$valid->id, $trashed->id, $foreign->id, 987654, 'abc'],
+        ])
+        ->assertSessionHasErrors(['contacts.1', 'contacts.2', 'contacts.3', 'contacts.4'])
+        ->assertSessionDoesntHaveErrors('contacts.0');
+
+    expect($campaign->recipients()->count())->toBe(0);
+});
+
 test('adding recipients requires at least one contact or list', function () {
     [$team, $user] = campaignRecipientTeamWithMember();
 

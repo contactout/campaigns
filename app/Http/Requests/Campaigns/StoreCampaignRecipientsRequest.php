@@ -5,6 +5,7 @@ namespace App\Http\Requests\Campaigns;
 use App\Concerns\ResolvesCurrentTeam;
 use App\Enums\CampaignStatus;
 use App\Models\Campaign;
+use App\Models\Contact;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -53,12 +54,8 @@ class StoreCampaignRecipientsRequest extends FormRequest
 
         return [
             'contacts' => ['nullable', 'array'],
-            'contacts.*' => [
-                'integer',
-                Rule::exists('contacts', 'id')
-                    ->where('team_id', $teamId)
-                    ->whereNull('deleted_at'),
-            ],
+            // Existence is checked for the whole array at once in after().
+            'contacts.*' => ['integer'],
             'lists' => ['nullable', 'array'],
             'lists.*' => [
                 'integer',
@@ -85,6 +82,8 @@ class StoreCampaignRecipientsRequest extends FormRequest
                     $validator->errors()->add('contacts', __('Select at least one contact or list.'));
                 }
 
+                $this->validateContactsExist($validator);
+
                 $campaign = $this->route('campaign');
 
                 if ($this->boolean('idle_only')
@@ -96,5 +95,47 @@ class StoreCampaignRecipientsRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /**
+     * Flag every submitted contact that is not a live contact of the team.
+     *
+     * A `Rule::exists` on `contacts.*` runs one query per id, so a large
+     * selection would run thousands of queries before the action starts. This
+     * checks them all in one query and reports each missing id under its own
+     * index, exactly like the per-element rule did.
+     */
+    private function validateContactsExist(Validator $validator): void
+    {
+        $contacts = $this->input('contacts');
+
+        if (! is_array($contacts)) {
+            return;
+        }
+
+        // Elements that already failed the `integer` rule keep that error alone.
+        $contacts = array_filter(
+            $contacts,
+            fn (mixed $id, int|string $index): bool => ! $validator->errors()->has("contacts.{$index}"),
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        if ($contacts === []) {
+            return;
+        }
+
+        $existing = array_flip(Contact::query()
+            ->forTeam($this->resolveCurrentTeam($this)->id)
+            ->whereIntegerInRaw('id', array_map(intval(...), $contacts))
+            ->pluck('id')
+            ->all());
+
+        foreach ($contacts as $index => $id) {
+            if (! isset($existing[(int) $id])) {
+                $validator->errors()->add("contacts.{$index}", __('validation.exists', [
+                    'attribute' => $validator->getDisplayableAttribute("contacts.{$index}"),
+                ]));
+            }
+        }
     }
 }
