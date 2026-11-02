@@ -21,6 +21,7 @@ use Carbon\CarbonImmutable;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 
 /**
@@ -54,24 +55,56 @@ function gmailApiPart(string $mimeType, ?string $text = null, array $parts = [],
 }
 
 /**
+ * Build a Gmail API part whose body is stored as an attachment.
+ *
+ * @return array<string, mixed>
+ */
+function gmailApiStoredPart(string $mimeType, string $attachmentId, string $filename = ''): array
+{
+    return [
+        'mimeType' => $mimeType,
+        'filename' => $filename,
+        'headers' => [],
+        'body' => ['attachmentId' => $attachmentId, 'size' => 120],
+    ];
+}
+
+/**
  * Fetch a message through the adapter with the Gmail API answering the given payload.
  *
+ * Attachment bodies are answered in order after the message, and the paths
+ * of all requests made are collected in `$paths`.
+ *
  * @param  array<string, mixed>  $payload
+ * @param  array<int, string>  $attachments
+ * @param  array<int, string>|null  $paths
  * @return array<string, mixed>|null
  */
-function gmailApiFetch(array $payload): ?array
+function gmailApiFetch(array $payload, array $attachments = [], ?array &$paths = null): ?array
 {
-    $http = new Client(['handler' => HandlerStack::create(new MockHandler([
-        new Response(200, ['Content-Type' => 'application/json'], (string) json_encode([
-            'id' => 'gmail-id',
-            'threadId' => 'gmail-thread',
-            'snippet' => 'Address not found Your message wasn&#39;t delivered to ada@example.com',
-            'internalDate' => '1700000000000',
-            'payload' => $payload,
-        ])),
-    ]))]);
+    $json = fn (array $body): Response => new Response(200, ['Content-Type' => 'application/json'], (string) json_encode($body));
 
-    return (new GoogleGmailApi($http))->getMessage('access-token', 'gmail-id');
+    $responses = [$json([
+        'id' => 'gmail-id',
+        'threadId' => 'gmail-thread',
+        'snippet' => 'Address not found Your message wasn&#39;t delivered to ada@example.com',
+        'internalDate' => '1700000000000',
+        'payload' => $payload,
+    ])];
+
+    foreach ($attachments as $text) {
+        $responses[] = $json(['size' => strlen($text), 'data' => gmailApiData($text)]);
+    }
+
+    $history = [];
+    $stack = HandlerStack::create(new MockHandler($responses));
+    $stack->push(Middleware::history($history));
+
+    try {
+        return (new GoogleGmailApi(new Client(['handler' => $stack])))->getMessage('access-token', 'gmail-id');
+    } finally {
+        $paths = array_map(fn (array $transaction): string => $transaction['request']->getUri()->getPath(), $history);
+    }
 }
 
 /**
@@ -249,6 +282,46 @@ test('attachments and parts without a body are left out of the message text', fu
     ], headers: ['From' => 'ada@example.com', 'Subject' => 'Re: Hello']));
 
     expect($message['text'])->toBe('Sounds great, let us talk.');
+});
+
+test('report parts Gmail stored as attachments are fetched in order', function () {
+    $fixture = gmailApiSentEmail();
+
+    $message = gmailApiFetch(gmailApiPart('multipart/report', parts: [
+        gmailApiPart('text/plain', "Delivery to the following recipient failed permanently.\r\n"),
+        gmailApiStoredPart('message/delivery-status', 'dsn-attachment'),
+        gmailApiStoredPart('text/rfc822-headers', 'headers-attachment'),
+    ], headers: [
+        'From' => 'Mail Delivery Subsystem <mailer-daemon@googlemail.com>',
+        'Subject' => 'Delivery Status Notification (Failure)',
+    ]), [
+        "Final-Recipient: rfc822; ada@example.com\r\nAction: failed\r\nStatus: 5.1.1\r\n",
+        "From: sender@example.com\r\nMessage-ID: <sent-message-id@example.com>\r\n",
+    ], $paths);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], gmailApiInbound($message));
+
+    expect($paths)->toBe([
+        '/gmail/v1/users/me/messages/gmail-id',
+        '/gmail/v1/users/me/messages/gmail-id/attachments/dsn-attachment',
+        '/gmail/v1/users/me/messages/gmail-id/attachments/headers-attachment',
+    ])
+        ->and($message['text'])->toContain("failed permanently.\r\n\nFinal-Recipient: rfc822; ada@example.com")
+        ->toContain("Status: 5.1.1\r\n\nContent-Type: text/rfc822-headers\nFrom: sender@example.com")
+        ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Bounced)
+        ->and($fixture['contact']->fresh()->status)->toBe(ContactStatus::Bounced)
+        ->and(Unsubscribe::query()->where('team_id', $fixture['team']->id)->value('email'))->toBe('ada@example.com');
+});
+
+test('a file attached with a filename is never fetched', function () {
+    $message = gmailApiFetch(gmailApiPart('multipart/mixed', parts: [
+        gmailApiPart('text/plain', 'Sounds great, let us talk.'),
+        gmailApiStoredPart('text/plain', 'notes-attachment', filename: 'notes.txt'),
+        gmailApiStoredPart('text/rfc822-headers', 'headers-attachment', filename: 'headers.txt'),
+    ], headers: ['From' => 'ada@example.com', 'Subject' => 'Re: Hello']), paths: $paths);
+
+    expect($paths)->toBe(['/gmail/v1/users/me/messages/gmail-id'])
+        ->and($message['text'])->toBe("Sounds great, let us talk.\nContent-Type: text/rfc822-headers");
 });
 
 test('a single part message is still read from its top-level body', function () {

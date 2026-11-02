@@ -4,6 +4,7 @@ namespace App\Services\Mail;
 
 use App\Contracts\Mail\GmailApi;
 use Carbon\CarbonImmutable;
+use Closure;
 use Google\Client as GoogleClient;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
@@ -119,8 +120,10 @@ class GoogleGmailApi implements GmailApi
      */
     public function getMessage(string $accessToken, string $messageId): ?array
     {
+        $gmail = $this->gmail($accessToken);
+
         try {
-            $message = $this->gmail($accessToken)->users_messages->get('me', $messageId, [
+            $message = $gmail->users_messages->get('me', $messageId, [
                 'format' => 'full',
             ]);
         } catch (GoogleServiceException $exception) {
@@ -156,11 +159,32 @@ class GoogleGmailApi implements GmailApi
             'references' => $references,
             'fromEmail' => $this->extractEmail($headers['from'] ?? null),
             'subject' => $headers['subject'] ?? '',
-            'text' => $this->bodyText($message->getPayload()) ?? $message->getSnippet(),
+            'text' => $this->bodyText(
+                $message->getPayload(),
+                fn (string $attachmentId): ?MessagePartBody => $this->attachment($gmail, $messageId, $attachmentId),
+            ) ?? $message->getSnippet(),
             'receivedAt' => ctype_digit($internalDate)
                 ? CarbonImmutable::createFromTimestampMs((int) $internalDate)
                 : null,
         ];
+    }
+
+    /**
+     * Fetch a part body Gmail stored as an attachment, or null if it is gone.
+     */
+    private function attachment(Gmail $gmail, string $messageId, string $attachmentId): ?MessagePartBody
+    {
+        try {
+            return $gmail->users_messages_attachments->get('me', $messageId, $attachmentId);
+        } catch (GoogleServiceException $exception) {
+            if ($exception->getCode() === 404) {
+                return null;
+            }
+
+            throw new RuntimeException('Gmail attachment fetch failed: '.$exception->getMessage(), 0, $exception);
+        } catch (Throwable $exception) {
+            throw new RuntimeException('Gmail attachment fetch failed: '.$exception->getMessage(), 0, $exception);
+        }
     }
 
     /**
@@ -203,22 +227,27 @@ class GoogleGmailApi implements GmailApi
      *
      * A multipart message, such as every `multipart/report` bounce, has no
      * top-level body, so its parts are walked in order. Plain text wins over
-     * HTML alternatives, delivery status fields are kept, and attachments are
-     * skipped. An embedded copy of the original message is written after a
+     * HTML alternatives, delivery status fields are kept (fetched when Gmail
+     * stored them as an attachment), and named attachments are skipped. An
+     * embedded copy of the original message is written after a
      * `Content-Type` line with its headers, so its Message-ID can be matched
      * while the bounce report itself still ends where the copy starts.
+     *
+     * @param  Closure(string): ?MessagePartBody  $attachment  Fetches a body Gmail stored as an attachment.
      */
-    private function bodyText(?MessagePart $payload): ?string
+    private function bodyText(?MessagePart $payload, Closure $attachment): ?string
     {
-        $text = $payload instanceof MessagePart ? trim($this->partText($payload)) : '';
+        $text = $payload instanceof MessagePart ? trim($this->partText($payload, $attachment)) : '';
 
         return $text !== '' ? $text : null;
     }
 
     /**
      * Collect the readable text of a MIME part and its children.
+     *
+     * @param  Closure(string): ?MessagePartBody  $attachment
      */
-    private function partText(MessagePart $part): string
+    private function partText(MessagePart $part, Closure $attachment): string
     {
         $mimeType = strtolower((string) $part->getMimeType());
         $children = $part->getParts();
@@ -233,18 +262,22 @@ class GoogleGmailApi implements GmailApi
                 $children = $plain !== [] ? $plain : $children;
             }
 
-            return $this->joinText(array_map(fn (MessagePart $child): string => $this->partText($child), $children));
+            return $this->joinText(array_map(fn (MessagePart $child): string => $this->partText($child, $attachment), $children));
         }
 
         if ($mimeType === 'message/rfc822' || $mimeType === 'text/rfc822-headers') {
-            $texts = ['Content-Type: '.$mimeType, $this->extractText($part->getBody()) ?? ''];
+            $body = $mimeType === 'text/rfc822-headers'
+                ? $this->readableText($part->getBody(), (string) $part->getFilename(), $attachment)
+                : $this->extractText($part->getBody());
+
+            $texts = ['Content-Type: '.$mimeType, $body ?? ''];
 
             foreach ($children as $child) {
                 foreach ($child->getHeaders() as $header) {
                     $texts[] = $header->getName().': '.$header->getValue();
                 }
 
-                $texts[] = $this->partText($child);
+                $texts[] = $this->partText($child, $attachment);
             }
 
             return $this->joinText($texts);
@@ -256,7 +289,28 @@ class GoogleGmailApi implements GmailApi
             return '';
         }
 
-        return $this->extractText($part->getBody()) ?? '';
+        return $this->readableText($part->getBody(), (string) $part->getFilename(), $attachment) ?? '';
+    }
+
+    /**
+     * Decode a readable part's body.
+     *
+     * Gmail may store even a delivery status body as an attachment, leaving
+     * only its id inline, so that is fetched. A part with a filename is a
+     * real attachment and is never fetched. The client leaves the body null
+     * when Gmail omits it, despite its docblock.
+     *
+     * @param  Closure(string): ?MessagePartBody  $attachment
+     */
+    private function readableText(?MessagePartBody $body, string $filename, Closure $attachment): ?string
+    {
+        $attachmentId = (string) $body?->getAttachmentId();
+
+        if ((string) $body?->getData() === '' && $attachmentId !== '' && $filename === '') {
+            $body = $attachment($attachmentId);
+        }
+
+        return $this->extractText($body);
     }
 
     /**
@@ -271,9 +325,6 @@ class GoogleGmailApi implements GmailApi
 
     /**
      * Decode a base64url body part when present.
-     *
-     * The client leaves the body null when Gmail omits it, despite its
-     * docblock.
      */
     private function extractText(?MessagePartBody $body): ?string
     {
