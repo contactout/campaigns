@@ -28,17 +28,21 @@ return new class extends Migration
      *
      * MySQL drops the index it created for the mailer connection foreign key
      * once these composite indexes can serve it, and then refuses to drop the
-     * last of them. The foreign key is dropped and re-added around them so it
-     * gets its own index back.
+     * last of them. A standalone index on the column is added first when
+     * missing, so the foreign key stays in place and enforced throughout.
      */
     public function down(): void
     {
-        Schema::table('campaign_emails', function (Blueprint $table) {
-            $table->dropForeign(['mailer_connection_id']);
+        $needsConnectionIndex = ! Schema::hasIndex('campaign_emails', ['mailer_connection_id']);
+
+        Schema::table('campaign_emails', function (Blueprint $table) use ($needsConnectionIndex) {
+            if ($needsConnectionIndex) {
+                $table->index('mailer_connection_id');
+            }
+
             $table->dropIndex(['status', 'scheduled_at']);
             $table->dropIndex(['mailer_connection_id', 'message_id']);
             $table->dropIndex(['mailer_connection_id', 'dispatched_at']);
-            $table->foreign('mailer_connection_id')->references('id')->on('mailer_connections')->nullOnDelete();
         });
     }
 };

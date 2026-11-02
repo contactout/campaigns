@@ -40,7 +40,7 @@ test('campaign emails are indexed for dispatch, reply and bounce lookups', funct
         ->toContain(['mailer_connection_id', 'dispatched_at']);
 });
 
-test('rolling the lookup indexes back keeps the mailer connection foreign key', function () {
+test('rolling the lookup indexes back keeps the mailer connection foreign key indexed', function () {
     $migration = celiLookupIndexMigration();
 
     $migration->down();
@@ -50,12 +50,24 @@ test('rolling the lookup indexes back keeps the mailer connection foreign key', 
         ->not->toContain(['mailer_connection_id', 'message_id'])
         ->not->toContain(['mailer_connection_id', 'dispatched_at']);
 
+    $connectionIndexes = fn (): int => collect(celiIndexColumns())
+        ->filter(fn (array $columns): bool => $columns === ['mailer_connection_id'])
+        ->count();
+
+    expect($connectionIndexes())->toBe(1);
+
     $foreignKey = celiMailerConnectionForeignKey();
 
     expect($foreignKey)->not->toBeNull()
         ->and($foreignKey['foreign_table'])->toBe('mailer_connections')
         ->and($foreignKey['foreign_columns'])->toBe(['id'])
         ->and(strtolower((string) $foreignKey['on_delete']))->toBe('set null');
+
+    // A second round trip reuses the standalone index instead of adding another.
+    $migration->up();
+    $migration->down();
+
+    expect($connectionIndexes())->toBe(1);
 
     $migration->up();
 
