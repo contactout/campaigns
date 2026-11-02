@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 class StartCampaign
 {
     /**
-     * Start the given campaign and queue its first-step emails.
+     * Start (or restart) the given campaign and queue its first-step emails.
      *
      * @throws ValidationException when the campaign cannot be started.
      */
@@ -24,7 +24,11 @@ class StartCampaign
         }
 
         $campaign->status = CampaignStatus::Active;
-        $campaign->started_at = CarbonImmutable::now();
+
+        // Keep the original start on a restart: every step's `day` is counted
+        // from it, so moving it would push the rest of the sequence back by
+        // however long the campaign was stopped.
+        $campaign->started_at ??= CarbonImmutable::now();
         $campaign->save();
 
         SeedCampaignEmails::dispatch($campaign);
