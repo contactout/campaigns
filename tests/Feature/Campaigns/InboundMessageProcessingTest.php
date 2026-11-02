@@ -3,6 +3,7 @@
 use App\Actions\Mail\ProcessInboundMessage;
 use App\Contracts\Mail\CampaignMailer;
 use App\Data\InboundMessage;
+use App\Data\SendResult;
 use App\Enums\ContactIdentityType;
 use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
@@ -182,6 +183,33 @@ test('a replied recipient is not sent further campaign email', function () {
 
     expect($nextEmail->fresh()->status)->toBe(EmailStatus::Failed)
         ->and($mailer->sent)->toBeEmpty();
+});
+
+test('a reply matches an email sent through the campaign connection after being seeded without one', function () {
+    $fixture = mmosInboundFixture();
+
+    // Seeded before the campaign had a connection, so the email carries none
+    // and is sent through the campaign's connection.
+    $fixture['email']->update([
+        'mailer_connection_id' => null,
+        'message_id' => 'not-yet-sent@example.com',
+        'status' => EmailStatus::Scheduled,
+        'dispatched_at' => null,
+        'scheduled_at' => CarbonImmutable::now(),
+    ]);
+
+    $this->app->instance(CampaignMailer::class, new RecordingCampaignMailer(new SendResult(
+        messageId: 'sent-message-id@example.com',
+    )));
+
+    app()->call([new SendEmail($fixture['email']), 'handle']);
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent);
+
+    app(ProcessInboundMessage::class)->handle($fixture['connection'], mmosInboundReply());
+
+    expect($fixture['email']->fresh()->status)->toBe(EmailStatus::Replied)
+        ->and($fixture['recipient']->fresh()->status)->toBe(RecipientStatus::Replied);
 });
 
 test('a bounce report marks the matching email recipient and contact bounced', function () {
