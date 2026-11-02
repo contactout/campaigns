@@ -9,6 +9,7 @@ use App\Models\Contact;
 use App\Models\Recipient;
 use App\Services\Mail\CampaignStepScheduler;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Create an active campaign with a first step and a recipient of the given status.
@@ -94,6 +95,37 @@ test('seeding skips emails that already exist for the recipient and step', funct
 
     expect($count)->toBe(0)
         ->and(CampaignEmail::query()->where('campaign_id', $campaign->id)->count())->toBe(1);
+});
+
+test('seeding does not revisit recipients that already have their first step', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-01 00:00:00'));
+
+    $queriesToSeed = function (int $alreadySeeded): int {
+        ['campaign' => $campaign, 'step' => $step] = mmosSeededCampaign();
+
+        Recipient::factory()->count($alreadySeeded)->create(['campaign_id' => $campaign->id])
+            ->each(fn (Recipient $recipient) => CampaignEmail::factory()->create([
+                'campaign_id' => $campaign->id,
+                'campaign_step_id' => $step->id,
+                'recipient_id' => $recipient->id,
+                'status' => EmailStatus::Scheduled,
+            ]));
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $count = app(CampaignStepScheduler::class)->scheduleFirstSteps($campaign);
+
+        DB::disableQueryLog();
+
+        expect($count)->toBe(1)
+            ->and(CampaignEmail::query()->where('campaign_id', $campaign->id)->count())->toBe($alreadySeeded + 1);
+
+        return count(DB::getQueryLog());
+    };
+
+    // Adding one contact costs the same however many recipients were seeded before it.
+    expect($queriesToSeed(25))->toBe($queriesToSeed(0));
 });
 
 test('seeding schedules about now when the computed time is in the past', function () {

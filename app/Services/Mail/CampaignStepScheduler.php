@@ -12,6 +12,8 @@ use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Recipient;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -108,9 +110,10 @@ class CampaignStepScheduler
     /**
      * Create the first-step email for every eligible recipient of the campaign.
      *
-     * Recipients already holding an email for the first step are skipped. Every
-     * seed job scans all eligible recipients, so two enrollments arriving
-     * together can both try to insert the same recipient and step; the unique
+     * Only recipients without an email for the first step are read, in chunks
+     * by id, so adding a contact to a large running campaign touches just the
+     * new recipient rather than every one already seeded. Two enrollments
+     * arriving together can still both pick up the same recipient; the unique
      * index on (recipient_id, campaign_step_id) settles which insert wins and
      * `createOrFirst` returns the row that landed.
      *
@@ -129,40 +132,39 @@ class CampaignStepScheduler
             return 0;
         }
 
-        $recipients = $campaign->recipients()
-            ->whereIn('status', [RecipientStatus::Active, RecipientStatus::Pending])
-            ->get();
-
         $created = 0;
 
-        foreach ($recipients->chunk(self::SEED_CHUNK_SIZE) as $chunk) {
-            $created += DB::transaction(function () use ($campaign, $firstStep, $chunk): int {
-                $connectionId = Campaign::query()->lockForUpdate()->whereKey($campaign->id)->value('mailer_connection_id');
+        $campaign->recipients()
+            ->whereIn('status', [RecipientStatus::Active, RecipientStatus::Pending])
+            ->whereDoesntHave('emails', fn (Builder $query) => $query->where('campaign_step_id', $firstStep->id))
+            ->chunkById(self::SEED_CHUNK_SIZE, function (Collection $chunk) use ($campaign, $firstStep, &$created): void {
+                $created += DB::transaction(function () use ($campaign, $firstStep, $chunk): int {
+                    $connectionId = Campaign::query()->lockForUpdate()->whereKey($campaign->id)->value('mailer_connection_id');
 
-                $created = 0;
+                    $created = 0;
 
-                foreach ($chunk as $recipient) {
-                    $email = CampaignEmail::query()->createOrFirst(
-                        [
-                            'recipient_id' => $recipient->id,
-                            'campaign_step_id' => $firstStep->id,
-                        ],
-                        [
-                            'campaign_id' => $campaign->id,
-                            'mailer_connection_id' => $connectionId,
-                            'status' => EmailStatus::Scheduled,
-                            'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $recipient),
-                        ],
-                    );
+                    foreach ($chunk as $recipient) {
+                        $email = CampaignEmail::query()->createOrFirst(
+                            [
+                                'recipient_id' => $recipient->id,
+                                'campaign_step_id' => $firstStep->id,
+                            ],
+                            [
+                                'campaign_id' => $campaign->id,
+                                'mailer_connection_id' => $connectionId,
+                                'status' => EmailStatus::Scheduled,
+                                'scheduled_at' => $this->scheduledAtFor($campaign, $firstStep, $recipient),
+                            ],
+                        );
 
-                    if ($email->wasRecentlyCreated) {
-                        $created++;
+                        if ($email->wasRecentlyCreated) {
+                            $created++;
+                        }
                     }
-                }
 
-                return $created;
-            }, self::TRANSACTION_ATTEMPTS);
-        }
+                    return $created;
+                }, self::TRANSACTION_ATTEMPTS);
+            });
 
         return $created;
     }
