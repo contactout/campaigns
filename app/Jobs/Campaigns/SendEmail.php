@@ -249,6 +249,11 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
 
         $email->status = EmailStatus::Sent;
         $email->dispatched_at = now();
+
+        // Record the connection that actually sent the email. An email seeded
+        // before its campaign had a connection falls back to the campaign's,
+        // and replies and bounces are matched on this column.
+        $email->mailerConnection()->associate($connection);
         $email->data = $this->withoutDeferral($email->data);
 
         if ($result->messageId !== null && $result->messageId !== '') {

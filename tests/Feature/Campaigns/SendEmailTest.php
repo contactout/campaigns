@@ -276,6 +276,22 @@ test('fails the email when no mailer connection is set at all', function () {
         ->and($fake->sent)->toBeEmpty();
 });
 
+test('records the campaign connection on an email that was seeded without one', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+
+    $fixture = mmosSendEmailFixture();
+    $fixture['email']->update(['mailer_connection_id' => null]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    $email = $fixture['email']->fresh();
+
+    expect($email->status)->toBe(EmailStatus::Sent)
+        ->and($email->mailer_connection_id)->toBe($fixture['connection']->id)
+        ->and($fake->sent[0]['connection']->is($fixture['connection']))->toBeTrue();
+});
+
 test('reschedules the email when the connection is rate limited', function () {
     $this->travelTo(CarbonImmutable::parse('2026-02-01 12:00:00'));
 
