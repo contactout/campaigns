@@ -423,15 +423,15 @@ export default function MailerConnectionsIndex({
                         </ul>
 
                         <div className="hidden overflow-x-auto rounded-lg border lg:block">
-                            <table className="w-full min-w-[1100px] table-fixed text-body">
+                            <table className="w-full table-fixed text-body">
                                 <colgroup>
-                                    <col className="w-[160px]" />
+                                    <col className="w-[140px]" />
                                     <col className="w-[91px]" />
                                     <col />
-                                    <col className="w-[170px]" />
+                                    <col className="w-[150px]" />
                                     <col className="w-[109px]" />
                                     <col className="w-[132px]" />
-                                    <col className="w-[143px]" />
+                                    <col className="w-[120px]" />
                                     <col className="w-[72px]" />
                                 </colgroup>
                                 <thead className="bg-muted/50 text-left">
