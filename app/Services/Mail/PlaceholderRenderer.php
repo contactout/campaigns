@@ -25,8 +25,6 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class PlaceholderRenderer
 {
-    private const string PLACEHOLDER = '\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}';
-
     /**
      * The contact fields already read, keyed by team id.
      *
@@ -71,7 +69,7 @@ class PlaceholderRenderer
     private function replace(string $content, array $values): string
     {
         return (string) preg_replace_callback(
-            '/'.self::PLACEHOLDER.'/',
+            '/'.MergeFields::PATTERN.'/',
             static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
             $content,
         );

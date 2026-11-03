@@ -73,6 +73,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Template and step saves reject unknown placeholders by name instead of silently saving tags
+  that send as blank text. Both editors list the same built-in and team contact fields, including imported ones with spaces such as `Job Title`.
 - Step order is locked after a campaign first starts, including while stopped, so moving a
   queued step above a sent one cannot strand recipients or skip their remaining steps.
 - Signatures now preserve line breaks and literal text such as `<ada@example.com>` in sent emails

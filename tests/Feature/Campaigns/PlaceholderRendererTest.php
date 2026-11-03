@@ -54,6 +54,25 @@ test('renders built-in and custom placeholders case-insensitively', function () 
     expect($html)->toBe('Hi Grace Hopper <grace@example.com> +15551234567 COBOL Inc ');
 });
 
+test('resolves custom fields whose names contain spaces', function () {
+    $contact = Contact::factory()->create();
+    $field = ContactField::factory()->forTeam($contact->team)->create(['name' => 'Job Title']);
+
+    ContactProperty::factory()->create([
+        'contact_id' => $contact->id,
+        'contact_field_id' => $field->id,
+        'value' => 'Engineer',
+    ]);
+
+    $recipient = Recipient::factory()->create([
+        'campaign_id' => Campaign::factory()->create()->id,
+        'contact_id' => $contact->id,
+    ]);
+
+    expect(app(PlaceholderRenderer::class)->render('Role: {{Job Title}} / {{ job title }}', $recipient))
+        ->toBe('Role: Engineer / Engineer');
+});
+
 test('resolves unknown placeholders to an empty string', function () {
     $contact = Contact::factory()->create();
     $recipient = Recipient::factory()->create([

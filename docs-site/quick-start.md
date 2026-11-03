@@ -63,6 +63,17 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Personalizing templates and steps
+
+Both editors list the same available contact fields: `{{name}}`, `{{email}}`, `{{phone}}`,
+and your team's custom fields (for example `{{company}}` or `{{title}}` if those columns exist).
+Tags ignore case and surrounding whitespace. Template and step saves reject unknown tags in
+subjects and bodies, naming the tags to correct; `{{first_name}}` needs a matching custom
+contact field or should be replaced with `{{name}}`. Template placeholder definitions alone
+do not create contact fields. Known fields with no contact value still render as empty text.
+Use `{{signature}}` only in the body to insert the sending connection's signature or team default.
+Existing saved content is not rewritten; correct unknown tags when editing it.
+
 ## Campaign step order
 
 Arrange steps before starting a campaign. After its first start, dragging steps and the
