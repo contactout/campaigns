@@ -1,4 +1,6 @@
 import { Form, usePage } from '@inertiajs/react';
+import { useState } from 'react';
+import ConnectionWarning from '@/components/campaigns/connection-warning';
 import InputError from '@/components/input-error';
 import NativeSelect from '@/components/native-select';
 import { Button } from '@/components/ui/button';
@@ -88,41 +90,11 @@ export default function EditCampaignModal({
                                 </div>
 
                                 {mailerConnections.length > 0 ? (
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="mailer_connection_id">
-                                            Connection
-                                        </Label>
-                                        <NativeSelect
-                                            id="mailer_connection_id"
-                                            name="mailer_connection_id"
-                                            defaultValue={
-                                                campaign.mailer_connection_id
-                                                    ? String(
-                                                          campaign.mailer_connection_id,
-                                                      )
-                                                    : ''
-                                            }
-                                        >
-                                            <option value="">
-                                                No connection
-                                            </option>
-                                            {mailerConnections.map(
-                                                (connection) => (
-                                                    <option
-                                                        key={connection.id}
-                                                        value={connection.id}
-                                                    >
-                                                        {connection.name}
-                                                    </option>
-                                                ),
-                                            )}
-                                        </NativeSelect>
-                                        <InputError
-                                            message={
-                                                errors.mailer_connection_id
-                                            }
-                                        />
-                                    </div>
+                                    <ConnectionPicker
+                                        campaign={campaign}
+                                        connections={mailerConnections}
+                                        error={errors.mailer_connection_id}
+                                    />
                                 ) : null}
 
                                 <div className="grid gap-2">
@@ -270,5 +242,45 @@ export default function EditCampaignModal({
                 </Form>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function ConnectionPicker({
+    campaign,
+    connections,
+    error,
+}: {
+    campaign: CampaignDetail;
+    connections: MailerConnectionOption[];
+    error?: string;
+}) {
+    const [connectionId, setConnectionId] = useState(
+        String(campaign.mailer_connection_id ?? ''),
+    );
+    const selected = connections.find(
+        (connection) => String(connection.id) === connectionId,
+    );
+
+    return (
+        <div className="grid gap-2">
+            <Label htmlFor="mailer_connection_id">Connection</Label>
+            <NativeSelect
+                id="mailer_connection_id"
+                name="mailer_connection_id"
+                value={connectionId}
+                onChange={(event) => setConnectionId(event.target.value)}
+            >
+                <option value="">No connection</option>
+                {connections.map((connection) => (
+                    <option key={connection.id} value={connection.id}>
+                        {connection.name} — {connection.display_status_label}
+                    </option>
+                ))}
+            </NativeSelect>
+            <InputError message={error} />
+            {campaign.status === 'Active' ? (
+                <ConnectionWarning connection={selected ?? null} />
+            ) : null}
+        </div>
     );
 }
