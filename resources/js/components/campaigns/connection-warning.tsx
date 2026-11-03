@@ -16,7 +16,7 @@ export default function ConnectionWarning({
     }
 
     return (
-        <Alert>
+        <Alert className="border-badge-warning-foreground/30 bg-badge-warning text-badge-warning-foreground *:data-[slot=alert-description]:text-badge-warning-foreground">
             <AlertTriangle />
             <AlertTitle>Connection needs attention</AlertTitle>
             <AlertDescription>

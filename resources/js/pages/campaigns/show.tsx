@@ -503,7 +503,9 @@ export default function CampaignShow({
                     })}
                 </div>
 
-                <ConnectionWarning connection={connection} />
+                {campaign.status === 'Active' ? (
+                    <ConnectionWarning connection={connection} />
+                ) : null}
 
                 {errors.campaign ? (
                     <Alert variant="destructive">
