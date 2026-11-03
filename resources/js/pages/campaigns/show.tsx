@@ -1,4 +1,4 @@
-import { Form, Head, router, usePage } from '@inertiajs/react';
+import { Form, Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     Archive,
@@ -117,6 +117,8 @@ export default function CampaignShow({
     const campaignId = useRef(campaign.id);
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [archiveOpen, setArchiveOpen] = useState(false);
+    const archiveForm = useForm({});
     const [recipientsOpen, setRecipientsOpen] = useState(false);
     const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -269,17 +271,12 @@ export default function CampaignShow({
 
             {canArchive ? (
                 <div className="hidden lg:block">
-                    <Form {...archive.form([slug, campaign.id])}>
-                        {({ processing }) => (
-                            <Button
-                                type="submit"
-                                variant="outline"
-                                disabled={processing}
-                            >
-                                <Archive /> Archive
-                            </Button>
-                        )}
-                    </Form>
+                    <Button
+                        variant="outline"
+                        onClick={() => setArchiveOpen(true)}
+                    >
+                        <Archive /> Archive
+                    </Button>
                 </div>
             ) : null}
 
@@ -365,13 +362,7 @@ export default function CampaignShow({
                             ) : null}
                             {canArchive ? (
                                 <DropdownMenuItem
-                                    onSelect={() =>
-                                        router.post(
-                                            archive.url([slug, campaign.id]),
-                                            {},
-                                            { preserveScroll: true },
-                                        )
-                                    }
+                                    onSelect={() => setArchiveOpen(true)}
                                 >
                                     <Archive /> Archive
                                 </DropdownMenuItem>
@@ -503,6 +494,16 @@ export default function CampaignShow({
                     })}
                 </div>
 
+                {campaign.status === 'Archived' ? (
+                    <Alert>
+                        <AlertDescription>
+                            This campaign is permanently archived. Sending has
+                            stopped, and its settings, recipients and steps are
+                            read-only. It cannot be restored.
+                        </AlertDescription>
+                    </Alert>
+                ) : null}
+
                 {campaign.status === 'Active' ? (
                     <ConnectionWarning connection={connection} />
                 ) : null}
@@ -521,7 +522,7 @@ export default function CampaignShow({
                         aria-labelledby="campaign-tab-steps"
                         className="flex flex-col gap-4"
                     >
-                        {editor ? (
+                        {editor && can.update ? (
                             <SequenceEditor
                                 campaignId={campaign.id}
                                 campaignName={campaign.name}
@@ -600,10 +601,29 @@ export default function CampaignShow({
                 }}
             />
 
+            <ConfirmDialog
+                open={archiveOpen}
+                onOpenChange={setArchiveOpen}
+                title="Archive campaign?"
+                description="Archiving is permanent. Sending stops, and this campaign and its recipients become read-only. You cannot restore or restart it. To pause sending temporarily, use Stop instead."
+                confirmLabel="Archive campaign"
+                processing={archiveForm.processing}
+                onConfirm={() =>
+                    archiveForm.post(archive.url([slug, campaign.id]), {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            setArchiveOpen(false);
+                            setEditor(null);
+                            editorDirty.current = false;
+                        },
+                    })
+                }
+            />
+
             <EditCampaignModal
                 campaign={campaign}
                 mailerConnections={mailerConnections}
-                open={editOpen}
+                open={can.update && editOpen}
                 onOpenChange={setEditOpen}
             />
             <DeleteCampaignModal
@@ -615,7 +635,7 @@ export default function CampaignShow({
                 campaignId={campaign.id}
                 availableContacts={availableContacts}
                 lists={lists}
-                open={recipientsOpen}
+                open={can.update && recipientsOpen}
                 onOpenChange={setRecipientsOpen}
             />
         </>
