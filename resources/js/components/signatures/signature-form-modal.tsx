@@ -52,7 +52,8 @@ export default function SignatureFormModal({
                                         : 'New signature'}
                                 </DialogTitle>
                                 <DialogDescription>
-                                    Signatures are appended to your emails.
+                                    Signatures use plain text. Line breaks are
+                                    preserved; HTML tags appear as text.
                                 </DialogDescription>
                             </DialogHeader>
 

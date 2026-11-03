@@ -36,6 +36,12 @@ Each connection can use one of the team's signatures, chosen in the **Signature*
 
 A connection left on **Team default** uses the team's default signature. With no default either, the tag renders empty. Deleting a signature moves the connections using it back to the team default.
 
+Signatures are plain text. Line breaks are preserved, and characters such as `&` and
+`<ada@example.com>` appear literally in the Signatures preview, the step editor's named-signature
+insertion, and sent emails. HTML tags and entities (including those in existing signatures) are
+shown as text, not formatting. Edit older HTML signatures to use text and line breaks instead.
+Content already copied into a saved step is unchanged; remove and reinsert it to update.
+
 The tag is filled only in the email body; in a subject it renders empty.
 
 ## When sending fails
