@@ -134,14 +134,7 @@ export default function TemplateShow({
 
             <div className="flex w-full flex-col gap-5 px-4 py-6 lg:px-6">
                 <PageHead
-                    title={
-                        <>
-                            <span className="lg:hidden">Edit template</span>
-                            <span className="hidden lg:inline">
-                                {form.data.name.trim() || 'Untitled template'}
-                            </span>
-                        </>
-                    }
+                    title={form.data.name.trim() || 'Untitled template'}
                     description={description}
                     mobileNav
                     back={{ href: listUrl, label: 'Back to templates' }}

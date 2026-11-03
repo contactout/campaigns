@@ -45,10 +45,10 @@ export default function StartBlockedPanel({
                         id="start-blocked-title"
                         className="text-body leading-5 font-semibold text-badge-danger-foreground"
                     >
-                        Can&apos;t start this campaign
+                        Before you can start
                     </h2>
                     <p className="text-body leading-5 text-badge-danger-foreground">
-                        Fix these first, then press Start again:
+                        Fix these issues:
                     </p>
 
                     <ul className="mt-2 flex list-disc flex-col gap-1 pl-4 text-body leading-5 text-badge-danger-foreground">

@@ -19,6 +19,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { formatRate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { timezoneLabel } from '@/lib/timezone';
 import { destroy as destroyStep, reorder } from '@/routes/campaigns/steps';
@@ -79,9 +80,6 @@ function groupByDay(steps: CampaignStep[]): DayGroup[] {
     return groups;
 }
 
-const percent = (value: number | null): string =>
-    value === null ? '—' : `${value}%`;
-
 export default function CampaignStepsTab({
     campaign,
     connection,
@@ -104,10 +102,9 @@ export default function CampaignStepsTab({
               .map((reason) => reason.step_id)
         : [];
 
-    const openedRate =
-        stats.emails_sent > 0
-            ? `${Math.round((stats.opened / stats.emails_sent) * 100)}%`
-            : '—';
+    const openedRate = formatRate(
+        stats.emails_sent > 0 ? (stats.opened / stats.emails_sent) * 100 : null,
+    );
 
     const sender = connection?.from_email ?? connection?.name ?? null;
 
@@ -314,14 +311,14 @@ export default function CampaignStepsTab({
                                                 />
                                                 <Metric
                                                     label="Opened"
-                                                    value={percent(
+                                                    value={formatRate(
                                                         step.metrics
                                                             .opened_rate,
                                                     )}
                                                 />
                                                 <Metric
                                                     label="Replied"
-                                                    value={percent(
+                                                    value={formatRate(
                                                         step.metrics
                                                             .replied_rate,
                                                     )}

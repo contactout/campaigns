@@ -314,7 +314,8 @@ export default function CampaignShow({
                             className={startBlocked ? 'opacity-50' : undefined}
                             data-test="campaign-start-button"
                         >
-                            <Play /> Start
+                            <Play />{' '}
+                            {campaign.status === 'Stopped' ? 'Resume' : 'Start'}
                         </Button>
                     )}
                 </Form>
