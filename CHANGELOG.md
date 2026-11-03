@@ -77,6 +77,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Signatures, contact detail, and Settings now use the same page header, spacing, and body
+  typography as the other app pages. Contact detail has its back link in the header; Settings
+  keeps its account sub-navigation.
 - Adding campaign recipients now reports how many unique contacts were skipped and why; the
   Add recipients dialog shows contact and list selection counts and explains suppression.
 - Template and step saves reject unknown placeholders by name instead of silently saving tags

@@ -63,6 +63,12 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Finding your way around
+
+App pages share the same sidebar and page header. On mobile, use the bottom tabs or the
+navigation button beside a page title to reach the full menu. Contact detail has a back arrow
+beside the contact name to return to Contacts. Settings keeps Profile, Security, Teams, and
+Appearance in its own sub-navigation within the same app layout.
 ## Stopping and archiving campaigns
 
 Use **Stop** to pause an active campaign if you may want to restart it later.
