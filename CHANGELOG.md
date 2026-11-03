@@ -77,6 +77,10 @@ All notable changes to this project are documented here. The format is based on
   queued step above a sent one cannot strand recipients or skip their remaining steps.
 - Signatures now preserve line breaks and literal text such as `<ada@example.com>` in sent emails
   and when inserted into the step editor, matching the plain-text signature editor and preview.
+- Campaign connection pickers in the edit dialog show verification status and warn before saving
+  an inactive connection on a running campaign. Campaign pages link to Connections while the
+  selected connection needs verification, instead of leaving waiting emails unexplained.
+
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
 - Every step of a recipient added after the campaign started fired within minutes, because step

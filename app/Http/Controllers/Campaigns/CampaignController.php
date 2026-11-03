@@ -414,7 +414,7 @@ class CampaignController extends Controller
      *
      * The smtp settings hold both passwords; only the sender address leaves here.
      *
-     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string}|null
+     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string, display_status: string, display_status_label: string}|null
      */
     protected function connectionSummary(?MailerConnection $connection): ?array
     {
@@ -425,11 +425,8 @@ class CampaignController extends Controller
         $settings = $connection->smtp_setting ?? [];
 
         return [
-            'id' => $connection->id,
-            'name' => $connection->name,
+            ...$connection->optionPayload(),
             'from_email' => $settings['from_email'] ?? $settings['email'] ?? null,
-            'status' => $connection->status->value,
-            'status_label' => $connection->status->label(),
         ];
     }
 
