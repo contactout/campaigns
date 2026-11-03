@@ -141,7 +141,7 @@ class MailerConnection extends Model
      * Single source for the mapping: the campaigns index, the campaign detail
      * page and the dashboard all read it, so their pickers cannot diverge.
      *
-     * @return array{id: int, name: string, status: string, status_label: string}
+     * @return array{id: int, name: string, status: string, status_label: string, display_status: string, display_status_label: string}
      */
     public function optionPayload(): array
     {
@@ -150,13 +150,15 @@ class MailerConnection extends Model
             'name' => $this->name,
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
+            'display_status' => $this->displayStatus()->value,
+            'display_status_label' => $this->displayStatus()->label(),
         ];
     }
 
     /**
      * Get the option payload for every connection a team owns, ordered by name.
      *
-     * @return array<int, array{id: int, name: string, status: string, status_label: string}>
+     * @return array<int, array{id: int, name: string, status: string, status_label: string, display_status: string, display_status_label: string}>
      */
     public static function optionsForTeam(int $teamId): array
     {

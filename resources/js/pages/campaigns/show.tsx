@@ -15,6 +15,7 @@ import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
 import CampaignRecipientsTab from '@/components/campaigns/campaign-recipients-tab';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
 import CampaignStepsTab from '@/components/campaigns/campaign-steps-tab';
+import ConnectionWarning from '@/components/campaigns/connection-warning';
 import DeleteCampaignModal from '@/components/campaigns/delete-campaign-modal';
 import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
 import SequenceEditor from '@/components/campaigns/sequence-editor';
@@ -501,6 +502,8 @@ export default function CampaignShow({
                         );
                     })}
                 </div>
+
+                <ConnectionWarning connection={connection} />
 
                 {errors.campaign ? (
                     <Alert variant="destructive">

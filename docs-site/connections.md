@@ -71,6 +71,12 @@ A threaded follow-up sent from the new connection still replies in the same conv
 SMTP and Gmail. On Outlook it starts a new conversation, because the new mailbox can't reply to a
 message it never sent.
 
+The campaign edit dialog labels each connection with its verification status. You can still
+save an inactive connection on a running campaign, but the dialog warns that sending will wait
+until it is verified. The campaign page keeps a warning and a link to **Connections** until the
+connection is verified or replaced with a verified one. Saving does not verify the connection
+or change the campaign's Active status.
+
 Clearing a campaign's connection leaves its unsent emails on the connection they already have.
 
 ## Replies and bounces
