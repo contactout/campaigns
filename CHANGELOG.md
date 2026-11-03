@@ -42,6 +42,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Campaigns and Contacts search as you type after a short pause, like Templates, while keeping
+  the selected status or list and scroll position. Enter applies the search immediately.
 - Rebranded from MMOS to Campaigns. The Docker image and nginx site are renamed; existing
   installs keep working and the database is untouched.
 - Contacts spreadsheet keyboard navigation and accessibility polish.
