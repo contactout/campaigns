@@ -63,6 +63,13 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Browsing contacts and campaigns
+
+Contacts, campaigns, and campaign recipients are listed newest first, with higher IDs first
+when creation timestamps match (for example, after a CSV import). This keeps page boundaries
+consistent while the data is unchanged. Adding or deleting records between requests can still
+shift rows between pages.
+
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`

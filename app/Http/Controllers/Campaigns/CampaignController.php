@@ -68,6 +68,7 @@ class CampaignController extends Controller
             ->when($filters['q'], fn (Builder $query, string $search): Builder => $query->where('name', 'like', "%{$search}%"))
             ->when($filters['status'], fn (Builder $query, string $status): Builder => $query->where('status', $status))
             ->latest()
+            ->latest('id')
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Campaign $campaign): array => $this->campaignSummary($campaign));
@@ -137,6 +138,7 @@ class CampaignController extends Controller
                         ->orWhereHas('emailIdentity', fn (Builder $identity): Builder => $identity->where('normalized_value', 'like', "%{$search}%"))),
             ))
             ->latest()
+            ->latest('id')
             ->paginate(25, ['*'], 'recipients_page')
             ->withQueryString();
 
