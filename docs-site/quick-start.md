@@ -63,6 +63,13 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Campaign step order
+
+Arrange steps before starting a campaign. After its first start, dragging steps and the
+**Move up / Move down** actions are disabled, even while the campaign is stopped. This keeps
+queued emails and recipients' sent history in the same sequence so follow-ups are not skipped.
+Stopping a campaign does not unlock its step order.
+
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`
