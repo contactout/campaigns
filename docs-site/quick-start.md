@@ -63,6 +63,9 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+In **New contact**, the Status select is associated with its visible label. The Role select
+in **Invite member** is labelled the same way, so assistive technology can identify both controls.
+
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`
