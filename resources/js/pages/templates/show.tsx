@@ -23,6 +23,7 @@ import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { index, update } from '@/routes/templates';
 import type {
     EmailTemplateDetail,
+    MergePlaceholder,
     TemplateFolder,
     TemplatePlaceholder,
 } from '@/types';
@@ -32,6 +33,7 @@ const NO_FOLDER = 'none';
 type Props = {
     template: EmailTemplateDetail;
     placeholders: TemplatePlaceholder[];
+    availablePlaceholders: MergePlaceholder[];
     folders: TemplateFolder[];
     can: {
         update: boolean;
@@ -42,6 +44,7 @@ type Props = {
 export default function TemplateShow({
     template,
     placeholders,
+    availablePlaceholders,
     folders,
     can,
 }: Props) {
@@ -312,7 +315,7 @@ export default function TemplateShow({
                                 minHeightClass="min-h-[280px]"
                                 insertRef={insertRef}
                                 actions={
-                                    placeholders.length > 0 ? (
+                                    availablePlaceholders.length > 0 ? (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button
@@ -331,20 +334,19 @@ export default function TemplateShow({
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                {placeholders.map(
+                                                {availablePlaceholders.map(
                                                     (placeholder) => (
                                                         <DropdownMenuItem
-                                                            key={placeholder.id}
+                                                            key={
+                                                                placeholder.name
+                                                            }
                                                             onSelect={() =>
                                                                 insertPlaceholder(
                                                                     placeholder.name,
                                                                 )
                                                             }
                                                         >
-                                                            {
-                                                                placeholder.type_label
-                                                            }{' '}
-                                                            · {placeholder.name}
+                                                            {placeholder.label}
                                                         </DropdownMenuItem>
                                                     ),
                                                 )}
@@ -366,13 +368,15 @@ export default function TemplateShow({
                                 Placeholders
                             </h2>
                             <p className="mt-1 hidden text-label leading-4 text-muted-foreground lg:block">
-                                Click to insert at cursor. Fallback used when a
-                                contact field is empty.
+                                Click to insert a contact field at the cursor.
+                                Use {'{{signature}}'} in the body for your
+                                signature.
                             </p>
                         </div>
                         <PlaceholderManager
                             templateId={template.id}
                             placeholders={placeholders}
+                            availablePlaceholders={availablePlaceholders}
                             canManage={can.update}
                             onInsert={insertPlaceholder}
                         />

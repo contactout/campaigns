@@ -1,4 +1,4 @@
-import { Form, Head, router, usePage } from '@inertiajs/react';
+import { Form, Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     Archive,
@@ -11,10 +11,12 @@ import {
     Trash2,
 } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
 import CampaignRecipientsTab from '@/components/campaigns/campaign-recipients-tab';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
 import CampaignStepsTab from '@/components/campaigns/campaign-steps-tab';
+import ConnectionWarning from '@/components/campaigns/connection-warning';
 import DeleteCampaignModal from '@/components/campaigns/delete-campaign-modal';
 import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
 import SequenceEditor from '@/components/campaigns/sequence-editor';
@@ -98,6 +100,12 @@ export default function CampaignShow({
     const slug = currentTeam?.slug ?? '';
     const errors = usePage().props.errors as Record<string, string>;
 
+    useEffect(() => {
+        if (errors.campaign) {
+            toast.error(errors.campaign, { id: errors.campaign });
+        }
+    }, [errors]);
+
     // A Recipients URL must open on Recipients: Back, a reload or a shared
     // `?recipients_q=…` link all remount the page with that query string.
     const [tab, setTab] = useState<Tab>(() =>
@@ -116,6 +124,8 @@ export default function CampaignShow({
     const campaignId = useRef(campaign.id);
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [archiveOpen, setArchiveOpen] = useState(false);
+    const archiveForm = useForm({});
     const [recipientsOpen, setRecipientsOpen] = useState(false);
     const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -268,17 +278,12 @@ export default function CampaignShow({
 
             {canArchive ? (
                 <div className="hidden lg:block">
-                    <Form {...archive.form([slug, campaign.id])}>
-                        {({ processing }) => (
-                            <Button
-                                type="submit"
-                                variant="outline"
-                                disabled={processing}
-                            >
-                                <Archive /> Archive
-                            </Button>
-                        )}
-                    </Form>
+                    <Button
+                        variant="outline"
+                        onClick={() => setArchiveOpen(true)}
+                    >
+                        <Archive /> Archive
+                    </Button>
                 </div>
             ) : null}
 
@@ -365,13 +370,7 @@ export default function CampaignShow({
                             ) : null}
                             {canArchive ? (
                                 <DropdownMenuItem
-                                    onSelect={() =>
-                                        router.post(
-                                            archive.url([slug, campaign.id]),
-                                            {},
-                                            { preserveScroll: true },
-                                        )
-                                    }
+                                    onSelect={() => setArchiveOpen(true)}
                                 >
                                     <Archive /> Archive
                                 </DropdownMenuItem>
@@ -503,10 +502,18 @@ export default function CampaignShow({
                     })}
                 </div>
 
-                {errors.campaign ? (
-                    <Alert variant="destructive">
-                        <AlertDescription>{errors.campaign}</AlertDescription>
+                {campaign.status === 'Archived' ? (
+                    <Alert>
+                        <AlertDescription>
+                            This campaign is permanently archived. Sending has
+                            stopped, and its settings, recipients and steps are
+                            read-only. It cannot be restored.
+                        </AlertDescription>
                     </Alert>
+                ) : null}
+
+                {campaign.status === 'Active' ? (
+                    <ConnectionWarning connection={connection} />
                 ) : null}
 
                 {tab === 'steps' ? (
@@ -517,7 +524,7 @@ export default function CampaignShow({
                         aria-labelledby="campaign-tab-steps"
                         className="flex flex-col gap-4"
                     >
-                        {editor ? (
+                        {editor && can.update ? (
                             <SequenceEditor
                                 campaignId={campaign.id}
                                 campaignName={campaign.name}
@@ -596,10 +603,29 @@ export default function CampaignShow({
                 }}
             />
 
+            <ConfirmDialog
+                open={archiveOpen}
+                onOpenChange={setArchiveOpen}
+                title="Archive campaign?"
+                description="Archiving is permanent. Sending stops, and this campaign and its recipients become read-only. You cannot restore or restart it. To pause sending temporarily, use Stop instead."
+                confirmLabel="Archive campaign"
+                processing={archiveForm.processing}
+                onConfirm={() =>
+                    archiveForm.post(archive.url([slug, campaign.id]), {
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            setArchiveOpen(false);
+                            setEditor(null);
+                            editorDirty.current = false;
+                        },
+                    })
+                }
+            />
+
             <EditCampaignModal
                 campaign={campaign}
                 mailerConnections={mailerConnections}
-                open={editOpen}
+                open={can.update && editOpen}
                 onOpenChange={setEditOpen}
             />
             <DeleteCampaignModal
@@ -611,7 +637,7 @@ export default function CampaignShow({
                 campaignId={campaign.id}
                 availableContacts={availableContacts}
                 lists={lists}
-                open={recipientsOpen}
+                open={can.update && recipientsOpen}
                 onOpenChange={setRecipientsOpen}
             />
         </>

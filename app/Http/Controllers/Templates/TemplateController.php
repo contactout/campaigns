@@ -12,6 +12,7 @@ use App\Models\EmailTemplate;
 use App\Models\Placeholder;
 use App\Models\Team;
 use App\Models\TemplateFolder;
+use App\Services\Mail\MergeFields;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -99,6 +100,7 @@ class TemplateController extends Controller
                 'folder_id' => $template->folder_id,
                 'is_draft' => $template->is_draft,
             ],
+            'availablePlaceholders' => MergeFields::forTeam($currentTeam->id),
             'placeholders' => $template->placeholders
                 ->map(fn (Placeholder $placeholder): array => [
                     'id' => $placeholder->id,

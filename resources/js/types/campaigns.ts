@@ -1,3 +1,5 @@
+import type { MailerConnectionOption } from './mailer-connections';
+
 export type CampaignStatus =
     | 'Draft'
     | 'Active'
@@ -55,15 +57,12 @@ export type CampaignStep = {
     time: string | null;
     is_threaded: boolean;
     setting: Record<string, unknown> | null;
+    can_delete: boolean;
     metrics: CampaignStepMetrics;
 };
 
-export type CampaignConnection = {
-    id: number;
-    name: string;
+export type CampaignConnection = MailerConnectionOption & {
     from_email: string | null;
-    status: string;
-    status_label: string;
 };
 
 export type CampaignStartReason = {
