@@ -26,8 +26,6 @@ use Illuminate\Database\Eloquent\Collection;
  */
 class PlaceholderRenderer
 {
-    private const string PLACEHOLDER = '\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}';
-
     private const string SIGNATURE_PARAGRAPH = '<p\b[^>]*>\s*\{\{\s*signature\s*\}\}\s*<\/p>';
 
     /**
@@ -56,7 +54,7 @@ class PlaceholderRenderer
         $values['signature'] = (string) $connection->resolveSignature()?->body;
 
         return (string) preg_replace_callback(
-            '/'.self::SIGNATURE_PARAGRAPH.'|'.self::PLACEHOLDER.'/i',
+            '/'.self::SIGNATURE_PARAGRAPH.'|'.MergeFields::PATTERN.'/i',
             static fn (array $matches): string => isset($matches[1])
                 ? $values[strtolower($matches[1])] ?? ''
                 : $values['signature'],
@@ -80,7 +78,7 @@ class PlaceholderRenderer
     private function replace(string $content, array $values): string
     {
         return (string) preg_replace_callback(
-            '/'.self::PLACEHOLDER.'/',
+            '/'.MergeFields::PATTERN.'/',
             static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
             $content,
         );

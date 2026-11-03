@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { destroy, store } from '@/routes/placeholders';
-import type { TemplatePlaceholder } from '@/types';
+import type { MergePlaceholder, TemplatePlaceholder } from '@/types';
 
 const typeOptions = [
     { value: 'Text', label: 'Text' },
@@ -25,6 +25,7 @@ const typeOptions = [
 type Props = {
     templateId: number;
     placeholders: TemplatePlaceholder[];
+    availablePlaceholders: MergePlaceholder[];
     canManage: boolean;
     /** Inserts `{{name}}` at the cursor of the body editor. */
     onInsert?: (name: string) => void;
@@ -41,6 +42,7 @@ type Props = {
 export default function PlaceholderManager({
     templateId,
     placeholders,
+    availablePlaceholders,
     canManage,
     onInsert,
 }: Props) {
@@ -51,6 +53,26 @@ export default function PlaceholderManager({
 
     return (
         <div className="flex flex-col">
+            <ul aria-label="Available placeholders">
+                {availablePlaceholders.map((placeholder) => (
+                    <li key={placeholder.name} className="border-b px-4 py-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onInsert?.(placeholder.name)}
+                            aria-label={`Insert ${placeholder.label}`}
+                        >
+                            {`{{${placeholder.name}}}`}
+                        </Button>
+                    </li>
+                ))}
+            </ul>
+            <p className="border-b px-4 py-3 text-label text-muted-foreground">
+                Template definitions below do not create contact fields. Add
+                custom fields in Contacts to make them available in both
+                editors.
+            </p>
             <ul aria-label="Template placeholders">
                 {placeholders.map((placeholder) => (
                     <li
@@ -63,6 +85,13 @@ export default function PlaceholderManager({
                         <button
                             type="button"
                             onClick={() => onInsert?.(placeholder.name)}
+                            disabled={
+                                !availablePlaceholders.some(
+                                    (field) =>
+                                        field.name.toLowerCase() ===
+                                        placeholder.name.toLowerCase(),
+                                )
+                            }
                             title={`Insert {{${placeholder.name}}}`}
                             aria-label={
                                 placeholder.fallback
@@ -109,11 +138,7 @@ export default function PlaceholderManager({
 
             {placeholders.length === 0 ? (
                 <p className="border-b px-4 py-3 text-body leading-5 text-muted-foreground">
-                    No placeholders yet. Use them as{' '}
-                    <code className="rounded-sm bg-muted px-1 py-0.5 text-foreground">
-                        {'{{name}}'}
-                    </code>{' '}
-                    in the body.
+                    No template definitions yet.
                 </p>
             ) : null}
 
