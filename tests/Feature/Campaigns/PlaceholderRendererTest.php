@@ -77,9 +77,9 @@ function rendererSignatureRecipient(Team $team): Recipient
     ]);
 }
 
-test('renders the connection signature in place of a signature-only paragraph', function () {
+test('renders the plain-text connection signature inside a signature-only paragraph', function () {
     $team = Team::factory()->create();
-    $signature = Signature::factory()->forTeam($team)->create(['body' => '<p>Alex</p><p>Sales</p>']);
+    $signature = Signature::factory()->forTeam($team)->create(['body' => "Best regards\nAda Lovelace\nTom & Jerry <ada@example.com>"]);
     $connection = MailerConnection::factory()->forTeam($team)->create(['signature_id' => $signature->id]);
 
     $html = app(PlaceholderRenderer::class)->render(
@@ -88,12 +88,26 @@ test('renders the connection signature in place of a signature-only paragraph', 
         $connection,
     );
 
-    expect($html)->toBe('<p>Hi Grace Hopper</p><p>Alex</p><p>Sales</p>');
+    expect($html)->toBe("<p>Hi Grace Hopper</p><p>Best regards<br />\nAda Lovelace<br />\nTom &amp; Jerry &lt;ada@example.com&gt;</p>");
+});
+
+test('renders existing html signatures literally instead of interpreting markup or entities', function () {
+    $team = Team::factory()->create();
+    $signature = Signature::factory()->forTeam($team)->create(['body' => 'Line<br>Line &amp; <a href="https://example.com">Sales</a>']);
+    $connection = MailerConnection::factory()->forTeam($team)->create(['signature_id' => $signature->id]);
+
+    $html = app(PlaceholderRenderer::class)->render(
+        '<p>{{signature}}</p>',
+        rendererSignatureRecipient($team),
+        $connection,
+    );
+
+    expect($html)->toBe('<p>Line&lt;br&gt;Line &amp;amp; &lt;a href=&quot;https://example.com&quot;&gt;Sales&lt;/a&gt;</p>');
 });
 
 test('renders an inline signature tag and leaves placeholders in the signature untouched', function () {
     $team = Team::factory()->create();
-    $signature = Signature::factory()->forTeam($team)->create(['body' => 'Alex {{name}}']);
+    $signature = Signature::factory()->forTeam($team)->create(['body' => "Alex {{name}}\r\nSales & Support"]);
     $connection = MailerConnection::factory()->forTeam($team)->create(['signature_id' => $signature->id]);
 
     $html = app(PlaceholderRenderer::class)->render(
@@ -102,18 +116,18 @@ test('renders an inline signature tag and leaves placeholders in the signature u
         $connection,
     );
 
-    expect($html)->toBe('<p>Thanks, Alex {{name}}</p>');
+    expect($html)->toBe("<p>Thanks, Alex {{name}}<br />\r\nSales &amp; Support</p>");
 });
 
 test('falls back to the team default signature when the connection has none', function () {
     $team = Team::factory()->create();
-    Signature::factory()->forTeam($team)->default()->create(['body' => '<p>The team</p>']);
+    Signature::factory()->forTeam($team)->default()->create(['body' => "The team\nSales & Support"]);
     Signature::factory()->default()->create(['body' => '<p>Another team</p>']);
     $connection = MailerConnection::factory()->forTeam($team)->create();
 
     $html = app(PlaceholderRenderer::class)->render('<p>{{signature}}</p>', rendererSignatureRecipient($team), $connection);
 
-    expect($html)->toBe('<p>The team</p>');
+    expect($html)->toBe("<p>The team<br />\nSales &amp; Support</p>");
 });
 
 test('renders the signature tag empty without a connection or any signature', function () {
@@ -124,7 +138,7 @@ test('renders the signature tag empty without a connection or any signature', fu
     $renderer = app(PlaceholderRenderer::class);
 
     expect($renderer->render('<p>Bye</p><p>{{signature}}</p>', $recipient))->toBe('<p>Bye</p><p></p>')
-        ->and($renderer->render('<p>Bye</p><p>{{signature}}</p>', $recipient, $connection))->toBe('<p>Bye</p>');
+        ->and($renderer->render('<p>Bye</p><p>{{signature}}</p>', $recipient, $connection))->toBe('<p>Bye</p><p></p>');
 });
 
 /**
@@ -159,7 +173,7 @@ test('escapes contact values rendered into the html body', function () {
 
     expect($renderer->render($template, $recipient))->toBe($escaped)
         ->and($renderer->render($template.'<p>{{signature}}</p>', $recipient, $connection))
-        ->toBe($escaped.'<p>Alex &amp; <b>Sales</b></p>');
+        ->toBe($escaped.'<p>&lt;p&gt;Alex &amp;amp; &lt;b&gt;Sales&lt;/b&gt;&lt;/p&gt;</p>');
 });
 
 test('substitutes contact values unescaped into plain text', function () {

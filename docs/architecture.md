@@ -110,7 +110,8 @@ is outside the interval. Jobs are queued with the email only, without its relati
   if the connection is at its daily limit
 - defers to the end of the connection's minimum interval since its last send (within the sending window)
 - renders placeholders (`PlaceholderRenderer`): contact values are HTML-escaped in the body and
-  filled as plain text in the subject; `{{signature}}` inserts the connection's signature HTML
+  filled as plain text in the subject; `{{signature}}` escapes the connection's plain-text signature
+  and converts its newlines to HTML line breaks
 - rewrites links, decoding HTML entities in each `href` first, and adds the unsubscribe link and
   the open pixel (`CampaignBodyBuilder`)
 - reserves the send against the daily limit with a conditional increment, tied to the current UTC
