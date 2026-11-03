@@ -22,7 +22,6 @@ use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Contact;
-use App\Models\ContactField;
 use App\Models\ContactList;
 use App\Models\EmailTemplate;
 use App\Models\LinkClick;
@@ -31,6 +30,7 @@ use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Models\Unsubscribe;
+use App\Services\Mail\MergeFields;
 use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -224,22 +224,7 @@ class CampaignController extends Controller
         $doNotContact = $this->doNotContactRecipients($campaign->id);
         $recipientsCount = $campaign->recipients()->count();
 
-        $placeholders = collect([
-            ['name' => 'name', 'label' => 'Full name'],
-            ['name' => 'email', 'label' => 'Email'],
-            ['name' => 'phone', 'label' => 'Phone'],
-        ])
-            ->merge(
-                $currentTeam->contactFields()
-                    ->orderBy('name')
-                    ->get()
-                    ->map(fn (ContactField $field): array => [
-                        'name' => $field->name,
-                        'label' => $field->name,
-                    ]),
-            )
-            ->values()
-            ->all();
+        $placeholders = MergeFields::forTeam($currentTeam->id);
 
         return Inertia::render('campaigns/show', [
             'campaign' => [
@@ -414,7 +399,7 @@ class CampaignController extends Controller
      *
      * The smtp settings hold both passwords; only the sender address leaves here.
      *
-     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string}|null
+     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string, display_status: string, display_status_label: string}|null
      */
     protected function connectionSummary(?MailerConnection $connection): ?array
     {
@@ -425,11 +410,8 @@ class CampaignController extends Controller
         $settings = $connection->smtp_setting ?? [];
 
         return [
-            'id' => $connection->id,
-            'name' => $connection->name,
+            ...$connection->optionPayload(),
             'from_email' => $settings['from_email'] ?? $settings['email'] ?? null,
-            'status' => $connection->status->value,
-            'status_label' => $connection->status->label(),
         ];
     }
 

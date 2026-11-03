@@ -1,6 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { FileText, MoreVertical, Plus, Search, Send } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
 import CreateCampaignModal from '@/components/campaigns/create-campaign-modal';
 import EmptyState from '@/components/empty-state';
@@ -27,6 +26,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/relative-time';
 import { index, show } from '@/routes/campaigns';
@@ -60,14 +60,14 @@ export default function CampaignsIndex({
 }: Props) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
-    const [search, setSearch] = useState(filters.q ?? '');
-
-    // The server owns `q`; keep the input in step when a filter change reloads it.
-    useEffect(() => {
-        setSearch(filters.q ?? '');
-    }, [filters.q]);
+    const { search, updateSearch, submitSearch, clearSearch, cancelSearch } =
+        useDebouncedSearch(index.url(slug), {
+            q: filters.q,
+            status: filters.status ?? '',
+        });
 
     const navigate = (params: { q?: string; status?: string }) => {
+        cancelSearch();
         router.get(
             index.url(slug),
             {
@@ -94,7 +94,7 @@ export default function CampaignsIndex({
     );
 
     const clearFilters = () => {
-        setSearch('');
+        clearSearch();
         router.get(
             index.url(slug),
             {},
@@ -149,7 +149,7 @@ export default function CampaignsIndex({
                         className="flex flex-wrap items-center gap-2"
                         onSubmit={(event) => {
                             event.preventDefault();
-                            navigate({ q: search });
+                            submitSearch();
                         }}
                     >
                         <div className="relative min-w-0 flex-1 lg:w-[260px] lg:flex-none">
@@ -158,7 +158,7 @@ export default function CampaignsIndex({
                                 aria-label="Search campaigns"
                                 value={search}
                                 onChange={(event) =>
-                                    setSearch(event.target.value)
+                                    updateSearch(event.target.value)
                                 }
                                 placeholder="Search campaigns…"
                                 className="h-8 pl-8"
