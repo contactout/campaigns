@@ -40,7 +40,7 @@ export default function CapMeter({ sentToday, sendingLimit }: Props) {
     const nearCap = ratio >= WARNING_RATIO;
 
     return (
-        <div className="flex w-28 flex-col gap-1.5">
+        <div className="flex w-full max-w-28 flex-col gap-1.5">
             <p className="text-body leading-5 whitespace-nowrap">
                 <span className="font-medium">{formatCount(sentToday)}</span>{' '}
                 <span className="text-muted-foreground">
@@ -51,7 +51,7 @@ export default function CapMeter({ sentToday, sendingLimit }: Props) {
                 announcing it as an image read the same number twice. */}
             <div
                 aria-hidden
-                className="hidden h-1 w-28 overflow-hidden rounded-full bg-muted lg:block"
+                className="hidden h-1 w-full max-w-28 overflow-hidden rounded-full bg-muted lg:block"
             >
                 <div
                     className={cn(

@@ -79,6 +79,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Connections give server hosts more table space instead of long names, and show a Verify
+  button on Pending rows and mobile cards so newly saved SMTP connections can be activated.
 - Contacts, campaigns, and campaign recipients now break creation-time ties by newest ID,
   so records created in the same second have a consistent order across pagination requests.
 - The Status select in New contact and Edit contact and the Role select in Invite member now use

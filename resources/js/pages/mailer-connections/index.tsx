@@ -60,8 +60,14 @@ function serverLabel(connection: MailerConnection): string {
     return connection.mailer_type_label;
 }
 
-/** `Retry` is the existing verify action, restyled. */
-function RetryButton({ connection }: { connection: MailerConnection }) {
+/** Pending connections and failed probes use the same verification action. */
+function VerifyButton({
+    connection,
+    retry = false,
+}: {
+    connection: MailerConnection;
+    retry?: boolean;
+}) {
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
 
@@ -76,9 +82,9 @@ function RetryButton({ connection }: { connection: MailerConnection }) {
                     variant="outline"
                     size="sm"
                     disabled={processing}
-                    data-test="connection-retry"
+                    data-test={retry ? 'connection-retry' : 'connection-verify'}
                 >
-                    <RefreshCw /> Retry
+                    <RefreshCw /> {retry ? 'Retry' : 'Verify'}
                 </Button>
             )}
         </Form>
@@ -335,7 +341,10 @@ export default function MailerConnectionsIndex({
                                         : '.'}
                                 </p>
                                 {can.create ? (
-                                    <RetryButton connection={connection} />
+                                    <VerifyButton
+                                        connection={connection}
+                                        retry
+                                    />
                                 ) : null}
                             </div>
                         ))}
@@ -389,6 +398,15 @@ export default function MailerConnectionsIndex({
                                         />
                                     </div>
 
+                                    {can.create &&
+                                    connection.display_status === 'Pending' ? (
+                                        <div className="mt-3">
+                                            <VerifyButton
+                                                connection={connection}
+                                            />
+                                        </div>
+                                    ) : null}
+
                                     <div className="mt-3 flex items-center justify-between gap-3">
                                         <span className="text-label leading-4 text-muted-foreground">
                                             Sent today
@@ -407,13 +425,13 @@ export default function MailerConnectionsIndex({
                         <div className="hidden overflow-x-auto rounded-lg border lg:block">
                             <table className="w-full table-fixed text-body">
                                 <colgroup>
-                                    <col />
+                                    <col className="w-[140px]" />
                                     <col className="w-[91px]" />
+                                    <col />
                                     <col className="w-[150px]" />
-                                    <col className="w-[170px]" />
                                     <col className="w-[109px]" />
-                                    <col className="w-[100px]" />
-                                    <col className="w-[143px]" />
+                                    <col className="w-[132px]" />
+                                    <col className="w-[120px]" />
                                     <col className="w-[72px]" />
                                 </colgroup>
                                 <thead className="bg-muted/50 text-left">
@@ -497,15 +515,26 @@ export default function MailerConnectionsIndex({
                                                     disabled={!can.create}
                                                 />
                                             </td>
-                                            <td className="px-4">
-                                                <MailerConnectionStatusBadge
-                                                    status={
-                                                        connection.display_status
-                                                    }
-                                                    label={
-                                                        connection.display_status_label
-                                                    }
-                                                />
+                                            <td className="px-4 py-2">
+                                                <div className="flex flex-col items-start gap-2">
+                                                    <MailerConnectionStatusBadge
+                                                        status={
+                                                            connection.display_status
+                                                        }
+                                                        label={
+                                                            connection.display_status_label
+                                                        }
+                                                    />
+                                                    {can.create &&
+                                                    connection.display_status ===
+                                                        'Pending' ? (
+                                                        <VerifyButton
+                                                            connection={
+                                                                connection
+                                                            }
+                                                        />
+                                                    ) : null}
+                                                </div>
                                             </td>
                                             <td className="px-4">
                                                 <CapMeter
