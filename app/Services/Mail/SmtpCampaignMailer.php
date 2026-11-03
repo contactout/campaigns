@@ -27,11 +27,11 @@ class SmtpCampaignMailer implements CampaignMailer
      *
      * @throws TransportExceptionInterface When the message cannot be sent.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         $settings = $connection->smtp_setting ?? [];
 
-        $email = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread);
+        $email = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread, $toName);
 
         $sent = $this->transport($settings)->send($email);
 

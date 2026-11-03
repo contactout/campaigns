@@ -26,13 +26,13 @@ class RecordingCampaignMailer implements CampaignMailer
         $this->result = $result ?? new SendResult;
     }
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
-        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers', 'thread');
+        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers', 'thread', 'toName');
 
         return $this->result;
     }

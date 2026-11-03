@@ -33,7 +33,7 @@ class GmailCampaignMailer implements CampaignMailer
      *
      * @param  array<string, string>  $headers
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
             throw new RuntimeException('GmailCampaignMailer requires a Gmail connection.');
@@ -41,7 +41,7 @@ class GmailCampaignMailer implements CampaignMailer
 
         $accessToken = $this->tokens->accessToken($connection);
 
-        $email = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread);
+        $email = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread, $toName);
 
         // Symfony generates a Message-ID into a prepared copy of the headers,
         // which would leave the id unavailable after sending. Set it here so it

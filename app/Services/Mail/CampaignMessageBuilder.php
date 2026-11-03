@@ -21,7 +21,7 @@ class CampaignMessageBuilder
     /**
      * @param  array<string, string>  $headers
      */
-    public function build(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): Email
+    public function build(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): Email
     {
         $settings = $connection->smtp_setting ?? [];
 
@@ -30,7 +30,7 @@ class CampaignMessageBuilder
                 (string) ($settings['from_email'] ?? $settings['email'] ?? ''),
                 (string) ($settings['from_name'] ?? $settings['name'] ?? ''),
             ))
-            ->to($to)
+            ->to(new Address($to, (string) $toName))
             ->subject($subject)
             ->text($this->plainText($html))
             ->html($html);

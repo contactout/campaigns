@@ -8,7 +8,8 @@ use Symfony\Component\Mime\Email;
 /**
  * Adds the RFC 5322 headers that keep a message in a previous conversation.
  *
- * Applied to every campaign MIME message, including those Outlook creates through Graph.
+ * Used by the mailers that build a MIME message themselves; the Outlook API
+ * threads by creating a reply instead of by headers.
  */
 trait AppliesThreadHeaders
 {

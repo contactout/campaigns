@@ -16,13 +16,13 @@ use App\Models\MailerConnection;
 interface CampaignMailer
 {
     /**
-     * Send HTML and plain-text alternatives using the connection's credentials.
+     * Send an HTML email to the given address using the connection's credentials.
      *
-     * @param  string  $to  Recipient address, optionally with an RFC 5322 display name.
+     * @param  string|null  $toName  Recipient display name, omitted from the To header when null.
      * @param  array<string, string>  $headers  Extra message headers such as List-Unsubscribe.
      * @param  EmailThread|null  $thread  Details of the conversation to reply in, when threaded.
      *
      * @throws \Throwable When the provider rejects or cannot send the message.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult;
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult;
 }

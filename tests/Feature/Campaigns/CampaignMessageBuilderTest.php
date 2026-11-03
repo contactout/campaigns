@@ -14,9 +14,10 @@ test('campaign plain text keeps rendered links and unsubscribe but omits the tra
 
     $message = (new CampaignMessageBuilder)->build(
         MailerConnection::factory()->create(),
-        '"Zoë, Ada" <ada@example.com>',
+        'ada@example.com',
         'Hello',
         $html,
+        toName: 'Zoë, Ada',
     );
 
     $url = $tracking ? route('tracking.click', ['hash' => $email->trackedLinks()->sole()->hash]) : 'https://example.com/?a=1&b=2';
@@ -42,3 +43,12 @@ test('plain text handles html fragments and excludes non-body content', function
 
     expect($message->getTextBody())->toBe("First\n\nSecond\n\nOne\n\nTwo\nhttps://example.com/");
 });
+
+test('display names with quotes, brackets and backslashes survive unchanged', function (string $name) {
+    $message = (new CampaignMessageBuilder)->build(MailerConnection::factory()->create(), 'ada@example.com', 'Hello', '<p>Hi</p>', toName: $name);
+
+    expect($message->getTo()[0]->getName())->toBe($name)
+        ->and($message->getTo()[0]->getAddress())->toBe('ada@example.com');
+
+    $message->toString();
+})->with(['Ada <CEO>', 'Ada "The Countess" L', 'Ada \\ L']);

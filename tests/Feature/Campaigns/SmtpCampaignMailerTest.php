@@ -100,9 +100,10 @@ test('smtp mailer sends both alternatives with the recipient display name', func
 
     mmosSmtpMailer($transport)->send(
         mmosSmtpConnection(),
-        '"Ada Lovelace" <ada@example.com>',
+        'ada@example.com',
         'Hello',
         '<p>Hi <a href="https://example.com/u">Unsubscribe</a></p><img src="https://example.com/pixel" width="1">',
+        toName: 'Ada Lovelace',
     );
 
     $message = $transport->messages[0];

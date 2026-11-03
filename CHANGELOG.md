@@ -73,9 +73,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- Campaign emails include plain-text and HTML alternatives across SMTP, Gmail, and Outlook. Plain
-  text keeps link destinations and unsubscribe links but omits tracking pixels; the To header uses
-  the contact's name when available.
+- SMTP and Gmail campaign emails now include a text/plain alternative that keeps link destinations
+  and the unsubscribe link but omits the tracking pixel (Outlook relies on Exchange generating it).
+  The To header carries the contact's name when it has one that is not an email address.
 
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
