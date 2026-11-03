@@ -78,6 +78,37 @@ test('members can list only their teams contacts', function () {
             ->has('statuses'));
 });
 
+test('contacts with identical timestamps have deterministic non overlapping pages', function () {
+    [$team, $user] = contactTeamWithMember();
+
+    $timestamp = now()->startOfSecond();
+    $newer = Contact::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp->copy()->addDay(),
+    ]);
+    $contacts = Contact::factory()->forTeam($team)->count(30)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp,
+    ]);
+    $older = Contact::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp->copy()->subDay(),
+    ]);
+    $ids = [$newer->id, ...$contacts->reverse()->pluck('id')->all(), $older->id];
+
+    foreach ([1, 2] as $pageNumber) {
+        $expectedIds = array_slice($ids, ($pageNumber - 1) * 25, 25);
+
+        $this->actingAs($user)
+            ->get(route('contacts.index', ['current_team' => $team->slug, 'page' => $pageNumber]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('contacts.total', 32)
+                ->where('contacts.current_page', $pageNumber)
+                ->where('contacts.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === $expectedIds));
+    }
+});
+
 test('contact index search keeps the list filter and team scope', function (string $query) {
     [$team, $user] = contactTeamWithMember();
     $list = ContactList::factory()->create(['team_id' => $team->id]);

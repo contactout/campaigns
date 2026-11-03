@@ -79,6 +79,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Contacts, campaigns, and campaign recipients now break creation-time ties by newest ID,
+  so records created in the same second have a consistent order across pagination requests.
 - The Status select in New contact and Edit contact and the Role select in Invite member now use
   their visible labels as accessible names for assistive technology.
 - Signatures, contact detail, and Settings now use the same page header, spacing, and body

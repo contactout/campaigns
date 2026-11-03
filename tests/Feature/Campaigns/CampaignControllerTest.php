@@ -92,6 +92,37 @@ test('members can list only their teams campaigns', function () {
             ->where('can.create', true));
 });
 
+test('campaigns with identical timestamps have deterministic non overlapping pages', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $timestamp = now()->startOfSecond();
+    $newer = Campaign::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp->copy()->addDay(),
+    ]);
+    $campaigns = Campaign::factory()->forTeam($team)->count(30)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp,
+    ]);
+    $older = Campaign::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp->copy()->subDay(),
+    ]);
+    $ids = [$newer->id, ...$campaigns->reverse()->pluck('id')->all(), $older->id];
+
+    foreach ([1, 2] as $pageNumber) {
+        $expectedIds = array_slice($ids, ($pageNumber - 1) * 25, 25);
+
+        $this->actingAs($user)
+            ->get(route('campaigns.index', ['current_team' => $team->slug, 'page' => $pageNumber]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('campaigns.total', 32)
+                ->where('campaigns.current_page', $pageNumber)
+                ->where('campaigns.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === $expectedIds));
+    }
+});
+
 test('campaign index search keeps the status filter and team scope', function () {
     [$team, $user] = campaignTeamWithMember();
 
@@ -201,6 +232,37 @@ test('members can view a campaign with its steps and stats', function () {
             ->where('stats.steps_count', 1)
             ->where('stats.recipients_count', 0)
             ->has('can'));
+});
+
+test('recipients with identical timestamps have deterministic non overlapping pages', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create(['user_id' => $user->id]);
+    $factory = Recipient::factory()->state([
+        'campaign_id' => $campaign->id,
+        'contact_id' => Contact::factory()->forTeam($team)->state(['user_id' => $user->id]),
+    ]);
+    $timestamp = now()->startOfSecond();
+    $newer = $factory->create(['created_at' => $timestamp->copy()->addDay()]);
+    $recipients = $factory->count(30)->create(['created_at' => $timestamp]);
+    $older = $factory->create(['created_at' => $timestamp->copy()->subDay()]);
+    $ids = [$newer->id, ...$recipients->reverse()->pluck('id')->all(), $older->id];
+
+    foreach ([1, 2] as $pageNumber) {
+        $expectedIds = array_slice($ids, ($pageNumber - 1) * 25, 25);
+
+        $this->actingAs($user)
+            ->get(route('campaigns.show', [
+                'current_team' => $team->slug,
+                'campaign' => $campaign,
+                'recipients_page' => $pageNumber,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('recipients.total', 32)
+                ->where('recipients.current_page', $pageNumber)
+                ->where('recipients.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === $expectedIds));
+    }
 });
 
 test('the campaign stats count opens clicks and unsubscribes', function () {
