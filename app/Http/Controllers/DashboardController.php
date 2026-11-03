@@ -90,7 +90,7 @@ class DashboardController extends Controller
      * @return array{
      *     metrics: array{emails_sent: int, open_rate: float|null, reply_rate: float|null, active_campaigns: int, emails_sent_delta: float|null, open_rate_delta: float|null, reply_rate_delta: float|null},
      *     jumpBackIn: array{contacts: int, lists: int, active_campaigns: int, draft_campaigns: int, templates: int, template_folders: int, connections: int, connections_needing_attention: int},
-     *     mailerConnections: array<int, array{id: int, name: string, status: string, status_label: string}>
+     *     mailerConnections: array<int, array{id: int, name: string, status: string, status_label: string, display_status: string, display_status_label: string}>
      * }
      */
     private function overview(Team $team): array

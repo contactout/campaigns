@@ -4,7 +4,7 @@ import { useState } from 'react';
 import EmptyState from '@/components/empty-state';
 import DeleteSignatureModal from '@/components/signatures/delete-signature-modal';
 import SignatureFormModal from '@/components/signatures/signature-form-modal';
-import Heading from '@/components/heading';
+import PageHead from '@/components/page-head';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { index } from '@/routes/signatures';
@@ -36,22 +36,22 @@ export default function SignaturesIndex({ signatures, can }: Props) {
         <>
             <Head title="Signatures" />
 
-            <h1 className="sr-only">Signatures</h1>
-
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <Heading
-                        variant="small"
-                        title="Signatures"
-                        description="Appended to the emails you send"
-                    />
-
-                    {can.create ? (
-                        <Button onClick={openNew} data-test="signatures-new">
-                            <Plus /> New signature
-                        </Button>
-                    ) : null}
-                </div>
+            <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-6">
+                <PageHead
+                    title="Signatures"
+                    description="Appended to the emails you send"
+                    mobileNav
+                    actions={
+                        can.create ? (
+                            <Button
+                                onClick={openNew}
+                                data-test="signatures-new"
+                            >
+                                <Plus /> New signature
+                            </Button>
+                        ) : null
+                    }
+                />
 
                 {signatures.length === 0 ? (
                     <EmptyState
@@ -86,7 +86,7 @@ export default function SignaturesIndex({ signatures, can }: Props) {
                                             </Badge>
                                         ) : null}
                                     </div>
-                                    <p className="max-w-2xl border-l-2 pl-3 text-sm leading-relaxed break-words whitespace-pre-line text-muted-foreground">
+                                    <p className="max-w-2xl border-l-2 pl-3 text-body leading-relaxed break-words whitespace-pre-line text-muted-foreground">
                                         {signature.body}
                                     </p>
                                 </div>

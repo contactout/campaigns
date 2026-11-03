@@ -84,7 +84,7 @@ test('members can create a template', function () {
     $response = $this->actingAs($user)->post(route('templates.store', ['current_team' => $team->slug]), [
         'name' => 'Welcome',
         'subject' => 'Hello there',
-        'body' => 'Hi {{first_name}}',
+        'body' => 'Hi {{name}}',
         'folder_id' => $folder->id,
     ]);
 

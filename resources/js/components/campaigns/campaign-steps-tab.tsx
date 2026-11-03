@@ -96,6 +96,7 @@ export default function CampaignStepsTab({
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const canReorder = canUpdate && campaign.started_at === null;
 
     const groups = groupByDay(steps);
     const blockedStepIds = startBlocked
@@ -114,7 +115,7 @@ export default function CampaignStepsTab({
     const moveStep = (index: number, direction: -1 | 1) => {
         const target = index + direction;
 
-        if (target < 0 || target >= steps.length) {
+        if (!canReorder || target < 0 || target >= steps.length) {
             return;
         }
 
@@ -129,7 +130,7 @@ export default function CampaignStepsTab({
     };
 
     const dropOn = (index: number) => {
-        if (dragIndex === null || dragIndex === index) {
+        if (!canReorder || dragIndex === null || dragIndex === index) {
             return;
         }
 
@@ -198,6 +199,12 @@ export default function CampaignStepsTab({
                 ) : null}
             </div>
 
+            {campaign.started_at !== null && canUpdate ? (
+                <p className="text-body leading-5 text-muted-foreground">
+                    Steps cannot be reordered after the campaign has started.
+                </p>
+            ) : null}
+
             {steps.length === 0 ? (
                 <EmptyState
                     className="py-12"
@@ -242,8 +249,14 @@ export default function CampaignStepsTab({
                                     return (
                                         <div
                                             key={step.id}
-                                            draggable={canUpdate}
+                                            draggable={canReorder}
                                             onDragStart={(event) => {
+                                                if (!canReorder) {
+                                                    event.preventDefault();
+
+                                                    return;
+                                                }
+
                                                 event.dataTransfer.setData(
                                                     'text/plain',
                                                     String(step.id),
@@ -272,7 +285,7 @@ export default function CampaignStepsTab({
                                             <GripVertical
                                                 className={cn(
                                                     'hidden size-4 shrink-0 text-muted-foreground lg:block',
-                                                    canUpdate && 'cursor-grab',
+                                                    canReorder && 'cursor-grab',
                                                 )}
                                                 aria-hidden
                                             />
@@ -354,6 +367,7 @@ export default function CampaignStepsTab({
                                                         <DropdownMenuSeparator />
                                                         <DropdownMenuItem
                                                             disabled={
+                                                                !canReorder ||
                                                                 index === 0
                                                             }
                                                             onSelect={() =>
@@ -367,8 +381,10 @@ export default function CampaignStepsTab({
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             disabled={
+                                                                !canReorder ||
                                                                 index ===
-                                                                steps.length - 1
+                                                                    steps.length -
+                                                                        1
                                                             }
                                                             onSelect={() =>
                                                                 moveStep(
