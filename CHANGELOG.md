@@ -42,6 +42,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Archiving a campaign now requires confirmation that sending stops and archiving is permanent.
+  Archived campaigns keep their recipient history but are read-only: settings, recipients and
+  steps cannot be changed from the page or by direct requests. Use Stop for a temporary pause.
+
 - Rebranded from MMOS to Campaigns. The Docker image and nginx site are renamed; existing
   installs keep working and the database is untouched.
 - Contacts spreadsheet keyboard navigation and accessibility polish.

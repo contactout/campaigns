@@ -63,6 +63,13 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Stopping and archiving campaigns
+
+Use **Stop** to pause an active campaign if you may want to restart it later.
+**Archive** asks for confirmation and is permanent: sending stops, and the campaign's settings,
+recipients and steps become read-only. Archived campaigns cannot be restored or restarted.
+Recipient history remains available; you can still duplicate or delete the campaign.
+
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`
