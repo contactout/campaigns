@@ -20,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { signatureHtml } from '@/lib/signature';
 import { store, update } from '@/routes/campaigns/steps';
 import type {
     CampaignSignatureOption,
@@ -141,7 +142,7 @@ export default function StepForm({
             return;
         }
 
-        setBody((current) => `${current}${signature.body}`);
+        setBody((current) => `${current}${signatureHtml(signature.body)}`);
     };
 
     const insertPlaceholder = (name: string) => {

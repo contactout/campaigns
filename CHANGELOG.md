@@ -77,6 +77,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Template and step saves reject unknown placeholders by name instead of silently saving tags
+  that send as blank text. Both editors list the same built-in and team contact fields, including imported ones with spaces such as `Job Title`.
+- Step order is locked after a campaign first starts, including while stopped, so moving a
+  queued step above a sent one cannot strand recipients or skip their remaining steps.
+- Signatures now preserve line breaks and literal text such as `<ada@example.com>` in sent emails
+  and when inserted into the step editor, matching the plain-text signature editor and preview.
+- Campaign connection pickers in the edit dialog show verification status and warn before saving
+  an inactive connection on a running campaign. Campaign pages link to Connections while the
+  selected connection needs verification, instead of leaving waiting emails unexplained.
+
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
 - Every step of a recipient added after the campaign started fired within minutes, because step
@@ -152,8 +162,8 @@ All notable changes to this project are documented here. The format is based on
 - The Docker example enables secure session cookies and a one-year HSTS header in Caddy.
 - The CSRF exemption now covers only the one-click unsubscribe POST, not every `unsubscribe/*` route.
 - Contact values filled into placeholders are HTML-escaped in email bodies, so imported data can
-  no longer inject markup or links. Subjects are filled as plain text. The `{{signature}}` tag still
-  inserts the signature's HTML.
+  no longer inject markup or links. Subjects are filled as plain text. The `{{signature}}` tag also
+  escapes the signature's plain text and converts newlines to HTML line breaks.
 
 ### Upgrade notes
 
@@ -168,3 +178,6 @@ All notable changes to this project are documented here. The format is based on
 - A migration adds three indexes to `campaign_emails`. Migrations run when the app container
   starts, so on a large table the first start after upgrading can take longer.
 - Contact fields whose values contain HTML now appear as literal text in email bodies.
+- Signatures are plain text, including existing signatures containing HTML: tags and entities now
+  appear literally. Edit those signatures to replace HTML formatting with text and line breaks.
+  Signature content already copied into a saved step is unchanged; remove and reinsert it to update.
