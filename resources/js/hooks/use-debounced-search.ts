@@ -29,7 +29,10 @@ export function useDebouncedSearch(
     // a slow response cannot replace a newer draft in the input.
     useEffect(() => {
         cancelSearch();
-        setSearch(filters.q ?? '');
+        // Servers trim q; keep the draft (and its typed space) when it matches.
+        setSearch((current) =>
+            current.trim() === (filters.q ?? '') ? current : (filters.q ?? ''),
+        );
     }, [filters.q, url, cancelSearch]);
 
     useEffect(() => {
@@ -42,7 +45,18 @@ export function useDebouncedSearch(
 
     // Pagination, list tabs and other visits must not leave a timer that can
     // navigate back to the filters from before the visit.
-    useEffect(() => router.on('before', cancelSearch), [cancelSearch]);
+    // Prefetch and async visits are background work and must not cancel it.
+    useEffect(
+        () =>
+            router.on('before', (event) => {
+                const { prefetch, async } = event.detail.visit;
+
+                if (!prefetch && !async) {
+                    cancelSearch();
+                }
+            }),
+        [cancelSearch],
+    );
 
     const visit = (value: string) => {
         cancelSearch();
