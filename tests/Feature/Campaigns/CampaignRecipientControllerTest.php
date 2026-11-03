@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\CampaignStatus;
+use App\Enums\ContactStatus;
 use App\Enums\EmailStatus;
 use App\Enums\RecipientStatus;
 use App\Enums\TeamRole;
@@ -12,6 +13,7 @@ use App\Models\ContactIdentity;
 use App\Models\ContactList;
 use App\Models\Recipient;
 use App\Models\Team;
+use App\Models\Unsubscribe;
 use App\Models\User;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
@@ -116,6 +118,65 @@ test('adding only suppressed contacts reports that no recipients were added', fu
             'contacts' => [$contact->id],
         ])
         ->assertRedirect()
+        ->assertInertiaFlash('toast', ['type' => 'info', 'message' => 'No new recipients added. 1 skipped (unsubscribed, bounced, do-not-contact, on the suppression list or already in the campaign).']);
+
+    expect($campaign->recipients()->count())->toBe(0);
+});
+
+test('the enrollment toast counts unique skipped contacts across overlapping lists and explicit contacts', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $allowed = Contact::factory()->forTeam($team)->create();
+    $existing = Contact::factory()->forTeam($team)->create(['status' => ContactStatus::Bounced]);
+    $bounced = Contact::factory()->forTeam($team)->create(['status' => ContactStatus::Bounced]);
+    $unsubscribed = Contact::factory()->forTeam($team)->create(['status' => ContactStatus::Unsubscribed]);
+    $doNotContact = Contact::factory()->forTeam($team)->create(['do_not_contact_at' => now()]);
+    $listed = Contact::factory()->forTeam($team)->create();
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $listed->id,
+        'normalized_value' => 'listed@blocked.test',
+    ]);
+    Unsubscribe::factory()->forTeam($team)->create(['email' => '@blocked.test']);
+    Recipient::factory()->for($campaign)->create(['contact_id' => $existing->id]);
+
+    $firstList = ContactList::factory()->create(['team_id' => $team->id]);
+    $secondList = ContactList::factory()->create(['team_id' => $team->id]);
+    $firstList->contacts()->attach([$allowed->id, $existing->id, $bounced->id, $unsubscribed->id]);
+    $secondList->contacts()->attach([$allowed->id, $bounced->id, $doNotContact->id, $listed->id]);
+    $deleted = Contact::factory()->forTeam($team)->create();
+    $secondList->contacts()->attach($deleted->id);
+    $deleted->delete();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), [
+            'contacts' => [$allowed->id, $allowed->id, $bounced->id],
+            'lists' => [$firstList->id, $secondList->id, $firstList->id],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors()
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => '1 recipient added. 5 skipped (unsubscribed, bounced, do-not-contact, on the suppression list or already in the campaign).']);
+
+    expect($campaign->recipients()->pluck('contact_id')->sort()->values()->all())
+        ->toBe(collect([$allowed->id, $existing->id])->sort()->values()->all());
+});
+
+test('adding an empty list reports no additions without a skipped count', function () {
+    [$team, $user] = campaignRecipientTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create();
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+
+    $this->actingAs($user)
+        ->post(route('campaigns.recipients.store', [
+            'current_team' => $team->slug,
+            'campaign' => $campaign,
+        ]), ['lists' => [$list->id]])
+        ->assertRedirect()
         ->assertInertiaFlash('toast', ['type' => 'info', 'message' => 'No new recipients added.']);
 
     expect($campaign->recipients()->count())->toBe(0);
@@ -184,7 +245,7 @@ test('a list larger than the driver binding limit is added in full', function ()
             'lists' => [$list->id],
         ])
         ->assertRedirect()
-        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => '4999 recipients added.']);
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => '4999 recipients added. 1 skipped (unsubscribed, bounced, do-not-contact, on the suppression list or already in the campaign).']);
 
     expect($maxBindings)->toBeLessThanOrEqual(32766)
         ->and($campaign->recipients()->count())->toBe(5000)

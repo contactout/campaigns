@@ -54,4 +54,6 @@ export type MailerConnectionOption = {
     name: string;
     status: string;
     status_label: string;
+    display_status: MailerConnectionDisplayStatus;
+    display_status_label: string;
 };

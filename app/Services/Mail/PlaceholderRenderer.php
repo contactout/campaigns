@@ -20,16 +20,11 @@ use Illuminate\Database\Eloquent\Collection;
  * plain text such as the subject line.
  *
  * When rendered for a connection, `signature` resolves to that connection's
- * signature HTML (or the team default), which is trusted markup and inserted
- * unescaped. A paragraph holding only the tag is replaced whole, so the
- * signature's own paragraphs are not nested in it.
+ * plain-text signature (or the team default), escaped with newlines converted
+ * to HTML line breaks just like the text shown in the signature editor.
  */
 class PlaceholderRenderer
 {
-    private const string PLACEHOLDER = '\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}';
-
-    private const string SIGNATURE_PARAGRAPH = '<p\b[^>]*>\s*\{\{\s*signature\s*\}\}\s*<\/p>';
-
     /**
      * The contact fields already read, keyed by team id.
      *
@@ -53,15 +48,9 @@ class PlaceholderRenderer
             return $this->replace($html, $values);
         }
 
-        $values['signature'] = (string) $connection->resolveSignature()?->body;
+        $values['signature'] = nl2br(e((string) $connection->resolveSignature()?->body));
 
-        return (string) preg_replace_callback(
-            '/'.self::SIGNATURE_PARAGRAPH.'|'.self::PLACEHOLDER.'/i',
-            static fn (array $matches): string => isset($matches[1])
-                ? $values[strtolower($matches[1])] ?? ''
-                : $values['signature'],
-            $html,
-        );
+        return $this->replace($html, $values);
     }
 
     /**
@@ -80,7 +69,7 @@ class PlaceholderRenderer
     private function replace(string $content, array $values): string
     {
         return (string) preg_replace_callback(
-            '/'.self::PLACEHOLDER.'/',
+            '/'.MergeFields::PATTERN.'/',
             static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
             $content,
         );

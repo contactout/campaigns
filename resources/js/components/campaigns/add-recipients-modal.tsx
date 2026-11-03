@@ -24,6 +24,12 @@ type Props = {
     onOpenChange: (open: boolean) => void;
 };
 
+function toggleSelection(selected: number[], id: number) {
+    return selected.includes(id)
+        ? selected.filter((selectedId) => selectedId !== id)
+        : [...selected, id];
+}
+
 export default function AddRecipientsModal({
     campaignId,
     availableContacts,
@@ -35,6 +41,17 @@ export default function AddRecipientsModal({
     const slug = currentTeam?.slug ?? '';
     const [tab, setTab] = useState<'contacts' | 'lists'>('contacts');
     const [search, setSearch] = useState('');
+    const [selectedContacts, setSelectedContacts] = useState<number[]>([]);
+    const [selectedLists, setSelectedLists] = useState<number[]>([]);
+
+    function handleOpenChange(nextOpen: boolean) {
+        if (!nextOpen) {
+            setSelectedContacts([]);
+            setSelectedLists([]);
+        }
+
+        onOpenChange(nextOpen);
+    }
 
     const filtered = useMemo(() => {
         const term = search.trim().toLowerCase();
@@ -51,13 +68,13 @@ export default function AddRecipientsModal({
     }, [availableContacts, search]);
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="max-h-[85vh] overflow-hidden">
                 <Form
                     key={String(open)}
                     {...store.form([slug, campaignId])}
                     className="flex max-h-[75vh] flex-col space-y-4"
-                    onSuccess={() => onOpenChange(false)}
+                    onSuccess={() => handleOpenChange(false)}
                 >
                     {({ errors, processing }) => (
                         <>
@@ -65,9 +82,28 @@ export default function AddRecipientsModal({
                                 <DialogTitle>Add recipients</DialogTitle>
                                 <DialogDescription>
                                     Add contacts or whole lists to this
-                                    campaign.
+                                    campaign. Unsubscribed, bounced,
+                                    do-not-contact and suppressed contacts, and
+                                    existing recipients, will be skipped.
                                 </DialogDescription>
                             </DialogHeader>
+
+                            {selectedContacts.map((id) => (
+                                <input
+                                    key={id}
+                                    type="hidden"
+                                    name="contacts[]"
+                                    value={id}
+                                />
+                            ))}
+                            {selectedLists.map((id) => (
+                                <input
+                                    key={id}
+                                    type="hidden"
+                                    name="lists[]"
+                                    value={id}
+                                />
+                            ))}
 
                             <div className="flex gap-1">
                                 <Button
@@ -113,10 +149,18 @@ export default function AddRecipientsModal({
                                                     className="flex items-center gap-3 rounded-md border p-3 text-sm"
                                                 >
                                                     <Checkbox
-                                                        name="contacts[]"
-                                                        value={String(
+                                                        checked={selectedContacts.includes(
                                                             contact.id,
                                                         )}
+                                                        onCheckedChange={() =>
+                                                            setSelectedContacts(
+                                                                (selected) =>
+                                                                    toggleSelection(
+                                                                        selected,
+                                                                        contact.id,
+                                                                    ),
+                                                            )
+                                                        }
                                                     />
                                                     <span className="flex flex-col">
                                                         <span className="font-medium">
@@ -144,8 +188,18 @@ export default function AddRecipientsModal({
                                                 className="flex items-center gap-3 rounded-md border p-3 text-sm"
                                             >
                                                 <Checkbox
-                                                    name="lists[]"
-                                                    value={String(list.id)}
+                                                    checked={selectedLists.includes(
+                                                        list.id,
+                                                    )}
+                                                    onCheckedChange={() =>
+                                                        setSelectedLists(
+                                                            (selected) =>
+                                                                toggleSelection(
+                                                                    selected,
+                                                                    list.id,
+                                                                ),
+                                                        )
+                                                    }
                                                 />
                                                 <span className="font-medium">
                                                     {list.name}
@@ -158,6 +212,19 @@ export default function AddRecipientsModal({
                                     )}
                                 </div>
                             )}
+
+                            <p
+                                role="status"
+                                className="text-sm text-muted-foreground"
+                            >
+                                {selectedContacts.length}{' '}
+                                {selectedContacts.length === 1
+                                    ? 'contact'
+                                    : 'contacts'}{' '}
+                                and {selectedLists.length}{' '}
+                                {selectedLists.length === 1 ? 'list' : 'lists'}{' '}
+                                selected
+                            </p>
 
                             <InputError
                                 message={errors.contacts ?? errors.lists}
