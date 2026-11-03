@@ -73,6 +73,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Adding campaign recipients now reports how many unique contacts were skipped and why; the
+  Add recipients dialog shows contact and list selection counts and explains suppression.
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
 - Every step of a recipient added after the campaign started fired within minutes, because step

@@ -35,11 +35,11 @@ class AddCampaignRecipients
      *
      * @param  array<int, int|string>  $contactIds
      * @param  array<int, int|string>  $listIds
-     * @return int the number of recipients created
+     * @return array{created: int, skipped: int} Counts of unique contacts added and skipped.
      */
-    public function handle(Campaign $campaign, array $contactIds, array $listIds): int
+    public function handle(Campaign $campaign, array $contactIds, array $listIds): array
     {
-        $created = DB::transaction(function () use ($campaign, $contactIds, $listIds): int {
+        $result = DB::transaction(function () use ($campaign, $contactIds, $listIds): array {
             $contactIds = array_values(array_unique(array_map(intval(...), $contactIds)));
             $listIds = array_values(array_unique(array_map(intval(...), $listIds)));
 
@@ -49,7 +49,7 @@ class AddCampaignRecipients
             ]));
 
             if ($candidateIds === []) {
-                return 0;
+                return ['created' => 0, 'skipped' => 0];
             }
 
             $source = $contactIds !== [] ? 'manual' : 'list';
@@ -84,14 +84,14 @@ class AddCampaignRecipients
                 $created += count($newIds);
             }
 
-            return $created;
+            return ['created' => $created, 'skipped' => count($candidateIds) - $created];
         });
 
-        if ($created > 0 && $campaign->status === CampaignStatus::Active) {
+        if ($result['created'] > 0 && $campaign->status === CampaignStatus::Active) {
             SeedCampaignEmails::dispatch($campaign)->afterCommit();
         }
 
-        return $created;
+        return $result;
     }
 
     /**

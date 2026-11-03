@@ -31,15 +31,21 @@ class CampaignRecipientController extends Controller
         /** @var array<int, int|string> $listIds */
         $listIds = $request->validated('lists') ?? [];
 
-        $created = $addCampaignRecipients->handle(
+        $result = $addCampaignRecipients->handle(
             $campaign,
             array_map(intval(...), $contactIds),
             array_map(intval(...), $listIds),
         );
 
+        $message = trans_choice('{0} No new recipients added.|{1} :count recipient added.|[2,*] :count recipients added.', $result['created']);
+
+        if ($result['skipped'] > 0) {
+            $message .= ' '.__(':count skipped (unsubscribed, bounced, do-not-contact, on the suppression list or already in the campaign).', ['count' => $result['skipped']]);
+        }
+
         Inertia::flash('toast', [
-            'type' => $created > 0 ? 'success' : 'info',
-            'message' => trans_choice('{0} No new recipients added.|{1} :count recipient added.|[2,*] :count recipients added.', $created),
+            'type' => $result['created'] > 0 ? 'success' : 'info',
+            'message' => $message,
         ]);
 
         return back();

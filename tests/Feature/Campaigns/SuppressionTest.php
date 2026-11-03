@@ -456,7 +456,7 @@ test('suppressed contacts are skipped at enrollment', function () {
         [$list->id],
     );
 
-    expect($created)->toBe(2)
+    expect($created)->toBe(['created' => 2, 'skipped' => 5])
         ->and($campaign->recipients()->pluck('contact_id')->sort()->values()->all())
         ->toBe(collect([$allowed->id, $withoutEmail->id])->sort()->values()->all());
 });
@@ -466,7 +466,7 @@ test('enrollment adds nothing when every contact is suppressed', function () {
     $campaign = Campaign::factory()->forTeam($team)->create();
     $contact = suppressionContact($team, 'ada@example.com', ['status' => ContactStatus::Bounced]);
 
-    expect(app(AddCampaignRecipients::class)->handle($campaign, [$contact->id], []))->toBe(0)
+    expect(app(AddCampaignRecipients::class)->handle($campaign, [$contact->id], []))->toBe(['created' => 0, 'skipped' => 1])
         ->and($campaign->recipients()->count())->toBe(0);
 });
 
