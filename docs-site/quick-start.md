@@ -63,16 +63,6 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
-## Editing campaign steps
-
-Deleting a step asks for confirmation in every campaign state. This permanently removes its
-content and any unsaved edits. Recipients waiting on that step move to the next step, or finish
-the sequence if it was the last step.
-
-Steps with email history cannot be deleted; the disabled **Delete step** action explains why.
-Only steps with no emails, or only pending/scheduled emails, can be removed. Failed sends also
-count as history, matching the server's protection.
-
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`

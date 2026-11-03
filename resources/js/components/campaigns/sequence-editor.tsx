@@ -131,9 +131,10 @@ export default function SequenceEditor({
             },
             onError: (errors) => {
                 setDeleteTarget(null);
-                toast.error(
-                    errors.campaign ?? 'This step could not be deleted.',
-                );
+                // errors.campaign is toasted by the campaign page.
+                if (!errors.campaign) {
+                    toast.error('This step could not be deleted.');
+                }
             },
             onFinish: () => setDeleting(false),
         });

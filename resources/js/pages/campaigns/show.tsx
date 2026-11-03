@@ -11,6 +11,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import AddRecipientsModal from '@/components/campaigns/add-recipients-modal';
 import CampaignRecipientsTab from '@/components/campaigns/campaign-recipients-tab';
 import CampaignStatusBadge from '@/components/campaigns/campaign-status-badge';
@@ -20,7 +21,6 @@ import EditCampaignModal from '@/components/campaigns/edit-campaign-modal';
 import SequenceEditor from '@/components/campaigns/sequence-editor';
 import ConfirmDialog from '@/components/confirm-dialog';
 import PageHead from '@/components/page-head';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -97,6 +97,12 @@ export default function CampaignShow({
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
     const errors = usePage().props.errors as Record<string, string>;
+
+    useEffect(() => {
+        if (errors.campaign) {
+            toast.error(errors.campaign);
+        }
+    }, [errors]);
 
     // A Recipients URL must open on Recipients: Back, a reload or a shared
     // `?recipients_q=…` link all remount the page with that query string.
@@ -501,12 +507,6 @@ export default function CampaignShow({
                         );
                     })}
                 </div>
-
-                {errors.campaign ? (
-                    <Alert variant="destructive">
-                        <AlertDescription>{errors.campaign}</AlertDescription>
-                    </Alert>
-                ) : null}
 
                 {tab === 'steps' ? (
                     <div
