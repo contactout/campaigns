@@ -606,7 +606,11 @@ export default function CampaignShow({
                 onConfirm={() =>
                     archiveForm.post(archive.url([slug, campaign.id]), {
                         preserveScroll: true,
-                        onSuccess: () => setArchiveOpen(false),
+                        onSuccess: () => {
+                            setArchiveOpen(false);
+                            setEditor(null);
+                            editorDirty.current = false;
+                        },
                     })
                 }
             />
