@@ -123,6 +123,47 @@ test('campaigns with identical timestamps have deterministic non overlapping pag
     }
 });
 
+test('campaign index search keeps the status filter and team scope', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $match = Campaign::factory()->forTeam($team)->create(['name' => 'Launch']);
+    Campaign::factory()->forTeam($team)->active()->create(['name' => 'Launch active']);
+    Campaign::factory()->forTeam($team)->create(['name' => 'Other']);
+    Campaign::factory()->forTeam(Team::factory()->create())->create(['name' => 'Launch']);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.index', [
+            'current_team' => $team->slug,
+            'q' => 'Launch',
+            'status' => CampaignStatus::Draft->value,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.q', 'Launch')
+            ->where('filters.status', CampaignStatus::Draft->value)
+            ->where('campaigns.current_page', 1)
+            ->has('campaigns.data', 1)
+            ->where('campaigns.data.0.id', $match->id));
+
+    $this->get(route('campaigns.index', [
+        'current_team' => $team->slug,
+        'q' => 'missing',
+        'status' => CampaignStatus::Draft->value,
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('filters.q', 'missing')
+        ->where('filters.status', CampaignStatus::Draft->value)
+        ->has('campaigns.data', 0));
+
+    $this->get(route('campaigns.index', [
+        'current_team' => $team->slug,
+        'q' => '',
+        'status' => CampaignStatus::Draft->value,
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('filters.q', null)
+        ->where('filters.status', CampaignStatus::Draft->value)
+        ->has('campaigns.data', 2));
+});
+
 test('members can create a campaign', function () {
     [$team, $user] = campaignTeamWithMember();
 

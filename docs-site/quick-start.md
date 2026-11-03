@@ -63,6 +63,44 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Searching your workspace
+
+Campaigns, Contacts, and Templates filter as you type. Campaigns and Contacts wait for a
+300 ms pause before searching the server; press Enter to search immediately. The search
+updates the current URL without adding a history entry, keeps your scroll position and
+selected status or contact list, and returns results from the first page. Clear the search
+box to keep the other filter, or use **Clear filters** in the no-results panel to reset both.
+Templates filter locally by name or subject without a server request.
+## Finding your way around
+
+App pages share the same sidebar and page header. On mobile, use the bottom tabs or the
+navigation button beside a page title to reach the full menu. Contact detail has a back arrow
+beside the contact name to return to Contacts. Settings keeps Profile, Security, Teams, and
+Appearance in its own sub-navigation within the same app layout.
+## Stopping and archiving campaigns
+
+Use **Stop** to pause an active campaign if you may want to restart it later.
+**Archive** asks for confirmation and is permanent: sending stops, and the campaign's settings,
+recipients and steps become read-only. Archived campaigns cannot be restored or restarted.
+Recipient history remains available; you can still duplicate or delete the campaign.
+## Personalizing templates and steps
+
+Both editors list the same available contact fields: `{{name}}`, `{{email}}`, `{{phone}}`,
+and your team's custom fields (for example `{{company}}` or `{{title}}` if those columns exist).
+Tags ignore case and surrounding whitespace. Template and step saves reject unknown tags in
+subjects and bodies, naming the tags to correct; `{{first_name}}` needs a matching custom
+contact field or should be replaced with `{{name}}`. Template placeholder definitions alone
+do not create contact fields. Known fields with no contact value still render as empty text.
+Use `{{signature}}` only in the body to insert the sending connection's signature or team default.
+Existing saved content is not rewritten; correct unknown tags when editing it.
+
+## Campaign step order
+
+Arrange steps before starting a campaign. After its first start, dragging steps and the
+**Move up / Move down** actions are disabled, even while the campaign is stopped. This keeps
+queued emails and recipients' sent history in the same sequence so follow-ups are not skipped.
+Stopping a campaign does not unlock its step order.
+
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`

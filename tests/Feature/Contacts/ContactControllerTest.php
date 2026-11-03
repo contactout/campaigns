@@ -109,6 +109,55 @@ test('contacts with identical timestamps have deterministic non overlapping page
     }
 });
 
+test('contact index search keeps the list filter and team scope', function (string $query) {
+    [$team, $user] = contactTeamWithMember();
+    $list = ContactList::factory()->create(['team_id' => $team->id]);
+    $match = Contact::factory()->forTeam($team)->create(['name' => 'Ada Lovelace']);
+    $match->lists()->attach($list);
+    ContactIdentity::factory()->create([
+        'team_id' => $team->id,
+        'contact_id' => $match->id,
+        'identity_type' => ContactIdentityType::Email,
+        'normalized_value' => 'ada@example.com',
+    ]);
+    Contact::factory()->forTeam($team)->create(['name' => 'Ada outside list']);
+    $other = Contact::factory()->forTeam($team)->create(['name' => 'Grace Hopper']);
+    $other->lists()->attach($list);
+    Contact::factory()->forTeam(Team::factory()->create())->create(['name' => 'Ada Lovelace']);
+
+    $this->actingAs($user)
+        ->get(route('contacts.index', [
+            'current_team' => $team->slug,
+            'q' => $query,
+            'list' => $list->id,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.q', $query)
+            ->where('filters.list', $list->id)
+            ->where('contacts.current_page', 1)
+            ->has('contacts.data', 1)
+            ->where('contacts.data.0.id', $match->id));
+
+    $this->get(route('contacts.index', [
+        'current_team' => $team->slug,
+        'q' => 'missing',
+        'list' => $list->id,
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('filters.q', 'missing')
+        ->where('filters.list', $list->id)
+        ->has('contacts.data', 0));
+
+    $this->get(route('contacts.index', [
+        'current_team' => $team->slug,
+        'q' => '',
+        'list' => $list->id,
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('filters.q', null)
+        ->where('filters.list', $list->id)
+        ->has('contacts.data', 2));
+})->with(['Ada', 'ada@example.com']);
+
 test('the index lists only draft and stopped campaigns to add contacts to', function () {
     [$team, $user] = contactTeamWithMember();
 

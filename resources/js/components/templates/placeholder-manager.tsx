@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { destroy, store } from '@/routes/placeholders';
-import type { TemplatePlaceholder } from '@/types';
+import type { MergePlaceholder, TemplatePlaceholder } from '@/types';
 
 const typeOptions = [
     { value: 'Text', label: 'Text' },
@@ -25,6 +25,7 @@ const typeOptions = [
 type Props = {
     templateId: number;
     placeholders: TemplatePlaceholder[];
+    availablePlaceholders: MergePlaceholder[];
     canManage: boolean;
     /** Inserts `{{name}}` at the cursor of the body editor. */
     onInsert?: (name: string) => void;
@@ -41,6 +42,7 @@ type Props = {
 export default function PlaceholderManager({
     templateId,
     placeholders,
+    availablePlaceholders,
     canManage,
     onInsert,
 }: Props) {
@@ -51,6 +53,28 @@ export default function PlaceholderManager({
 
     return (
         <div className="flex flex-col">
+            <ul
+                aria-label="Available placeholders"
+                className="flex flex-wrap border-b py-1"
+            >
+                {availablePlaceholders.map((placeholder) => (
+                    <li key={placeholder.name} className="px-4 py-1">
+                        <button
+                            type="button"
+                            onClick={() => onInsert?.(placeholder.name)}
+                            className="inline-flex items-center rounded-md border border-badge-info-border bg-accent px-1.5 py-0.5 font-mono text-label leading-4 text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary-border max-lg:min-h-11"
+                            aria-label={`Insert ${placeholder.label}`}
+                        >
+                            {`{{${placeholder.name}}}`}
+                        </button>
+                    </li>
+                ))}
+            </ul>
+            <p className="border-b px-4 py-3 text-label text-muted-foreground">
+                Template definitions below do not create contact fields. Add
+                custom fields in Contacts to make them available in both
+                editors.
+            </p>
             <ul aria-label="Template placeholders">
                 {placeholders.map((placeholder) => (
                     <li
@@ -63,13 +87,28 @@ export default function PlaceholderManager({
                         <button
                             type="button"
                             onClick={() => onInsert?.(placeholder.name)}
-                            title={`Insert {{${placeholder.name}}}`}
+                            disabled={
+                                !availablePlaceholders.some(
+                                    (field) =>
+                                        field.name.toLowerCase() ===
+                                        placeholder.name.toLowerCase(),
+                                )
+                            }
+                            title={
+                                availablePlaceholders.some(
+                                    (field) =>
+                                        field.name.toLowerCase() ===
+                                        placeholder.name.toLowerCase(),
+                                )
+                                    ? `Insert {{${placeholder.name}}}`
+                                    : 'Not a contact field, add it in Contacts to use it'
+                            }
                             aria-label={
                                 placeholder.fallback
                                     ? `Insert ${placeholder.name}, fallback ${placeholder.fallback}`
                                     : `Insert ${placeholder.name}`
                             }
-                            className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border max-lg:h-11"
+                            className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent max-lg:h-11"
                         >
                             {`{{${placeholder.name}}}`}
                         </button>
@@ -109,11 +148,7 @@ export default function PlaceholderManager({
 
             {placeholders.length === 0 ? (
                 <p className="border-b px-4 py-3 text-body leading-5 text-muted-foreground">
-                    No placeholders yet. Use them as{' '}
-                    <code className="rounded-sm bg-muted px-1 py-0.5 text-foreground">
-                        {'{{name}}'}
-                    </code>{' '}
-                    in the body.
+                    No template definitions yet.
                 </p>
             ) : null}
 
@@ -138,7 +173,7 @@ export default function PlaceholderManager({
                                         <Input
                                             id="placeholder-name"
                                             name="name"
-                                            placeholder="first_name"
+                                            placeholder="job_title"
                                             required
                                             className="h-8"
                                         />

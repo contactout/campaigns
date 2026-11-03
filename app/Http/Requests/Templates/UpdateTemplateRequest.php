@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Templates;
 
 use App\Concerns\ResolvesCurrentTeam;
+use App\Rules\KnownPlaceholders;
+use App\Services\Mail\MergeFields;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -19,11 +21,12 @@ class UpdateTemplateRequest extends FormRequest
     public function rules(): array
     {
         $teamId = $this->resolveCurrentTeam($this)->id;
+        $fields = MergeFields::forTeam($teamId);
 
         return [
             'name' => ['required', 'string', 'max:255'],
-            'subject' => ['nullable', 'string', 'max:255'],
-            'body' => ['required', 'string'],
+            'subject' => ['nullable', 'string', 'max:255', new KnownPlaceholders($fields)],
+            'body' => ['required', 'string', new KnownPlaceholders($fields, allowSignature: true)],
             'folder_id' => [
                 'nullable',
                 'integer',
