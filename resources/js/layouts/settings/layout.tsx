@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
 import type { PropsWithChildren } from 'react';
-import Heading from '@/components/heading';
+import PageHead from '@/components/page-head';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
@@ -38,10 +38,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
 
     return (
-        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-            <Heading
+        <div className="flex w-full flex-col gap-6 px-4 py-6 lg:px-6">
+            <PageHead
                 title="Settings"
                 description="Manage your profile and account settings"
+                mobileNav
             />
 
             <div className="flex flex-col gap-6 lg:flex-row lg:gap-12">

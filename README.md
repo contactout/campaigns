@@ -24,7 +24,7 @@ via Docker Compose. Documentation: [contactout.github.io/campaigns](https://cont
 
 ## Features
 
-- **Campaigns** — multi-step email sequences, recipients from contacts, start/pause lifecycle
+- **Campaigns** — multi-step email sequences, recipients from contacts, start/stop/resume lifecycle
 - **Contacts** — spreadsheet-style editor, lists as tabs, custom columns
 - **Connections** — SMTP (+ optional IMAP), Gmail, or Outlook (BYO OAuth apps)
 - **Sending** — database queue, scheduled dispatch, placeholder merge fields

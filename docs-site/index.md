@@ -17,7 +17,7 @@ hero:
       link: /architecture
 features:
   - title: Campaigns
-    details: Multi-step email sequences, recipients from contacts, start/pause lifecycle
+    details: Multi-step email sequences, recipients from contacts, start/stop/resume lifecycle
   - title: Contacts
     details: Spreadsheet-style editor, lists as tabs, custom columns
   - title: Connections

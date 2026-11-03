@@ -15,6 +15,7 @@ import PageHead from '@/components/page-head';
 import PendingInvitationsModal from '@/components/pending-invitations-modal';
 import TeamInvitationAlert from '@/components/team-invitation-alert';
 import { Button } from '@/components/ui/button';
+import { formatRate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import { index as campaignsIndex } from '@/routes/campaigns';
@@ -52,9 +53,6 @@ const plural = (count: number, singular: string, pluralForm: string) =>
     count === 1 ? singular : pluralForm;
 
 const formatCount = (value: number) => numberFormatter.format(value);
-
-const formatRate = (value: number | null | undefined) =>
-    value === null || value === undefined ? '—' : `${value.toFixed(1)}%`;
 
 export default function Dashboard({
     pendingInvitations = [],

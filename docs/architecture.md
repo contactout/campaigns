@@ -41,14 +41,15 @@ stateDiagram-v2
     [*] --> Draft: create or duplicate
     Draft --> Active: start (needs a step)
     Active --> Stopped: stop
-    Stopped --> Active: start again
+    Stopped --> Active: resume
     Draft --> Archived: archive
     Active --> Archived: archive
     Stopped --> Archived: archive
 ```
 
 Starting a campaign records `started_at` the first time and queues `SeedCampaignEmails`; only
-`Active` campaigns send. Stopping keeps scheduled emails in place, and starting again keeps the
+`Active` campaigns send. Use **Stop** to stop an active campaign and **Resume** to continue a
+`Stopped` campaign (a `Draft` uses **Start**). Stopping keeps scheduled emails in place, and resuming keeps the
 original `started_at`, so later steps stay on the days they were planned for. Duplicating creates a
 new `Draft`. `CampaignStatus` also defines `Completed`, which no action sets yet.
 
@@ -110,7 +111,8 @@ is outside the interval. Jobs are queued with the email only, without its relati
   if the connection is at its daily limit
 - defers to the end of the connection's minimum interval since its last send (within the sending window)
 - renders placeholders (`PlaceholderRenderer`): contact values are HTML-escaped in the body and
-  filled as plain text in the subject; `{{signature}}` inserts the connection's signature HTML
+  filled as plain text in the subject; `{{signature}}` escapes the connection's plain-text signature
+  and converts its newlines to HTML line breaks
 - rewrites links, decoding HTML entities in each `href` first, and adds the unsubscribe link and
   the open pixel (`CampaignBodyBuilder`)
 - reserves the send against the daily limit with a conditional increment, tied to the current UTC

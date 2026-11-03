@@ -2,6 +2,7 @@ import type { PendingVisit } from '@inertiajs/core';
 import { router, usePage } from '@inertiajs/react';
 import { Mail, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import StepForm from '@/components/campaigns/step-form';
 import ConfirmDialog from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
@@ -58,10 +59,12 @@ export default function SequenceEditor({
     const headingRef = useRef<HTMLHeadingElement | null>(null);
     const mobileHeadingRef = useRef<HTMLHeadingElement | null>(null);
     const [isDirty, setIsDirty] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<CampaignStep | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
-    // Saving the step, deleting it and reordering are visits under this
-    // campaign's steps endpoint: they reload the same page, keep or discard the
-    // draft deliberately, and need no confirmation. Every other visit (the tab
+    // Step visits deliberately keep or discard the draft. Deletion has its own
+    // confirmation, so it does not also need the unsaved-changes prompt.
+    // Every other visit (the tab
     // bar, the sidebar, Duplicate, Archive, Stop, browser Back) asks first.
     const allowVisit = (visit: PendingVisit): boolean =>
         visit.url.pathname.includes(`/campaigns/${campaignId}/steps`);
@@ -113,13 +116,27 @@ export default function SequenceEditor({
     }, [onClose, requestAction]);
 
     const deleteStep = () => {
-        if (activeStep === null) {
+        const step = steps.find((item) => item.id === deleteTarget?.id);
+
+        if (!step?.can_delete || !canUpdate || deleting) {
             return;
         }
 
-        router.delete(destroyStep.url([slug, campaignId, activeStep.id]), {
+        setDeleting(true);
+        router.delete(destroyStep.url([slug, campaignId, step.id]), {
             preserveScroll: true,
-            onSuccess: onClose,
+            onSuccess: () => {
+                setDeleteTarget(null);
+                onClose();
+            },
+            onError: (errors) => {
+                setDeleteTarget(null);
+                // errors.campaign is toasted by the campaign page.
+                if (!errors.campaign) {
+                    toast.error('This step could not be deleted.');
+                }
+            },
+            onFinish: () => setDeleting(false),
         });
     };
 
@@ -230,11 +247,30 @@ export default function SequenceEditor({
                                     type="button"
                                     variant="outline"
                                     className="w-full justify-start text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
-                                    onClick={deleteStep}
+                                    onClick={() => setDeleteTarget(activeStep)}
+                                    disabled={
+                                        !activeStep.can_delete ||
+                                        processing ||
+                                        deleting
+                                    }
+                                    aria-describedby={
+                                        !activeStep.can_delete
+                                            ? 'delete-step-reason-mobile'
+                                            : undefined
+                                    }
                                     data-test="campaign-delete-step-button-mobile"
                                 >
                                     <Trash2 /> Delete step
                                 </Button>
+                                {!activeStep.can_delete ? (
+                                    <p
+                                        id="delete-step-reason-mobile"
+                                        className="mt-2 text-label text-muted-foreground"
+                                    >
+                                        Steps with email history cannot be
+                                        deleted.
+                                    </p>
+                                ) : null}
                             </div>
                         ) : null}
 
@@ -243,15 +279,38 @@ export default function SequenceEditor({
                             className="hidden items-center justify-between gap-2 border-t px-4 py-3 lg:flex"
                         >
                             {activeStep && canUpdate ? (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
-                                    onClick={deleteStep}
-                                    data-test="campaign-delete-step-button"
-                                >
-                                    <Trash2 /> Delete step
-                                </Button>
+                                <div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="text-destructive-foreground hover:bg-badge-danger hover:text-badge-danger-foreground"
+                                        onClick={() =>
+                                            setDeleteTarget(activeStep)
+                                        }
+                                        disabled={
+                                            !activeStep.can_delete ||
+                                            processing ||
+                                            deleting
+                                        }
+                                        aria-describedby={
+                                            !activeStep.can_delete
+                                                ? 'delete-step-reason'
+                                                : undefined
+                                        }
+                                        data-test="campaign-delete-step-button"
+                                    >
+                                        <Trash2 /> Delete step
+                                    </Button>
+                                    {!activeStep.can_delete ? (
+                                        <p
+                                            id="delete-step-reason"
+                                            className="mt-2 text-label text-muted-foreground"
+                                        >
+                                            Steps with email history cannot be
+                                            deleted.
+                                        </p>
+                                    ) : null}
+                                </div>
                             ) : (
                                 <span />
                             )}
@@ -374,6 +433,20 @@ export default function SequenceEditor({
             ) : (
                 editorPane
             )}
+
+            <ConfirmDialog
+                open={deleteTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setDeleteTarget(null);
+                    }
+                }}
+                title="Delete step?"
+                description={`Permanently delete "${deleteTarget?.subject || '(no subject)'}"? This cannot be undone. Recipients waiting on this step will move to the next step, or complete the sequence if it is the last step. Any unsaved edits will be lost.`}
+                confirmLabel="Delete step"
+                processing={deleting}
+                onConfirm={deleteStep}
+            />
 
             <ConfirmDialog
                 open={guard.pending}

@@ -129,7 +129,10 @@ export default function CreateContactModal({
                                         value={status}
                                         onValueChange={setStatus}
                                     >
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger
+                                            id="status"
+                                            className="w-full"
+                                        >
                                             <SelectValue placeholder="Select a status" />
                                         </SelectTrigger>
                                         <SelectContent>

@@ -23,6 +23,7 @@ import ListTabs from '@/components/contacts/list-tabs';
 import ConfirmDialog from '@/components/confirm-dialog';
 import EmptyState from '@/components/empty-state';
 import PageHead from '@/components/page-head';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { setFlashToastSuppressed } from '@/hooks/use-flash-toast';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -80,7 +81,6 @@ export default function ContactsIndex({
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
 
-    const [search, setSearch] = useState(filters.q ?? '');
     const [selected, setSelected] = useState<number[]>([]);
     const [busy, setBusy] = useState<'do-not-contact' | 'delete' | null>(null);
     const [bulkError, setBulkError] = useState<string | null>(null);
@@ -93,10 +93,12 @@ export default function ContactsIndex({
         null,
     );
 
-    // The server owns `q`; keep the field in step when a visit reloads it.
-    useEffect(() => {
-        setSearch(filters.q ?? '');
-    }, [filters.q]);
+    const { search, updateSearch, submitSearch, clearSearch, cancelSearch } =
+        useDebouncedSearch(
+            contactsIndex.url(slug),
+            { q: filters.q, list: filters.list ?? '' },
+            busy !== null,
+        );
 
     // Selection never crosses a page or filter change.
     useEffect(() => {
@@ -134,10 +136,11 @@ export default function ContactsIndex({
             return;
         }
 
+        cancelSearch();
         router.get(
             contactsIndex.url(slug),
             {
-                q: params.q ?? filters.q ?? '',
+                q: params.q ?? search,
                 list:
                     params.list !== undefined
                         ? (params.list ?? '')
@@ -152,7 +155,7 @@ export default function ContactsIndex({
             return;
         }
 
-        setSearch('');
+        clearSearch();
         router.get(
             contactsIndex.url(slug),
             {},
@@ -531,7 +534,7 @@ export default function ContactsIndex({
                         lists={lists}
                         activeListId={filters.list}
                         canCreate={can.create}
-                        search={filters.q}
+                        search={search}
                         disabled={busy !== null}
                         className="h-auto rounded-lg border py-1"
                     />
@@ -661,7 +664,7 @@ export default function ContactsIndex({
                         className="flex min-w-0 flex-1 items-center gap-2 lg:ms-auto lg:flex-none"
                         onSubmit={(event) => {
                             event.preventDefault();
-                            navigate({ q: search });
+                            submitSearch();
                         }}
                     >
                         <div className="relative min-w-0 flex-1 lg:flex-none">
@@ -670,7 +673,7 @@ export default function ContactsIndex({
                                 aria-label="Search contacts"
                                 value={search}
                                 onChange={(event) =>
-                                    setSearch(event.target.value)
+                                    updateSearch(event.target.value)
                                 }
                                 placeholder="Search name or email…"
                                 disabled={busy !== null}
@@ -795,7 +798,7 @@ export default function ContactsIndex({
                             lists={lists}
                             activeListId={filters.list}
                             canCreate={can.create}
-                            search={filters.q}
+                            search={search}
                             disabled={busy !== null}
                             trailing={pagination}
                         />

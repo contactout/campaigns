@@ -22,7 +22,6 @@ use App\Models\Campaign;
 use App\Models\CampaignEmail;
 use App\Models\CampaignStep;
 use App\Models\Contact;
-use App\Models\ContactField;
 use App\Models\ContactList;
 use App\Models\EmailTemplate;
 use App\Models\LinkClick;
@@ -31,8 +30,10 @@ use App\Models\Recipient;
 use App\Models\Signature;
 use App\Models\Team;
 use App\Models\Unsubscribe;
+use App\Services\Mail\MergeFields;
 use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -68,6 +69,7 @@ class CampaignController extends Controller
             ->when($filters['q'], fn (Builder $query, string $search): Builder => $query->where('name', 'like', "%{$search}%"))
             ->when($filters['status'], fn (Builder $query, string $status): Builder => $query->where('status', $status))
             ->latest()
+            ->latest('id')
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Campaign $campaign): array => $this->campaignSummary($campaign));
@@ -115,7 +117,13 @@ class CampaignController extends Controller
 
         Gate::authorize('view', $campaign);
 
-        $campaign->load(['steps', 'mailerConnection']);
+        $campaign->load([
+            'steps' => fn (HasMany $query): HasMany => $query->withExists([
+                'emails as has_email_history' => fn (Builder $emails): Builder => $emails
+                    ->whereNotIn('status', [EmailStatus::Pending, EmailStatus::Scheduled]),
+            ]),
+            'mailerConnection',
+        ]);
 
         $validated = $request->validate([
             'recipients_q' => ['nullable', 'string', 'max:255'],
@@ -137,6 +145,7 @@ class CampaignController extends Controller
                         ->orWhereHas('emailIdentity', fn (Builder $identity): Builder => $identity->where('normalized_value', 'like', "%{$search}%"))),
             ))
             ->latest()
+            ->latest('id')
             ->paginate(25, ['*'], 'recipients_page')
             ->withQueryString();
 
@@ -224,22 +233,7 @@ class CampaignController extends Controller
         $doNotContact = $this->doNotContactRecipients($campaign->id);
         $recipientsCount = $campaign->recipients()->count();
 
-        $placeholders = collect([
-            ['name' => 'name', 'label' => 'Full name'],
-            ['name' => 'email', 'label' => 'Email'],
-            ['name' => 'phone', 'label' => 'Phone'],
-        ])
-            ->merge(
-                $currentTeam->contactFields()
-                    ->orderBy('name')
-                    ->get()
-                    ->map(fn (ContactField $field): array => [
-                        'name' => $field->name,
-                        'label' => $field->name,
-                    ]),
-            )
-            ->values()
-            ->all();
+        $placeholders = MergeFields::forTeam($currentTeam->id);
 
         return Inertia::render('campaigns/show', [
             'campaign' => [
@@ -266,6 +260,7 @@ class CampaignController extends Controller
                     'time' => $step->time,
                     'is_threaded' => $step->is_threaded,
                     'setting' => $step->setting,
+                    'can_delete' => ! (bool) $step->getAttribute('has_email_history'),
                     'metrics' => $stepMetrics[$step->id] ?? ['sent' => 0, 'opened' => 0, 'replied' => 0, 'opened_rate' => null, 'replied_rate' => null],
                 ])
                 ->values()
@@ -346,13 +341,15 @@ class CampaignController extends Controller
 
         Gate::authorize('start', $campaign);
 
+        $resuming = $campaign->status === CampaignStatus::Stopped;
+
         try {
             $startCampaign->handle($campaign);
         } catch (ValidationException $exception) {
             return back()->withErrors($exception->errors());
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign started.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $resuming ? __('Campaign resumed.') : __('Campaign started.')]);
 
         return back();
     }
@@ -414,7 +411,7 @@ class CampaignController extends Controller
      *
      * The smtp settings hold both passwords; only the sender address leaves here.
      *
-     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string}|null
+     * @return array{id: int, name: string, from_email: string|null, status: string, status_label: string, display_status: string, display_status_label: string}|null
      */
     protected function connectionSummary(?MailerConnection $connection): ?array
     {
@@ -425,11 +422,8 @@ class CampaignController extends Controller
         $settings = $connection->smtp_setting ?? [];
 
         return [
-            'id' => $connection->id,
-            'name' => $connection->name,
+            ...$connection->optionPayload(),
             'from_email' => $settings['from_email'] ?? $settings['email'] ?? null,
-            'status' => $connection->status->value,
-            'status_label' => $connection->status->label(),
         ];
     }
 
@@ -439,7 +433,7 @@ class CampaignController extends Controller
      * `sent` counts dispatched emails only, so an opened or replied email is
      * always a subset of it and the percentages cannot exceed 100.
      *
-     * @return array<int, array{sent: int, opened: int, replied: int, opened_rate: int|null, replied_rate: int|null}>
+     * @return array<int, array{sent: int, opened: int, replied: int, opened_rate: float|null, replied_rate: float|null}>
      */
     protected function stepMetrics(int $campaignId): array
     {
@@ -460,8 +454,8 @@ class CampaignController extends Controller
                     'sent' => $sent,
                     'opened' => $opened,
                     'replied' => $replied,
-                    'opened_rate' => $sent > 0 ? (int) round($opened / $sent * 100) : null,
-                    'replied_rate' => $sent > 0 ? (int) round($replied / $sent * 100) : null,
+                    'opened_rate' => $sent > 0 ? round($opened / $sent * 100, 1) : null,
+                    'replied_rate' => $sent > 0 ? round($replied / $sent * 100, 1) : null,
                 ]];
             })
             ->all();

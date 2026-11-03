@@ -8,6 +8,12 @@ Campaigns sends from inboxes you connect: SMTP (optional IMAP), Gmail, or Outloo
 
 System mail (verification, password reset, invitations) is separate. It uses `MAIL_*` in `.env` — see [Quick start](./quick-start#system-email-registration).
 
+## SMTP verification
+
+After adding an SMTP connection, click **Verify** beside its **Pending** status in the table, or on its card on smaller screens. Verification checks the credentials before the connection can send; saving alone does not contact the SMTP server. If verification fails, fix the settings and use **Retry** in the failure banner.
+
+The desktop table gives Server the available width and truncates long connection names first. Hover a truncated name or server to see its full value; on narrower desktops, scroll the table horizontally.
+
 ## Gmail / Outlook OAuth (optional)
 
 Connect buttons appear only when credentials are set. Add to `.env`:
@@ -35,6 +41,12 @@ Then recreate containers: `docker compose up -d`.
 Each connection can use one of the team's signatures, chosen in the **Signature** column on the Connections page. Put `{{signature}}` in a step body (the step editor's **Insert signature → Sender's signature** adds it) and every email gets the signature of the connection that sends it.
 
 A connection left on **Team default** uses the team's default signature. With no default either, the tag renders empty. Deleting a signature moves the connections using it back to the team default.
+
+Signatures are plain text. Line breaks are preserved, and characters such as `&` and
+`<ada@example.com>` appear literally in the Signatures preview, the step editor's named-signature
+insertion, and sent emails. HTML tags and entities (including those in existing signatures) are
+shown as text, not formatting. Edit older HTML signatures to use text and line breaks instead.
+Content already copied into a saved step is unchanged; remove and reinsert it to update.
 
 The tag is filled only in the email body; in a subject it renders empty.
 
@@ -64,6 +76,12 @@ so replies and bounces to them still match.
 A threaded follow-up sent from the new connection still replies in the same conversation over
 SMTP and Gmail. On Outlook it starts a new conversation, because the new mailbox can't reply to a
 message it never sent.
+
+The campaign edit dialog labels each connection with its verification status. You can still
+save an inactive connection on a running campaign, but the dialog warns that sending will wait
+until it is verified. The campaign page keeps a warning and a link to **Connections** until the
+connection is verified or replaced with a verified one. Saving does not verify the connection
+or change the campaign's Active status.
 
 Clearing a campaign's connection leaves its unsent emails on the connection they already have.
 

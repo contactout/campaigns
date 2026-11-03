@@ -8,7 +8,7 @@ export default function AppLogo() {
             </div>
             <div className="grid min-w-0 flex-1 text-left">
                 <span className="truncate text-brand leading-tight font-bold tracking-[-0.01em]">
-                    Campaigns OS
+                    Campaigns
                 </span>
             </div>
         </>

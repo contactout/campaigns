@@ -194,13 +194,13 @@ test('omits the display name when the contact name is blank or an email address'
         ->and($fake->sent[0]['toName'])->toBeNull();
 })->with(['', '  ', 'ada@example.com']);
 
-test('fills the signature tag from the sending connection', function () {
+test('sends the connection signature as escaped text with line breaks', function () {
     $fake = new FakeCampaignMailer;
     $this->app->instance(CampaignMailer::class, $fake);
 
     $fixture = mmosSendEmailFixture();
 
-    $signature = Signature::factory()->forTeam($fixture['team'])->create(['body' => '<p>Alex from Sales</p>']);
+    $signature = Signature::factory()->forTeam($fixture['team'])->create(['body' => "Best regards\nAda Lovelace\nTom & Jerry <ada@example.com>"]);
     $fixture['connection']->update(['signature_id' => $signature->id]);
     $fixture['firstStep']->update([
         'subject' => 'Hi {{signature}}',
@@ -211,7 +211,7 @@ test('fills the signature tag from the sending connection', function () {
 
     expect($fake->sent)->toHaveCount(1)
         ->and($fake->sent[0]['subject'])->toBe('Hi ')
-        ->and($fake->sent[0]['html'])->toStartWith('<p>Hello</p><p>Alex from Sales</p>');
+        ->and($fake->sent[0]['html'])->toStartWith("<p>Hello</p><p>Best regards<br />\nAda Lovelace<br />\nTom &amp; Jerry &lt;ada@example.com&gt;</p>");
 });
 
 test('escapes contact values in the body but not in the subject', function () {

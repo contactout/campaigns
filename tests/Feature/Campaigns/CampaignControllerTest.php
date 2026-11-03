@@ -92,6 +92,78 @@ test('members can list only their teams campaigns', function () {
             ->where('can.create', true));
 });
 
+test('campaigns with identical timestamps have deterministic non overlapping pages', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $timestamp = now()->startOfSecond();
+    $newer = Campaign::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp->copy()->addDay(),
+    ]);
+    $campaigns = Campaign::factory()->forTeam($team)->count(30)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp,
+    ]);
+    $older = Campaign::factory()->forTeam($team)->create([
+        'user_id' => $user->id,
+        'created_at' => $timestamp->copy()->subDay(),
+    ]);
+    $ids = [$newer->id, ...$campaigns->reverse()->pluck('id')->all(), $older->id];
+
+    foreach ([1, 2] as $pageNumber) {
+        $expectedIds = array_slice($ids, ($pageNumber - 1) * 25, 25);
+
+        $this->actingAs($user)
+            ->get(route('campaigns.index', ['current_team' => $team->slug, 'page' => $pageNumber]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('campaigns.total', 32)
+                ->where('campaigns.current_page', $pageNumber)
+                ->where('campaigns.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === $expectedIds));
+    }
+});
+
+test('campaign index search keeps the status filter and team scope', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $match = Campaign::factory()->forTeam($team)->create(['name' => 'Launch']);
+    Campaign::factory()->forTeam($team)->active()->create(['name' => 'Launch active']);
+    Campaign::factory()->forTeam($team)->create(['name' => 'Other']);
+    Campaign::factory()->forTeam(Team::factory()->create())->create(['name' => 'Launch']);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.index', [
+            'current_team' => $team->slug,
+            'q' => 'Launch',
+            'status' => CampaignStatus::Draft->value,
+        ]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.q', 'Launch')
+            ->where('filters.status', CampaignStatus::Draft->value)
+            ->where('campaigns.current_page', 1)
+            ->has('campaigns.data', 1)
+            ->where('campaigns.data.0.id', $match->id));
+
+    $this->get(route('campaigns.index', [
+        'current_team' => $team->slug,
+        'q' => 'missing',
+        'status' => CampaignStatus::Draft->value,
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('filters.q', 'missing')
+        ->where('filters.status', CampaignStatus::Draft->value)
+        ->has('campaigns.data', 0));
+
+    $this->get(route('campaigns.index', [
+        'current_team' => $team->slug,
+        'q' => '',
+        'status' => CampaignStatus::Draft->value,
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('filters.q', null)
+        ->where('filters.status', CampaignStatus::Draft->value)
+        ->has('campaigns.data', 2));
+});
+
 test('members can create a campaign', function () {
     [$team, $user] = campaignTeamWithMember();
 
@@ -160,6 +232,37 @@ test('members can view a campaign with its steps and stats', function () {
             ->where('stats.steps_count', 1)
             ->where('stats.recipients_count', 0)
             ->has('can'));
+});
+
+test('recipients with identical timestamps have deterministic non overlapping pages', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create(['user_id' => $user->id]);
+    $factory = Recipient::factory()->state([
+        'campaign_id' => $campaign->id,
+        'contact_id' => Contact::factory()->forTeam($team)->state(['user_id' => $user->id]),
+    ]);
+    $timestamp = now()->startOfSecond();
+    $newer = $factory->create(['created_at' => $timestamp->copy()->addDay()]);
+    $recipients = $factory->count(30)->create(['created_at' => $timestamp]);
+    $older = $factory->create(['created_at' => $timestamp->copy()->subDay()]);
+    $ids = [$newer->id, ...$recipients->reverse()->pluck('id')->all(), $older->id];
+
+    foreach ([1, 2] as $pageNumber) {
+        $expectedIds = array_slice($ids, ($pageNumber - 1) * 25, 25);
+
+        $this->actingAs($user)
+            ->get(route('campaigns.show', [
+                'current_team' => $team->slug,
+                'campaign' => $campaign,
+                'recipients_page' => $pageNumber,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('recipients.total', 32)
+                ->where('recipients.current_page', $pageNumber)
+                ->where('recipients.data', fn ($rows): bool => collect($rows)->pluck('id')->all() === $expectedIds));
+    }
 });
 
 test('the campaign stats count opens clicks and unsubscribes', function () {
@@ -372,6 +475,20 @@ test('a campaign needs at least one step before it can be started', function () 
         ->and($campaign->fresh()->started_at)->toBeNull();
 });
 
+test('starting a stopped campaign flashes that it was resumed', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create(['status' => CampaignStatus::Stopped]);
+    CampaignStep::factory()->forCampaign($campaign)->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.start', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertRedirect()
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Campaign resumed.']);
+
+    expect($campaign->fresh()->status)->toBe(CampaignStatus::Active);
+});
+
 test('members can start a campaign with a step', function () {
     [$team, $user] = campaignTeamWithMember();
 
@@ -556,6 +673,11 @@ test('the show page counts sent opened and replied per step', function () {
     $email($first);
     // Step two: one dispatched, nothing opened.
     $email($second);
+    // Step three: one of three opened, a non-integer rate.
+    $third = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 3, 'subject' => 'Third']);
+    $email($third, ['status' => EmailStatus::Opened, 'opened_at' => now()]);
+    $email($third);
+    $email($third);
 
     // Another campaign's emails, including one that reuses this campaign's step
     // id, must not reach this campaign's metrics.
@@ -591,7 +713,9 @@ test('the show page counts sent opened and replied per step', function () {
             ->where('steps.0.metrics.replied_rate', 25)
             ->where('steps.1.metrics.sent', 1)
             ->where('steps.1.metrics.opened_rate', 0)
-            ->where('steps.1.metrics.replied_rate', 0));
+            ->where('steps.1.metrics.replied_rate', 0)
+            ->where('steps.2.metrics.opened_rate', 33.3)
+            ->where('steps.2.metrics.replied_rate', 0));
 });
 
 test('the recipients payload derives the boards status labels', function () {

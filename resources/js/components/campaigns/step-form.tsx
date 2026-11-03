@@ -20,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { signatureHtml } from '@/lib/signature';
 import { store, update } from '@/routes/campaigns/steps';
 import type {
     CampaignSignatureOption,
@@ -141,7 +142,7 @@ export default function StepForm({
             return;
         }
 
-        setBody((current) => `${current}${signature.body}`);
+        setBody((current) => `${current}${signatureHtml(signature.body)}`);
     };
 
     const insertPlaceholder = (name: string) => {
@@ -279,9 +280,7 @@ export default function StepForm({
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="grid gap-1.5">
-                                        <FormLabel htmlFor="day">
-                                            Day (from campaign start)
-                                        </FormLabel>
+                                        <FormLabel htmlFor="day">Day</FormLabel>
                                         <Input
                                             id="day"
                                             name="day"
@@ -292,8 +291,16 @@ export default function StepForm({
                                             onChange={(event) =>
                                                 setDay(event.target.value)
                                             }
+                                            aria-describedby="day-hint"
                                             required
                                         />
+                                        <p
+                                            id="day-hint"
+                                            className="text-xs text-muted-foreground"
+                                        >
+                                            From campaign start, or from when
+                                            the recipient joins if later.
+                                        </p>
                                         <InputError message={errors.day} />
                                     </div>
 

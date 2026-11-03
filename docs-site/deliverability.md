@@ -16,6 +16,11 @@ title: Deliverability & compliance
   pixel. Recipients are addressed by their contact name when it is not an email address.
 - Every campaign email carries an unsubscribe link and one-click `List-Unsubscribe` headers.
   Unsubscribed addresses are suppressed for the team.
+- The campaign's Add recipients dialog shows how many contacts and lists you have selected.
+  After adding them, the notification reports additions and skipped contacts. Unsubscribed,
+  bounced, do-not-contact and suppressed contacts, and contacts already in the campaign, are
+  skipped. Contacts selected directly or through multiple lists are counted only once;
+  selection counts are not a preview of how many recipients will be added.
 - Open and link tracking can be turned off per campaign. The unsubscribe link is added either way,
   so a campaign with tracking off still carries it.
 - You, the operator, are responsible for complying with laws such as CAN-SPAM and GDPR: having

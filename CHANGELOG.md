@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 
 - Documentation site (VitePress), published to GitHub Pages.
-- Campaigns with multi-step sequences, recipients from contacts, and a start/pause/archive lifecycle.
+- Campaigns with multi-step sequences, recipients from contacts, and a start/stop/resume/archive lifecycle.
 - Contacts spreadsheet with inline editing, lists as tabs, and custom columns.
 - Templates, template folders, signatures, and placeholder merge fields in the step editor.
 - SMTP, Gmail, and Outlook sending connections (Gmail and Outlook via bring-your-own OAuth apps).
@@ -41,6 +41,12 @@ All notable changes to this project are documented here. The format is based on
   address of the contact, and legacy mixed-case unsubscribe entries are lowercased by a migration.
 
 ### Changed
+
+- Campaigns and Contacts search as you type after a short pause, like Templates, while keeping
+  the selected status or list and scroll position. Enter applies the search immediately.
+- Archiving a campaign now requires confirmation that sending stops and archiving is permanent.
+  Archived campaigns keep their recipient history but are read-only: settings, recipients and
+  steps cannot be changed from the page or by direct requests. Use Stop for a temporary pause.
 
 - Rebranded from MMOS to Campaigns. The Docker image and nginx site are renamed; existing
   installs keep working and the database is untouched.
@@ -76,6 +82,32 @@ All notable changes to this project are documented here. The format is based on
 - SMTP and Gmail campaign emails now include a text/plain alternative that keeps link destinations
   and the unsubscribe link but omits the tracking pixel (Outlook relies on Exchange generating it).
   The To header carries the contact's name when it has one that is not an email address.
+- Consistent Campaigns branding and one-decimal percentage rates on the dashboard and campaign
+  pages. Stopped campaigns now say Resume; start guidance no longer assumes a prior attempt.
+- Step day labels now say days count from the campaign start, or from when the recipient
+  joins if that is later, and template headers show the template name on both mobile and desktop.
+- Deleting a campaign step now asks for confirmation, and steps with email history have a disabled
+  Delete action with an explanation. Deletion errors use the shared error toast, including on mobile.
+- Connections give server hosts more table space instead of long names, and show a Verify
+  button on Pending rows and mobile cards so newly saved SMTP connections can be activated.
+- Contacts, campaigns, and campaign recipients now break creation-time ties by newest ID,
+  so records created in the same second have a consistent order across pagination requests.
+- The Status select in New contact and Edit contact and the Role select in Invite member now use
+  their visible labels as accessible names for assistive technology.
+- Signatures, contact detail, and Settings now use the same page header, spacing, and body
+  typography as the other app pages. Contact detail has its back link in the header; Settings
+  keeps its account sub-navigation.
+- Adding campaign recipients now reports how many unique contacts were skipped and why; the
+  Add recipients dialog shows contact and list selection counts and explains suppression.
+- Template and step saves reject unknown placeholders by name instead of silently saving tags
+  that send as blank text. Both editors list the same built-in and team contact fields, including imported ones with spaces such as `Job Title`.
+- Step order is locked after a campaign first starts, including while stopped, so moving a
+  queued step above a sent one cannot strand recipients or skip their remaining steps.
+- Signatures now preserve line breaks and literal text such as `<ada@example.com>` in sent emails
+  and when inserted into the step editor, matching the plain-text signature editor and preview.
+- Campaign connection pickers in the edit dialog show verification status and warn before saving
+  an inactive connection on a running campaign. Campaign pages link to Connections while the
+  selected connection needs verification, instead of leaving waiting emails unexplained.
 
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
@@ -152,8 +184,8 @@ All notable changes to this project are documented here. The format is based on
 - The Docker example enables secure session cookies and a one-year HSTS header in Caddy.
 - The CSRF exemption now covers only the one-click unsubscribe POST, not every `unsubscribe/*` route.
 - Contact values filled into placeholders are HTML-escaped in email bodies, so imported data can
-  no longer inject markup or links. Subjects are filled as plain text. The `{{signature}}` tag still
-  inserts the signature's HTML.
+  no longer inject markup or links. Subjects are filled as plain text. The `{{signature}}` tag also
+  escapes the signature's plain text and converts newlines to HTML line breaks.
 
 ### Upgrade notes
 
@@ -168,3 +200,6 @@ All notable changes to this project are documented here. The format is based on
 - A migration adds three indexes to `campaign_emails`. Migrations run when the app container
   starts, so on a large table the first start after upgrading can take longer.
 - Contact fields whose values contain HTML now appear as literal text in email bodies.
+- Signatures are plain text, including existing signatures containing HTML: tags and entities now
+  appear literally. Edit those signatures to replace HTML formatting with text and line breaks.
+  Signature content already copied into a saved step is unchanged; remove and reinsert it to update.
