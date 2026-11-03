@@ -8,6 +8,12 @@ Campaigns sends from inboxes you connect: SMTP (optional IMAP), Gmail, or Outloo
 
 System mail (verification, password reset, invitations) is separate. It uses `MAIL_*` in `.env` — see [Quick start](./quick-start#system-email-registration).
 
+## SMTP verification
+
+After adding an SMTP connection, click **Verify** beside its **Pending** status in the table, or on its card on smaller screens. Verification checks the credentials before the connection can send; saving alone does not contact the SMTP server. If verification fails, fix the settings and use **Retry** in the failure banner.
+
+The desktop table gives Server the available width and truncates long connection names first. Hover a truncated name or server to see its full value; on narrower desktops, scroll the table horizontally.
+
 ## Gmail / Outlook OAuth (optional)
 
 Connect buttons appear only when credentials are set. Add to `.env`:

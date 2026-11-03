@@ -352,11 +352,11 @@ test('deleting a signature clears it from the connections using it', function ()
     expect($connection->fresh()->signature_id)->toBeNull();
 });
 
-test('verifying a reachable mailer connection marks it active and clears the error', function () {
+test('verifying a reachable mailer connection marks it active and clears the error', function (MailerConnectionStatus $status) {
     [$team, $user] = mailerConnectionTeamWithMember();
 
     $connection = MailerConnection::factory()->forTeam($team)->create([
-        'status' => MailerConnectionStatus::Deactivated,
+        'status' => $status,
         'exception_type' => RuntimeException::class,
         'exception_data' => ['message' => 'Previous failure'],
         'threw_at' => now()->subDay(),
@@ -380,7 +380,7 @@ test('verifying a reachable mailer connection marks it active and clears the err
         ->and($connection->exception_type)->toBeNull()
         ->and($connection->exception_data)->toBeNull()
         ->and($connection->threw_at)->toBeNull();
-});
+})->with([MailerConnectionStatus::Pending, MailerConnectionStatus::Deactivated]);
 
 test('verifying an unreachable mailer connection deactivates it and stores the error', function () {
     [$team, $user] = mailerConnectionTeamWithMember();
