@@ -341,13 +341,15 @@ class CampaignController extends Controller
 
         Gate::authorize('start', $campaign);
 
+        $resuming = $campaign->status === CampaignStatus::Stopped;
+
         try {
             $startCampaign->handle($campaign);
         } catch (ValidationException $exception) {
             return back()->withErrors($exception->errors());
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Campaign started.')]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => $resuming ? __('Campaign resumed.') : __('Campaign started.')]);
 
         return back();
     }
@@ -431,7 +433,7 @@ class CampaignController extends Controller
      * `sent` counts dispatched emails only, so an opened or replied email is
      * always a subset of it and the percentages cannot exceed 100.
      *
-     * @return array<int, array{sent: int, opened: int, replied: int, opened_rate: int|null, replied_rate: int|null}>
+     * @return array<int, array{sent: int, opened: int, replied: int, opened_rate: float|null, replied_rate: float|null}>
      */
     protected function stepMetrics(int $campaignId): array
     {
@@ -452,8 +454,8 @@ class CampaignController extends Controller
                     'sent' => $sent,
                     'opened' => $opened,
                     'replied' => $replied,
-                    'opened_rate' => $sent > 0 ? (int) round($opened / $sent * 100) : null,
-                    'replied_rate' => $sent > 0 ? (int) round($replied / $sent * 100) : null,
+                    'opened_rate' => $sent > 0 ? round($opened / $sent * 100, 1) : null,
+                    'replied_rate' => $sent > 0 ? round($replied / $sent * 100, 1) : null,
                 ]];
             })
             ->all();

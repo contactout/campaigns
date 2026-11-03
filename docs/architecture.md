@@ -41,14 +41,15 @@ stateDiagram-v2
     [*] --> Draft: create or duplicate
     Draft --> Active: start (needs a step)
     Active --> Stopped: stop
-    Stopped --> Active: start again
+    Stopped --> Active: resume
     Draft --> Archived: archive
     Active --> Archived: archive
     Stopped --> Archived: archive
 ```
 
 Starting a campaign records `started_at` the first time and queues `SeedCampaignEmails`; only
-`Active` campaigns send. Stopping keeps scheduled emails in place, and starting again keeps the
+`Active` campaigns send. Use **Stop** to stop an active campaign and **Resume** to continue a
+`Stopped` campaign (a `Draft` uses **Start**). Stopping keeps scheduled emails in place, and resuming keeps the
 original `started_at`, so later steps stay on the days they were planned for. Duplicating creates a
 new `Draft`. `CampaignStatus` also defines `Completed`, which no action sets yet.
 

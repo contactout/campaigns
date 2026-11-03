@@ -9,7 +9,7 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 
 - Documentation site (VitePress), published to GitHub Pages.
-- Campaigns with multi-step sequences, recipients from contacts, and a start/pause/archive lifecycle.
+- Campaigns with multi-step sequences, recipients from contacts, and a start/stop/resume/archive lifecycle.
 - Contacts spreadsheet with inline editing, lists as tabs, and custom columns.
 - Templates, template folders, signatures, and placeholder merge fields in the step editor.
 - SMTP, Gmail, and Outlook sending connections (Gmail and Outlook via bring-your-own OAuth apps).
@@ -79,6 +79,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Consistent Campaigns branding and one-decimal percentage rates on the dashboard and campaign
+  pages. Stopped campaigns now say Resume; start guidance no longer assumes a prior attempt.
+- Step day labels now say days count from the campaign start, or from when the recipient
+  joins if that is later, and template headers show the template name on both mobile and desktop.
 - Deleting a campaign step now asks for confirmation, and steps with email history have a disabled
   Delete action with an explanation. Deletion errors use the shared error toast, including on mobile.
 - Connections give server hosts more table space instead of long names, and show a Verify

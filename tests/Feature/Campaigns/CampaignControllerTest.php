@@ -475,6 +475,20 @@ test('a campaign needs at least one step before it can be started', function () 
         ->and($campaign->fresh()->started_at)->toBeNull();
 });
 
+test('starting a stopped campaign flashes that it was resumed', function () {
+    [$team, $user] = campaignTeamWithMember();
+
+    $campaign = Campaign::factory()->forTeam($team)->create(['status' => CampaignStatus::Stopped]);
+    CampaignStep::factory()->forCampaign($campaign)->create();
+
+    $this->actingAs($user)
+        ->post(route('campaigns.start', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertRedirect()
+        ->assertInertiaFlash('toast', ['type' => 'success', 'message' => 'Campaign resumed.']);
+
+    expect($campaign->fresh()->status)->toBe(CampaignStatus::Active);
+});
+
 test('members can start a campaign with a step', function () {
     [$team, $user] = campaignTeamWithMember();
 
@@ -659,6 +673,11 @@ test('the show page counts sent opened and replied per step', function () {
     $email($first);
     // Step two: one dispatched, nothing opened.
     $email($second);
+    // Step three: one of three opened, a non-integer rate.
+    $third = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 3, 'subject' => 'Third']);
+    $email($third, ['status' => EmailStatus::Opened, 'opened_at' => now()]);
+    $email($third);
+    $email($third);
 
     // Another campaign's emails, including one that reuses this campaign's step
     // id, must not reach this campaign's metrics.
@@ -694,7 +713,9 @@ test('the show page counts sent opened and replied per step', function () {
             ->where('steps.0.metrics.replied_rate', 25)
             ->where('steps.1.metrics.sent', 1)
             ->where('steps.1.metrics.opened_rate', 0)
-            ->where('steps.1.metrics.replied_rate', 0));
+            ->where('steps.1.metrics.replied_rate', 0)
+            ->where('steps.2.metrics.opened_rate', 33.3)
+            ->where('steps.2.metrics.replied_rate', 0));
 });
 
 test('the recipients payload derives the boards status labels', function () {
