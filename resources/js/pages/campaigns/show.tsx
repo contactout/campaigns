@@ -100,7 +100,7 @@ export default function CampaignShow({
 
     useEffect(() => {
         if (errors.campaign) {
-            toast.error(errors.campaign);
+            toast.error(errors.campaign, { id: errors.campaign });
         }
     }, [errors]);
 
