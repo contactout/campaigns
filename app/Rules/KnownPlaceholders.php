@@ -2,7 +2,6 @@
 
 namespace App\Rules;
 
-use App\Services\Mail\MergeFields;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
@@ -25,7 +24,9 @@ class KnownPlaceholders implements ValidationRule
             $known[] = 'signature';
         }
 
-        preg_match_all('/'.MergeFields::PATTERN.'/', $value, $matches);
+        // Any {{ ... }} counts, not just well-formed tokens: a tag the renderer
+        // cannot match (`{{first name}}`) would otherwise be sent as literal braces.
+        preg_match_all('/\{\{\s*(.*?)\s*\}\}/s', $value, $matches);
 
         $unknown = array_values(array_unique(array_filter(
             $matches[1],

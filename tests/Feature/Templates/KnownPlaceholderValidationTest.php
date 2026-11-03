@@ -102,3 +102,21 @@ test('both editors expose the same team scoped placeholder catalogue', function 
     $this->get(route('campaigns.show', ['current_team' => $this->team->slug, 'campaign' => $this->campaign]))
         ->assertOk()->assertInertia(fn (Assert $page) => $page->where('placeholders', $expected));
 });
+
+test('saves reject tags the renderer cannot match and the catalogue omits unusable field names', function (string $target) {
+    ContactField::factory()->forTeam($this->team)->create(['name' => 'Job Title']);
+    [$method, $url] = placeholderSaveTarget($target, $this->team, $this->template, $this->campaign, $this->step);
+
+    $this->{$method}($url, [
+        'name' => 'Intro',
+        'subject' => 'Hi {{first name}}',
+        'body' => '<p>{{Job Title}} {{name!}}</p>',
+        'day' => 0,
+    ])->assertSessionHasErrors([
+        'subject' => 'Unknown placeholders: {{first name}}. Use the available contact fields.',
+        'body' => 'Unknown placeholders: {{Job Title}}, {{name!}}. Use the available contact fields.',
+    ]);
+
+    $this->get(route('templates.show', ['current_team' => $this->team->slug, 'template' => $this->template]))
+        ->assertInertia(fn (Assert $page) => $page->where('availablePlaceholders', fn ($list) => collect($list)->pluck('name')->doesntContain('Job Title')));
+})->with(['create template', 'update template', 'create step', 'update step']);

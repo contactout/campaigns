@@ -53,18 +53,20 @@ export default function PlaceholderManager({
 
     return (
         <div className="flex flex-col">
-            <ul aria-label="Available placeholders">
+            <ul
+                aria-label="Available placeholders"
+                className="flex flex-wrap border-b py-1"
+            >
                 {availablePlaceholders.map((placeholder) => (
-                    <li key={placeholder.name} className="border-b px-4 py-2">
-                        <Button
+                    <li key={placeholder.name} className="px-4 py-1">
+                        <button
                             type="button"
-                            variant="outline"
-                            size="sm"
                             onClick={() => onInsert?.(placeholder.name)}
+                            className="inline-flex items-center rounded-md border border-badge-info-border bg-accent px-1.5 py-0.5 font-mono text-label leading-4 text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary-border max-lg:min-h-11"
                             aria-label={`Insert ${placeholder.label}`}
                         >
                             {`{{${placeholder.name}}}`}
-                        </Button>
+                        </button>
                     </li>
                 ))}
             </ul>
@@ -92,13 +94,21 @@ export default function PlaceholderManager({
                                         placeholder.name.toLowerCase(),
                                 )
                             }
-                            title={`Insert {{${placeholder.name}}}`}
+                            title={
+                                availablePlaceholders.some(
+                                    (field) =>
+                                        field.name.toLowerCase() ===
+                                        placeholder.name.toLowerCase(),
+                                )
+                                    ? `Insert {{${placeholder.name}}}`
+                                    : 'Not a contact field, add it in Contacts to use it'
+                            }
                             aria-label={
                                 placeholder.fallback
                                     ? `Insert ${placeholder.name}, fallback ${placeholder.fallback}`
                                     : `Insert ${placeholder.name}`
                             }
-                            className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border max-lg:h-11"
+                            className="inline-flex h-[22px] shrink-0 items-center rounded-md bg-accent px-2 text-label leading-none font-medium text-primary outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-primary-border disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent max-lg:h-11"
                         >
                             {`{{${placeholder.name}}}`}
                         </button>
@@ -163,7 +173,7 @@ export default function PlaceholderManager({
                                         <Input
                                             id="placeholder-name"
                                             name="name"
-                                            placeholder="first_name"
+                                            placeholder="job_title"
                                             required
                                             className="h-8"
                                         />
