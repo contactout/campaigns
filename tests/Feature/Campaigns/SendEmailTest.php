@@ -167,7 +167,7 @@ test('sends the rendered email and schedules the next step', function () {
     expect($fixture['connection']->fresh()->sent_count)->toBe(1);
 
     expect($fake->sent)->toHaveCount(1)
-        ->and($fake->sent[0]['to'])->toBe('ada@example.com')
+        ->and($fake->sent[0]['to'])->toBe('"Ada Lovelace" <ada@example.com>')
         ->and($fake->sent[0]['subject'])->toBe('Hello Ada Lovelace')
         ->and($fake->sent[0]['html'])->toStartWith('<p>ada@example.com / Analytical Engines / </p>')
         ->and($fake->sent[0]['html'])->toContain('width="1" height="1"');
@@ -179,6 +179,17 @@ test('sends the rendered email and schedules the next step', function () {
 
     expect($next)->not->toBeNull()
         ->and($next->status)->toBe(EmailStatus::Scheduled);
+});
+
+test('sends an address without a display name when the contact name is blank', function () {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+    $fixture = mmosSendEmailFixture();
+    $fixture['contact']->update(['name' => '']);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent[0]['to'])->toBe('ada@example.com');
 });
 
 test('fills the signature tag from the sending connection', function () {
@@ -721,7 +732,7 @@ test('does not let concurrent workers send past the connection sending limit', f
 
     mmosRunSendEmail($fixture['email']);
 
-    expect($mailer->sent)->toBe(['ada@example.com'])
+    expect($mailer->sent)->toBe(['"Ada Lovelace" <ada@example.com>'])
         ->and($fixture['email']->fresh()->status)->toBe(EmailStatus::Sent)
         ->and($other->fresh()->status)->toBe(EmailStatus::Scheduled)
         ->and($other->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-03 00:00:00')
@@ -784,7 +795,7 @@ test('holds the email when another worker takes the last slot after the cap chec
 
     $email = $fixture['email']->fresh();
 
-    expect(array_column($fake->sent, 'to'))->toBe(['grace@example.com'])
+    expect(array_column($fake->sent, 'to'))->toBe(['"Grace Hopper" <grace@example.com>'])
         ->and($email->status)->toBe(EmailStatus::Scheduled)
         ->and($email->scheduled_at->toDateTimeString())->toBe('2026-02-03 00:00:00')
         ->and($fixture['connection']->fresh()->sent_count)->toBe(2);
@@ -845,7 +856,7 @@ test('does not give back a slot in the next sending window when a send fails aft
     // The new day's one slot is used, so a third email is held.
     mmosRunSendEmail($third);
 
-    expect($mailer->sent)->toBe(['ada@example.com', 'grace@example.com'])
+    expect($mailer->sent)->toBe(['"Ada Lovelace" <ada@example.com>', '"Grace Hopper" <grace@example.com>'])
         ->and($third->fresh()->scheduled_at->toDateTimeString())->toBe('2026-02-04 00:00:00');
 });
 

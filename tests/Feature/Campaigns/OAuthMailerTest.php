@@ -102,17 +102,27 @@ test('outlook campaign mailer creates sends and returns message ids', function (
 
     $result = app(OutlookCampaignMailer::class)->send(
         $connection,
-        'recipient@example.com',
+        '"Ada Lovelace" <recipient@example.com>',
         'Hello',
-        '<p>Hi</p>',
+        '<p>Hi <a href="https://example.com/u">Unsubscribe</a></p><img src="https://example.com/pixel" width="1">',
         ['List-Unsubscribe' => '<https://example.com/u>', 'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click'],
     );
 
-    Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.microsoft.com/v1.0/me/messages'
-        && $request['internetMessageHeaders'] === [
-            ['name' => 'List-Unsubscribe', 'value' => '<https://example.com/u>'],
-            ['name' => 'List-Unsubscribe-Post', 'value' => 'List-Unsubscribe=One-Click'],
-        ]);
+    Http::assertSent(function (Request $request) {
+        if ($request->url() !== 'https://graph.microsoft.com/v1.0/me/messages') {
+            return false;
+        }
+
+        $mime = (string) base64_decode($request->body(), true);
+        expect($request->hasHeader('Content-Type', 'text/plain'))->toBeTrue()
+            ->and($mime)->toContain('multipart/alternative;', 'Content-Type: text/plain;', 'Content-Type: text/html;',
+                'List-Unsubscribe: <https://example.com/u>',
+                'List-Unsubscribe-Post: List-Unsubscribe=One-Click',
+                'To: Ada Lovelace <recipient@example.com>')
+            ->and(quoted_printable_decode($mime))->toContain('Hi Unsubscribe <https://example.com/u>');
+
+        return true;
+    });
 
     expect($result)->toBeInstanceOf(SendResult::class)
         ->and($result->messageId)->toBe('<outlook-1@example.com>')
@@ -149,9 +159,9 @@ test('gmail campaign mailer puts unsubscribe headers in the raw message', functi
 
     (new GmailCampaignMailer(app(OAuthTokenManager::class), $api))->send(
         $connection,
-        'to@example.com',
+        '"Ada Lovelace" <to@example.com>',
         'Hello',
-        '<p>Hi</p>',
+        '<p>Hi <a href="https://example.com/u">Unsubscribe</a></p><img src="https://example.com/pixel" width="1">',
         [
             'List-Unsubscribe' => '<https://example.com/u>',
             'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
@@ -161,7 +171,10 @@ test('gmail campaign mailer puts unsubscribe headers in the raw message', functi
     $mime = (string) base64_decode(strtr($api->raw, '-_', '+/'));
 
     expect($mime)->toContain('List-Unsubscribe: <https://example.com/u>')
-        ->and($mime)->toContain('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+        ->and($mime)->toContain('List-Unsubscribe-Post: List-Unsubscribe=One-Click',
+            'multipart/alternative;', 'Content-Type: text/plain;', 'Content-Type: text/html;',
+            'To: Ada Lovelace <to@example.com>')
+        ->and(quoted_printable_decode($mime))->toContain('Hi Unsubscribe <https://example.com/u>');
 });
 
 test('gmail mailbox reader excludes the connections own sent mail from the poll', function () {
@@ -383,12 +396,8 @@ test('outlook campaign mailer creates a reply in the previous conversation', fun
     Http::fake(function (Request $request) {
         $url = $request->url();
 
-        if ($request->method() === 'POST' && $url === 'https://graph.microsoft.com/v1.0/me/messages/reply-msg-1/createReply') {
+        if ($request->method() === 'POST' && $url === 'https://graph.microsoft.com/v1.0/me/messages') {
             return Http::response(['id' => 'graph-reply-1', 'conversationId' => 'conv-1'], 201);
-        }
-
-        if ($request->method() === 'PATCH' && $url === 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1') {
-            return Http::response(['id' => 'graph-reply-1'], 200);
         }
 
         if ($request->method() === 'POST' && $url === 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1/send') {
@@ -414,18 +423,24 @@ test('outlook campaign mailer creates a reply in the previous conversation', fun
         new EmailThread(messageId: '<outlook-1@example.com>', threadId: 'conv-1', replyToId: 'reply-msg-1'),
     );
 
-    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
-        && $request->url() === 'https://graph.microsoft.com/v1.0/me/messages/reply-msg-1/createReply');
+    Http::assertSent(function (Request $request) {
+        if ($request->url() !== 'https://graph.microsoft.com/v1.0/me/messages') {
+            return false;
+        }
 
-    Http::assertSent(fn (Request $request) => $request->method() === 'PATCH'
-        && $request->url() === 'https://graph.microsoft.com/v1.0/me/messages/graph-reply-1'
-        && $request['body']['content'] === '<p>Hi</p>');
+        $mime = (string) base64_decode($request->body(), true);
+        expect($request->hasHeader('Content-Type', 'text/plain'))->toBeTrue()
+            ->and($mime)->toContain('multipart/alternative;', 'Content-Type: text/plain;', 'Content-Type: text/html;',
+                'In-Reply-To: <outlook-1@example.com>', 'List-Unsubscribe: <https://example.com/u>');
+
+        return true;
+    });
 
     expect($result->messageId)->toBe('<outlook-reply@example.com>')
         ->and($result->threadId)->toBe('conv-1')
         ->and($result->replyToId)->toBe('graph-reply-1');
 
-    Http::assertSentCount(4);
+    Http::assertSentCount(3);
 });
 
 test('outlook campaign mailer reports the graph status and error code when a send is rejected', function () {
@@ -448,7 +463,7 @@ test('outlook campaign mailer reports the graph status and error code when a sen
     ]);
 
     try {
-        app(OutlookCampaignMailer::class)->send($connection, 'not-an-address', 'Hello', '<p>Hi</p>');
+        app(OutlookCampaignMailer::class)->send($connection, 'rejected@example.com', 'Hello', '<p>Hi</p>');
         $this->fail('Expected the send to be rejected.');
     } catch (MailerHttpException $exception) {
         expect($exception->getMessage())->toBe('Outlook message create failed.')

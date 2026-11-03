@@ -9,7 +9,6 @@ use App\Enums\MailerType;
 use App\Exceptions\Mail\MailerHttpException;
 use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -41,48 +40,12 @@ class OutlookCampaignMailer implements CampaignMailer
             throw new RuntimeException('OutlookCampaignMailer requires an Outlook connection.');
         }
 
-        $settings = $connection->smtp_setting ?? [];
         $accessToken = $this->tokens->accessToken($connection);
+        $message = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread);
 
-        $fromEmail = (string) ($settings['from_email'] ?? $settings['email'] ?? '');
-        $fromName = (string) ($settings['from_name'] ?? $settings['name'] ?? '');
-
-        $message = [
-            'subject' => $subject,
-            'body' => [
-                'contentType' => 'HTML',
-                'content' => $html,
-            ],
-            'toRecipients' => [
-                [
-                    'emailAddress' => [
-                        'address' => $to,
-                    ],
-                ],
-            ],
-        ];
-
-        if ($headers !== []) {
-            $message['internetMessageHeaders'] = collect($headers)
-                ->map(fn (string $value, string $name): array => ['name' => $name, 'value' => $value])
-                ->values()
-                ->all();
-        }
-
-        if ($fromEmail !== '') {
-            $message['from'] = [
-                'emailAddress' => array_filter([
-                    'address' => $fromEmail,
-                    'name' => $fromName !== '' ? $fromName : null,
-                ]),
-            ];
-        }
-
-        $replyToId = $thread?->replyToId;
-
-        $id = $replyToId !== null && $replyToId !== ''
-            ? $this->createReply($accessToken, $replyToId, $message)
-            : $this->createMessage($accessToken, $message);
+        // Graph only documents MIME bodies for new messages, so replies are
+        // new messages carrying In-Reply-To/References headers.
+        $id = $this->createMessage($accessToken, $message->toString());
 
         $this->sendMessage($accessToken, $id);
 
@@ -116,14 +79,13 @@ class OutlookCampaignMailer implements CampaignMailer
     }
 
     /**
-     * Create a message, returning its Graph id.
-     *
-     * @param  array<string, mixed>  $message
+     * Create a draft from MIME so Graph keeps both alternatives.
      */
-    private function createMessage(string $accessToken, array $message): string
+    private function createMessage(string $accessToken, string $mime): string
     {
         $create = Http::withToken($accessToken)
-            ->post('https://graph.microsoft.com/v1.0/me/messages', $message);
+            ->withBody(base64_encode($mime), 'text/plain')
+            ->post('https://graph.microsoft.com/v1.0/me/messages');
 
         if (! $create->successful()) {
             throw MailerHttpException::fromResponse('Outlook message create failed.', $create);
@@ -134,43 +96,6 @@ class OutlookCampaignMailer implements CampaignMailer
 
         if ($id === '') {
             throw new RuntimeException('Outlook message create returned no id.');
-        }
-
-        return $id;
-    }
-
-    /**
-     * Create a reply on the previous message and load the step content into it.
-     *
-     * Graph rejects `internetMessageHeaders` when updating a draft, so the reply
-     * body, recipients and sender are patched in separately.
-     *
-     * @param  array<string, mixed>  $message
-     */
-    private function createReply(string $accessToken, string $replyToId, array $message): string
-    {
-        $create = Http::withToken($accessToken)
-            ->post('https://graph.microsoft.com/v1.0/me/messages/'.$replyToId.'/createReply');
-
-        if (! $create->successful()) {
-            throw MailerHttpException::fromResponse('Outlook reply create failed.', $create);
-        }
-
-        $created = $create->json();
-        $id = is_array($created) ? (string) ($created['id'] ?? '') : '';
-
-        if ($id === '') {
-            throw new RuntimeException('Outlook reply create returned no id.');
-        }
-
-        $patch = Http::withToken($accessToken)
-            ->patch(
-                'https://graph.microsoft.com/v1.0/me/messages/'.$id,
-                Arr::except($message, ['internetMessageHeaders']),
-            );
-
-        if (! $patch->successful()) {
-            throw MailerHttpException::fromResponse('Outlook reply update failed.', $patch);
         }
 
         return $id;

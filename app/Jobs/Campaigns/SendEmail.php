@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Symfony\Component\Mime\Address;
 use Throwable;
 
 class SendEmail implements ShouldBeUnique, ShouldQueue
@@ -264,7 +265,8 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $reservedIn = $connection->sending_limit_refreshed_at;
 
         try {
-            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email, $connection));
+            $recipient = new Address($to, trim($email->recipient->contact->name));
+            $result = $mailer->send($connection, $recipient->toString(), $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email, $connection));
         } catch (Throwable $exception) {
             $this->releaseSend($connection, $reservedIn);
 

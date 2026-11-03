@@ -16,8 +16,9 @@ use App\Models\MailerConnection;
 interface CampaignMailer
 {
     /**
-     * Send an HTML email to the given address using the connection's credentials.
+     * Send HTML and plain-text alternatives using the connection's credentials.
      *
+     * @param  string  $to  Recipient address, optionally with an RFC 5322 display name.
      * @param  array<string, string>  $headers  Extra message headers such as List-Unsubscribe.
      * @param  EmailThread|null  $thread  Details of the conversation to reply in, when threaded.
      *
