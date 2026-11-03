@@ -74,7 +74,7 @@ All notable changes to this project are documented here. The format is based on
 ### Fixed
 
 - Template and step saves reject unknown placeholders by name instead of silently saving tags
-  that send as blank text. Both editors list the same built-in and team contact fields.
+  that send as blank text. Both editors list the same built-in and team contact fields, including imported ones with spaces such as `Job Title`.
 
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.

@@ -6,7 +6,7 @@ use App\Models\ContactField;
 
 class MergeFields
 {
-    public const string PATTERN = '\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}';
+    public const string PATTERN = '\{\{\s*([^{}]+?)\s*\}\}';
 
     /**
      * Contact fields available to both editors and the recipient renderer.
@@ -21,7 +21,6 @@ class MergeFields
             ['name' => 'phone', 'label' => 'Phone'],
         ])->merge(
             ContactField::query()->forTeam($teamId)->orderBy('name')->get()
-                ->filter(fn (ContactField $field): bool => preg_match('/^[A-Za-z0-9_.-]+$/', $field->name) === 1)
                 ->map(fn (ContactField $field): array => [
                     'name' => $field->name,
                     'label' => $field->name,
