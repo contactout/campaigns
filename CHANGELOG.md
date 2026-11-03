@@ -79,6 +79,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- SMTP and Gmail campaign emails now include a text/plain alternative that keeps link destinations
+  and the unsubscribe link but omits the tracking pixel (Outlook relies on Exchange generating it).
+  The To header carries the contact's name when it has one that is not an email address.
 - Consistent Campaigns branding and one-decimal percentage rates on the dashboard and campaign
   pages. Stopped campaigns now say Resume; start guidance no longer assumes a prior attempt.
 - Step day labels now say days count from the campaign start, or from when the recipient

@@ -2,7 +2,6 @@
 
 namespace App\Services\Mail;
 
-use App\Concerns\AppliesThreadHeaders;
 use App\Contracts\Mail\CampaignMailer;
 use App\Contracts\Mail\GmailApi;
 use App\Data\EmailThread;
@@ -11,8 +10,6 @@ use App\Enums\MailerType;
 use App\Models\MailerConnection;
 use App\Services\OAuth\OAuthTokenManager;
 use RuntimeException;
-use Symfony\Component\Mime\Address;
-use Symfony\Component\Mime\Email;
 
 /**
  * Sends campaign emails through the Gmail API.
@@ -23,8 +20,6 @@ use Symfony\Component\Mime\Email;
  */
 class GmailCampaignMailer implements CampaignMailer
 {
-    use AppliesThreadHeaders;
-
     /**
      * Create a new Gmail campaign mailer instance.
      */
@@ -38,29 +33,15 @@ class GmailCampaignMailer implements CampaignMailer
      *
      * @param  array<string, string>  $headers
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         if ($connection->mailer_type !== MailerType::Gmail) {
             throw new RuntimeException('GmailCampaignMailer requires a Gmail connection.');
         }
 
-        $settings = $connection->smtp_setting ?? [];
         $accessToken = $this->tokens->accessToken($connection);
 
-        $email = (new Email)
-            ->from(new Address(
-                (string) ($settings['from_email'] ?? $settings['email'] ?? ''),
-                (string) ($settings['from_name'] ?? $settings['name'] ?? ''),
-            ))
-            ->to($to)
-            ->subject($subject)
-            ->html($html);
-
-        foreach ($headers as $name => $value) {
-            $email->getHeaders()->addTextHeader($name, $value);
-        }
-
-        $this->applyThreadHeaders($email, $thread);
+        $email = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread, $toName);
 
         // Symfony generates a Message-ID into a prepared copy of the headers,
         // which would leave the id unavailable after sending. Set it here so it

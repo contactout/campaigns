@@ -27,12 +27,12 @@ class CampaignMailerResolver implements CampaignMailer
      *
      * @param  array<string, string>  $headers
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         return match ($connection->mailer_type) {
-            MailerType::Smtp => $this->smtp->send($connection, $to, $subject, $html, $headers, $thread),
-            MailerType::Gmail => $this->gmail->send($connection, $to, $subject, $html, $headers, $thread),
-            MailerType::Outlook => $this->outlook->send($connection, $to, $subject, $html, $headers, $thread),
+            MailerType::Smtp => $this->smtp->send($connection, $to, $subject, $html, $headers, $thread, $toName),
+            MailerType::Gmail => $this->gmail->send($connection, $to, $subject, $html, $headers, $thread, $toName),
+            MailerType::Outlook => $this->outlook->send($connection, $to, $subject, $html, $headers, $thread, $toName),
         };
     }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Services\Mail;
 
-use App\Concerns\AppliesThreadHeaders;
 use App\Contracts\Mail\CampaignMailer;
 use App\Data\EmailThread;
 use App\Data\SendResult;
@@ -10,8 +9,6 @@ use App\Models\MailerConnection;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mailer\Transport\TransportInterface;
-use Symfony\Component\Mime\Address;
-use Symfony\Component\Mime\Email;
 
 /**
  * Sends campaign emails over SMTP using Symfony Mailer.
@@ -23,8 +20,6 @@ use Symfony\Component\Mime\Email;
  */
 class SmtpCampaignMailer implements CampaignMailer
 {
-    use AppliesThreadHeaders;
-
     /**
      * Send an HTML email using the given connection's SMTP credentials.
      *
@@ -32,24 +27,11 @@ class SmtpCampaignMailer implements CampaignMailer
      *
      * @throws TransportExceptionInterface When the message cannot be sent.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         $settings = $connection->smtp_setting ?? [];
 
-        $email = (new Email)
-            ->from(new Address(
-                (string) ($settings['from_email'] ?? ''),
-                (string) ($settings['from_name'] ?? ''),
-            ))
-            ->to($to)
-            ->subject($subject)
-            ->html($html);
-
-        foreach ($headers as $name => $value) {
-            $email->getHeaders()->addTextHeader($name, $value);
-        }
-
-        $this->applyThreadHeaders($email, $thread);
+        $email = (new CampaignMessageBuilder)->build($connection, $to, $subject, $html, $headers, $thread, $toName);
 
         $sent = $this->transport($settings)->send($email);
 

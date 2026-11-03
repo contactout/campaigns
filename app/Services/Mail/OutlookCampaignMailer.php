@@ -35,7 +35,7 @@ class OutlookCampaignMailer implements CampaignMailer
      *
      * @throws MailerHttpException When Graph rejects the send.
      */
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         if ($connection->mailer_type !== MailerType::Outlook) {
             throw new RuntimeException('OutlookCampaignMailer requires an Outlook connection.');
@@ -55,9 +55,10 @@ class OutlookCampaignMailer implements CampaignMailer
             ],
             'toRecipients' => [
                 [
-                    'emailAddress' => [
+                    'emailAddress' => array_filter([
                         'address' => $to,
-                    ],
+                        'name' => $toName,
+                    ]),
                 ],
             ],
         ];

@@ -46,13 +46,13 @@ class FakeCampaignMailer implements CampaignMailer
         $this->result = $result ?? new SendResult;
     }
 
-    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+    public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
     {
         if ($this->exception !== null) {
             throw $this->exception;
         }
 
-        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers', 'thread');
+        $this->sent[] = compact('connection', 'to', 'subject', 'html', 'headers', 'thread', 'toName');
 
         return $this->result;
     }
@@ -168,6 +168,7 @@ test('sends the rendered email and schedules the next step', function () {
 
     expect($fake->sent)->toHaveCount(1)
         ->and($fake->sent[0]['to'])->toBe('ada@example.com')
+        ->and($fake->sent[0]['toName'])->toBe('Ada Lovelace')
         ->and($fake->sent[0]['subject'])->toBe('Hello Ada Lovelace')
         ->and($fake->sent[0]['html'])->toStartWith('<p>ada@example.com / Analytical Engines / </p>')
         ->and($fake->sent[0]['html'])->toContain('width="1" height="1"');
@@ -180,6 +181,18 @@ test('sends the rendered email and schedules the next step', function () {
     expect($next)->not->toBeNull()
         ->and($next->status)->toBe(EmailStatus::Scheduled);
 });
+
+test('omits the display name when the contact name is blank or an email address', function (string $name) {
+    $fake = new FakeCampaignMailer;
+    $this->app->instance(CampaignMailer::class, $fake);
+    $fixture = mmosSendEmailFixture();
+    $fixture['contact']->update(['name' => $name]);
+
+    mmosRunSendEmail($fixture['email']);
+
+    expect($fake->sent[0]['to'])->toBe('ada@example.com')
+        ->and($fake->sent[0]['toName'])->toBeNull();
+})->with(['', '  ', 'ada@example.com']);
 
 test('sends the connection signature as escaped text with line breaks', function () {
     $fake = new FakeCampaignMailer;
@@ -600,7 +613,7 @@ test('does not send again while the same email is already being sent', function 
 
         public function __construct(private readonly CampaignEmail $email) {}
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
         {
             $this->sends++;
 
@@ -702,7 +715,7 @@ test('does not let concurrent workers send past the connection sending limit', f
 
         public function __construct(private readonly CampaignEmail $other) {}
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
         {
             $this->sent[] = $to;
 
@@ -817,7 +830,7 @@ test('does not give back a slot in the next sending window when a send fails aft
 
         public function __construct(private readonly Closure $whileSending) {}
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
         {
             $this->sent[] = $to;
 
@@ -1054,7 +1067,7 @@ test('records the connection that sent even when a switch repoints the row mid-s
             private readonly MailerConnection $other,
         ) {}
 
-        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null): SendResult
+        public function send(MailerConnection $connection, string $to, string $subject, string $html, array $headers = [], ?EmailThread $thread = null, ?string $toName = null): SendResult
         {
             // Stand in for the campaign switching connection while the
             // provider call is in flight: the still-Scheduled row is moved.

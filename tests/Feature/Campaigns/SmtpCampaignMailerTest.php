@@ -95,6 +95,25 @@ test('smtp mailer replies to the previous message when threaded', function () {
         ->and($result->messageId)->toContain('@');
 });
 
+test('smtp mailer sends both alternatives with the recipient display name', function () {
+    $transport = new FakeSmtpTransport;
+
+    mmosSmtpMailer($transport)->send(
+        mmosSmtpConnection(),
+        'ada@example.com',
+        'Hello',
+        '<p>Hi <a href="https://example.com/u">Unsubscribe</a></p><img src="https://example.com/pixel" width="1">',
+        toName: 'Ada Lovelace',
+    );
+
+    $message = $transport->messages[0];
+
+    expect($message->getTo()[0]->getName())->toBe('Ada Lovelace')
+        ->and($message->getTextBody())->toBe('Hi Unsubscribe <https://example.com/u>')
+        ->and($message->getHtmlBody())->toContain('<img')
+        ->and($message->toString())->toContain('multipart/alternative;', 'Content-Type: text/plain;', 'Content-Type: text/html;');
+});
+
 test('smtp mailer starts a new conversation without a thread context', function () {
     $transport = new FakeSmtpTransport;
 

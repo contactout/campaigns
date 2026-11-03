@@ -11,6 +11,9 @@ title: Deliverability & compliance
   hours at 00:00 sends at any hour.
 - A connection's `sending_limit` is a per-day allowance. It counts sends since midnight UTC and
   resets when the UTC day rolls over, so reaching the limit delays a campaign rather than stopping it.
+- SMTP and Gmail campaign emails include both HTML and plain-text alternatives (Outlook generates
+  its own). Plain text keeps link destinations (including unsubscribe) without the open-tracking
+  pixel. Recipients are addressed by their contact name when it is not an email address.
 - Every campaign email carries an unsubscribe link and one-click `List-Unsubscribe` headers.
   Unsubscribed addresses are suppressed for the team.
 - The campaign's Add recipients dialog shows how many contacts and lists you have selected.

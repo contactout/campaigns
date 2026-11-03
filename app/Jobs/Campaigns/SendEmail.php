@@ -264,7 +264,7 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         $reservedIn = $connection->sending_limit_refreshed_at;
 
         try {
-            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email, $connection));
+            $result = $mailer->send($connection, $to, $subject, $html, $this->unsubscribeHeaders($email), $this->resolveThread($email, $connection), $this->recipientName($email));
         } catch (Throwable $exception) {
             $this->releaseSend($connection, $reservedIn);
 
@@ -380,6 +380,16 @@ class SendEmail implements ShouldBeUnique, ShouldQueue
         }
 
         return $email->scheduled_at === null || ! $email->scheduled_at->isFuture();
+    }
+
+    /**
+     * The contact's name for the To header, or null when it is blank or just an address.
+     */
+    private function recipientName(CampaignEmail $email): ?string
+    {
+        $name = trim((string) $email->recipient->contact->name);
+
+        return $name === '' || str_contains($name, '@') ? null : $name;
     }
 
     /**

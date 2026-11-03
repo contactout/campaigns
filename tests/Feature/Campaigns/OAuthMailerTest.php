@@ -106,9 +106,11 @@ test('outlook campaign mailer creates sends and returns message ids', function (
         'Hello',
         '<p>Hi</p>',
         ['List-Unsubscribe' => '<https://example.com/u>', 'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click'],
+        toName: 'Ada "Lovelace" <CEO>',
     );
 
     Http::assertSent(fn (Request $request) => $request->url() === 'https://graph.microsoft.com/v1.0/me/messages'
+        && $request['toRecipients'] === [['emailAddress' => ['address' => 'recipient@example.com', 'name' => 'Ada "Lovelace" <CEO>']]]
         && $request['internetMessageHeaders'] === [
             ['name' => 'List-Unsubscribe', 'value' => '<https://example.com/u>'],
             ['name' => 'List-Unsubscribe-Post', 'value' => 'List-Unsubscribe=One-Click'],
@@ -156,12 +158,14 @@ test('gmail campaign mailer puts unsubscribe headers in the raw message', functi
             'List-Unsubscribe' => '<https://example.com/u>',
             'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
         ],
+        toName: 'Ada Lovelace',
     );
 
     $mime = (string) base64_decode(strtr($api->raw, '-_', '+/'));
 
     expect($mime)->toContain('List-Unsubscribe: <https://example.com/u>')
-        ->and($mime)->toContain('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+        ->and($mime)->toContain('List-Unsubscribe-Post: List-Unsubscribe=One-Click',
+            'multipart/alternative;', 'Content-Type: text/plain;', 'To: Ada Lovelace <to@example.com>');
 });
 
 test('gmail mailbox reader excludes the connections own sent mail from the poll', function () {
