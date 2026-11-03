@@ -279,10 +279,7 @@ export default function StepForm({
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="grid gap-1.5">
-                                        <FormLabel htmlFor="day">
-                                            Day (from campaign start, or from
-                                            when the recipient joins if later)
-                                        </FormLabel>
+                                        <FormLabel htmlFor="day">Day</FormLabel>
                                         <Input
                                             id="day"
                                             name="day"
@@ -293,8 +290,16 @@ export default function StepForm({
                                             onChange={(event) =>
                                                 setDay(event.target.value)
                                             }
+                                            aria-describedby="day-hint"
                                             required
                                         />
+                                        <p
+                                            id="day-hint"
+                                            className="text-xs text-muted-foreground"
+                                        >
+                                            From campaign start, or from when
+                                            the recipient joins if later.
+                                        </p>
                                         <InputError message={errors.day} />
                                     </div>
 
