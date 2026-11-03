@@ -74,6 +74,13 @@ do not create contact fields. Known fields with no contact value still render as
 Use `{{signature}}` only in the body to insert the sending connection's signature or team default.
 Existing saved content is not rewritten; correct unknown tags when editing it.
 
+## Campaign step order
+
+Arrange steps before starting a campaign. After its first start, dragging steps and the
+**Move up / Move down** actions are disabled, even while the campaign is stopped. This keeps
+queued emails and recipients' sent history in the same sequence so follow-ups are not skipped.
+Stopping a campaign does not unlock its step order.
+
 ## System email & registration
 
 System mail (email verification, password reset, team invitations) needs SMTP `MAIL_*`
