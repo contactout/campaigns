@@ -77,6 +77,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Adding campaign recipients now reports how many unique contacts were skipped and why; the
+  Add recipients dialog shows contact and list selection counts and explains suppression.
 - Template and step saves reject unknown placeholders by name instead of silently saving tags
   that send as blank text. Both editors list the same built-in and team contact fields, including imported ones with spaces such as `Job Title`.
 - Step order is locked after a campaign first starts, including while stopped, so moving a
