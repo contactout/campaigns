@@ -63,6 +63,14 @@ Open `https://YOUR_DOMAIN` and register the first user. The dashboard checklist 
 2. Add contacts
 3. Create a campaign
 
+## Searching your workspace
+
+Campaigns, Contacts, and Templates filter as you type. Campaigns and Contacts wait for a
+300 ms pause before searching the server; press Enter to search immediately. The search
+updates the current URL without adding a history entry, keeps your scroll position and
+selected status or contact list, and returns results from the first page. Clear the search
+box to keep the other filter, or use **Clear filters** in the no-results panel to reset both.
+Templates filter locally by name or subject without a server request.
 ## Finding your way around
 
 App pages share the same sidebar and page header. On mobile, use the bottom tabs or the

@@ -42,6 +42,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Campaigns and Contacts search as you type after a short pause, like Templates, while keeping
+  the selected status or list and scroll position. Enter applies the search immediately.
 - Archiving a campaign now requires confirmation that sending stops and archiving is permanent.
   Archived campaigns keep their recipient history but are read-only: settings, recipients and
   steps cannot be changed from the page or by direct requests. Use Stop for a temporary pause.
