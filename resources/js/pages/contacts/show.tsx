@@ -1,10 +1,10 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import ContactStatusBadge from '@/components/contacts/contact-status-badge';
 import DeleteContactModal from '@/components/contacts/delete-contact-modal';
 import EditContactModal from '@/components/contacts/edit-contact-modal';
-import Heading from '@/components/heading';
+import PageHead from '@/components/page-head';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,35 +46,38 @@ export default function ContactShow({
         <>
             <Head title={contact.name} />
 
-            <h1 className="sr-only">{contact.name}</h1>
-
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Heading variant="small" title={contact.name} />
+            <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-6">
+                <PageHead
+                    title={contact.name}
+                    back={{
+                        href: index.url(currentTeam?.slug ?? ''),
+                        label: 'Back to contacts',
+                    }}
+                    titleAddon={
                         <ContactStatusBadge
                             status={contact.status}
                             label={contact.status_label}
                         />
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            variant="secondary"
-                            onClick={() => setEditOpen(true)}
-                            data-test="contact-edit-button"
-                        >
-                            <Pencil /> Edit
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={() => setDeleteOpen(true)}
-                            data-test="contact-delete-button"
-                        >
-                            <Trash2 /> Delete
-                        </Button>
-                    </div>
-                </div>
+                    }
+                    actions={
+                        <>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setEditOpen(true)}
+                                data-test="contact-edit-button"
+                            >
+                                <Pencil /> Edit
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                onClick={() => setDeleteOpen(true)}
+                                data-test="contact-delete-button"
+                            >
+                                <Trash2 /> Delete
+                            </Button>
+                        </>
+                    }
+                />
 
                 <Card className="shadow-sm">
                     <CardHeader>
@@ -115,7 +118,7 @@ export default function ContactShow({
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-2">
                         {lists.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-body text-muted-foreground">
                                 Not in any list.
                             </p>
                         ) : (
@@ -134,7 +137,7 @@ export default function ContactShow({
                     </CardHeader>
                     <CardContent>
                         {recipients.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-body text-muted-foreground">
                                 This contact is not in any campaign.
                             </p>
                         ) : (
@@ -142,7 +145,7 @@ export default function ContactShow({
                                 {recipients.map((recipient) => (
                                     <li
                                         key={recipient.id}
-                                        className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
+                                        className="flex flex-wrap items-center justify-between gap-2 py-3 text-body"
                                     >
                                         <span>{recipient.campaign}</span>
                                         <span className="text-muted-foreground">
@@ -154,17 +157,6 @@ export default function ContactShow({
                         )}
                     </CardContent>
                 </Card>
-
-                <div>
-                    <Button variant="ghost" asChild>
-                        <Link
-                            href={index(currentTeam?.slug ?? '')}
-                            data-test="contacts-back-link"
-                        >
-                            Back to contacts
-                        </Link>
-                    </Button>
-                </div>
             </div>
 
             <EditContactModal
@@ -187,7 +179,7 @@ export default function ContactShow({
 function Detail({ label, value }: { label: string; value: string | null }) {
     return (
         <div className="grid gap-1">
-            <span className="text-xs tracking-wide text-muted-foreground uppercase">
+            <span className="text-label font-medium text-muted-foreground">
                 {label}
             </span>
             <span>{value ?? '—'}</span>

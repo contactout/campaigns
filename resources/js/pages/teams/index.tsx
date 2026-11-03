@@ -32,8 +32,6 @@ export default function TeamsIndex({ teams }: Props) {
         <>
             <Head title="Teams" />
 
-            <h1 className="sr-only">Teams</h1>
-
             <div className="flex flex-col space-y-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                     <Heading

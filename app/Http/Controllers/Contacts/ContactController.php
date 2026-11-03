@@ -64,6 +64,7 @@ class ContactController extends Controller
             ->when($filters['list'], fn (Builder $query, int $listId) => $query
                 ->whereHas('lists', fn (Builder $query) => $query->whereKey($listId)))
             ->latest()
+            ->latest('id')
             ->paginate(25)
             ->withQueryString()
             ->through(fn (Contact $contact): array => $this->contactSummary($contact));

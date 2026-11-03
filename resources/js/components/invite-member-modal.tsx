@@ -90,7 +90,10 @@ export default function InviteMemberModal({
                                             )
                                         }
                                     >
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger
+                                            id="role"
+                                            className="w-full"
+                                        >
                                             <SelectValue placeholder="Select a role" />
                                         </SelectTrigger>
                                         <SelectContent>

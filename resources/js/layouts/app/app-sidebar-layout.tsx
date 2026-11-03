@@ -8,7 +8,7 @@ import type { AppLayoutProps } from '@/types';
 export default function AppSidebarLayout({
     children,
     breadcrumbs = [],
-    showHeader = true,
+    showHeader = false,
 }: AppLayoutProps) {
     return (
         <AppShell variant="sidebar">
@@ -17,7 +17,7 @@ export default function AppSidebarLayout({
                 variant="sidebar"
                 // The 390 tab bar is fixed to the bottom edge; keep the last row
                 // and any sticky bar clear of it.
-                className="min-w-0 overflow-x-clip pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0"
+                className="min-w-0 overflow-x-clip pb-[calc(3.5rem+env(safe-area-inset-bottom))] text-body lg:pb-0"
             >
                 {showHeader ? (
                     <AppSidebarHeader breadcrumbs={breadcrumbs} />

@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\CampaignStatus;
 use App\Models\Campaign;
 use App\Models\Team;
 use App\Models\User;
@@ -37,7 +38,8 @@ class CampaignPolicy
      */
     public function update(User $user, Campaign $campaign): bool
     {
-        return $user->belongsToTeam($campaign->team);
+        return $campaign->status !== CampaignStatus::Archived
+            && $user->belongsToTeam($campaign->team);
     }
 
     /**

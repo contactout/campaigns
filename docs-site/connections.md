@@ -42,6 +42,12 @@ Each connection can use one of the team's signatures, chosen in the **Signature*
 
 A connection left on **Team default** uses the team's default signature. With no default either, the tag renders empty. Deleting a signature moves the connections using it back to the team default.
 
+Signatures are plain text. Line breaks are preserved, and characters such as `&` and
+`<ada@example.com>` appear literally in the Signatures preview, the step editor's named-signature
+insertion, and sent emails. HTML tags and entities (including those in existing signatures) are
+shown as text, not formatting. Edit older HTML signatures to use text and line breaks instead.
+Content already copied into a saved step is unchanged; remove and reinsert it to update.
+
 The tag is filled only in the email body; in a subject it renders empty.
 
 ## When sending fails
@@ -70,6 +76,12 @@ so replies and bounces to them still match.
 A threaded follow-up sent from the new connection still replies in the same conversation over
 SMTP and Gmail. On Outlook it starts a new conversation, because the new mailbox can't reply to a
 message it never sent.
+
+The campaign edit dialog labels each connection with its verification status. You can still
+save an inactive connection on a running campaign, but the dialog warns that sending will wait
+until it is verified. The campaign page keeps a warning and a link to **Connections** until the
+connection is verified or replaced with a verified one. Saving does not verify the connection
+or change the campaign's Active status.
 
 Clearing a campaign's connection leaves its unsent emails on the connection they already have.
 

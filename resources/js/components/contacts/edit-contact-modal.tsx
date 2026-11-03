@@ -117,7 +117,10 @@ export default function EditContactModal({
                                         name="status"
                                         defaultValue={contact.status}
                                     >
-                                        <SelectTrigger className="w-full">
+                                        <SelectTrigger
+                                            id="status"
+                                            className="w-full"
+                                        >
                                             <SelectValue placeholder="Select a status" />
                                         </SelectTrigger>
                                         <SelectContent>
