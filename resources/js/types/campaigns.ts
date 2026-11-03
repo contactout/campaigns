@@ -57,6 +57,7 @@ export type CampaignStep = {
     time: string | null;
     is_threaded: boolean;
     setting: Record<string, unknown> | null;
+    can_delete: boolean;
     metrics: CampaignStepMetrics;
 };
 

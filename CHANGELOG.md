@@ -79,6 +79,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Deleting a campaign step now asks for confirmation, and steps with email history have a disabled
+  Delete action with an explanation. Deletion errors use the shared error toast, including on mobile.
 - Connections give server hosts more table space instead of long names, and show a Verify
   button on Pending rows and mobile cards so newly saved SMTP connections can be activated.
 - Contacts, campaigns, and campaign recipients now break creation-time ties by newest ID,

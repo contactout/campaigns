@@ -13,6 +13,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Services\Mail\CampaignStepScheduler;
 use Carbon\CarbonImmutable;
+use Inertia\Testing\AssertableInertia as Assert;
 
 /**
  * Create a team with the given user attached as a member.
@@ -219,6 +220,47 @@ test('deleting the last step completes recipients waiting on it', function () {
 
     expect($recipient->refresh()->status)->toBe(RecipientStatus::Completed);
 });
+
+test('step deletion eligibility matches the server guard for every email status', function (EmailStatus $status, bool $canDelete) {
+    [$team, $user] = campaignStepTeamWithMember();
+    $campaign = Campaign::factory()->forTeam($team)->active()->create();
+    $step = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 1]);
+    $empty = CampaignStep::factory()->forCampaign($campaign)->create(['sequence' => 2]);
+
+    campaignStepRecipientWithEmail($campaign, $step, $status);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('steps.0.id', $step->id)
+            ->where('steps.0.can_delete', $canDelete)
+            ->where('steps.1.id', $empty->id)
+            ->where('steps.1.can_delete', true));
+
+    $response = $this->delete(route('campaigns.steps.destroy', [
+        'current_team' => $team->slug,
+        'campaign' => $campaign,
+        'step' => $step,
+    ]))->assertRedirect();
+
+    if ($canDelete) {
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseMissing('campaign_steps', ['id' => $step->id]);
+    } else {
+        $response->assertSessionHasErrors('campaign');
+        $this->assertDatabaseHas('campaign_steps', ['id' => $step->id]);
+    }
+})->with([
+    'pending' => [EmailStatus::Pending, true],
+    'scheduled' => [EmailStatus::Scheduled, true],
+    'sent' => [EmailStatus::Sent, false],
+    'delivered' => [EmailStatus::Delivered, false],
+    'opened' => [EmailStatus::Opened, false],
+    'replied' => [EmailStatus::Replied, false],
+    'bounced' => [EmailStatus::Bounced, false],
+    'failed' => [EmailStatus::Failed, false],
+]);
 
 test('a step whose emails have gone out cannot be deleted', function () {
     [$team, $user] = campaignStepTeamWithMember();

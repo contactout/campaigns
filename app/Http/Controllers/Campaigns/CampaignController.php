@@ -33,6 +33,7 @@ use App\Models\Unsubscribe;
 use App\Services\Mail\MergeFields;
 use App\Services\Mail\SuppressionList;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -116,7 +117,13 @@ class CampaignController extends Controller
 
         Gate::authorize('view', $campaign);
 
-        $campaign->load(['steps', 'mailerConnection']);
+        $campaign->load([
+            'steps' => fn (HasMany $query): HasMany => $query->withExists([
+                'emails as has_email_history' => fn (Builder $emails): Builder => $emails
+                    ->whereNotIn('status', [EmailStatus::Pending, EmailStatus::Scheduled]),
+            ]),
+            'mailerConnection',
+        ]);
 
         $validated = $request->validate([
             'recipients_q' => ['nullable', 'string', 'max:255'],
@@ -253,6 +260,7 @@ class CampaignController extends Controller
                     'time' => $step->time,
                     'is_threaded' => $step->is_threaded,
                     'setting' => $step->setting,
+                    'can_delete' => ! (bool) $step->getAttribute('has_email_history'),
                     'metrics' => $stepMetrics[$step->id] ?? ['sent' => 0, 'opened' => 0, 'replied' => 0, 'opened_rate' => null, 'replied_rate' => null],
                 ])
                 ->values()
