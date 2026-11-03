@@ -79,6 +79,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- The Status select in New contact and Edit contact and the Role select in Invite member now use
+  their visible labels as accessible names for assistive technology.
 - Signatures, contact detail, and Settings now use the same page header, spacing, and body
   typography as the other app pages. Contact detail has its back link in the header; Settings
   keeps its account sub-navigation.
