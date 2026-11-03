@@ -458,7 +458,7 @@ export default function CampaignShow({
                             className="size-4 shrink-0 text-badge-danger-foreground"
                             aria-hidden
                         />
-                        This campaign can&apos;t start until you resolve{' '}
+                        This campaign can&apos;t send until you resolve{' '}
                         {blockingReasonCount === 1
                             ? '1 blocking issue'
                             : `${blockingReasonCount} blocking issues`}

@@ -280,7 +280,8 @@ export default function StepForm({
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="grid gap-1.5">
                                         <FormLabel htmlFor="day">
-                                            Day (after the recipient is added)
+                                            Day (from campaign start, or from
+                                            when the recipient joins if later)
                                         </FormLabel>
                                         <Input
                                             id="day"

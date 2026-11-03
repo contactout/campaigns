@@ -75,8 +75,8 @@ All notable changes to this project are documented here. The format is based on
 
 - Consistent Campaigns branding and one-decimal percentage rates on the dashboard and campaign
   pages. Stopped campaigns now say Resume; start guidance no longer assumes a prior attempt.
-- Step day labels now describe recipient-relative scheduling, and template headers show the
-  template name on both mobile and desktop.
+- Step day labels now say days count from the campaign start, or from when the recipient
+  joins if that is later, and template headers show the template name on both mobile and desktop.
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
 - Every step of a recipient added after the campaign started fired within minutes, because step

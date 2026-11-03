@@ -45,7 +45,7 @@ export default function StartBlockedPanel({
                         id="start-blocked-title"
                         className="text-body leading-5 font-semibold text-badge-danger-foreground"
                     >
-                        Before you can start
+                        Before this campaign can send
                     </h2>
                     <p className="text-body leading-5 text-badge-danger-foreground">
                         Fix these issues:
