@@ -73,6 +73,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- Deleting a campaign step now asks for confirmation, and steps with email history have a disabled
+  Delete action with an explanation. Deletion errors use the shared error toast, including on mobile.
 - Campaign emails could be queued and sent more than once when the queue fell behind; sends are
   now unique per email and re-check that the email is still scheduled and due.
 - Every step of a recipient added after the campaign started fired within minutes, because step
