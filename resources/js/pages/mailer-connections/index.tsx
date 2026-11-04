@@ -15,7 +15,12 @@ import PageHead from '@/components/page-head';
 import CapMeter, { capText } from '@/components/mailer-connections/cap-meter';
 import ConnectionFormModal from '@/components/mailer-connections/connection-form-modal';
 import DeleteConnectionModal from '@/components/mailer-connections/delete-connection-modal';
-import SignatureSelect from '@/components/mailer-connections/signature-select';
+import SignatureSelect, {
+    assignSignature,
+    TEAM_DEFAULT,
+    signatureOptionLabel,
+    signatureValue,
+} from '@/components/mailer-connections/signature-select';
 import MailerConnectionStatusBadge from '@/components/mailer-connections/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,7 +36,6 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { index, verify } from '@/routes/mailer-connections';
-import { update as updateSignature } from '@/routes/mailer-connections/signature';
 import { redirect as oauthRedirect } from '@/routes/mailer-connections/oauth';
 import type {
     MailerConnection,
@@ -177,31 +181,12 @@ function ConnectionMenu({
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <DropdownMenuRadioGroup
-                                value={
-                                    connection.signature_id === null
-                                        ? 'default'
-                                        : String(connection.signature_id)
-                                }
+                                value={signatureValue(connection)}
                                 onValueChange={(next) =>
-                                    router.put(
-                                        updateSignature.url([
-                                            slug,
-                                            connection.id,
-                                        ]),
-                                        {
-                                            signature_id:
-                                                next === 'default'
-                                                    ? null
-                                                    : Number(next),
-                                        },
-                                        {
-                                            preserveScroll: true,
-                                            preserveState: true,
-                                        },
-                                    )
+                                    assignSignature(slug, connection, next)
                                 }
                             >
-                                <DropdownMenuRadioItem value="default">
+                                <DropdownMenuRadioItem value={TEAM_DEFAULT}>
                                     Team default
                                 </DropdownMenuRadioItem>
                                 {signatures.map((signature) => (
@@ -209,10 +194,7 @@ function ConnectionMenu({
                                         key={signature.id}
                                         value={String(signature.id)}
                                     >
-                                        {signature.name}
-                                        {signature.is_default
-                                            ? ' — default'
-                                            : ''}
+                                        {signatureOptionLabel(signature)}
                                     </DropdownMenuRadioItem>
                                 ))}
                             </DropdownMenuRadioGroup>
