@@ -159,204 +159,208 @@ export default function StepForm({
         insertRef.current?.(`{{${name}}}`);
     };
 
+    const render = (errors: Record<string, string>, processing: boolean) => (
+        <>
+            {children({
+                errors,
+                processing,
+                isDirty,
+                fields: (
+                    <div className={fieldsClassName}>
+                        {!readOnly && templates.length > 0 ? (
+                            <div className="grid gap-1.5">
+                                <FormLabel htmlFor="apply-template">
+                                    Apply template
+                                </FormLabel>
+                                <Select
+                                    // Controlled with the reset value: an
+                                    // uncontrolled Select keeps its last pick and
+                                    // cannot re-apply the same template. Radix
+                                    // shows the placeholder for an empty value.
+                                    value={templateId}
+                                    onValueChange={applyTemplate}
+                                >
+                                    <SelectTrigger
+                                        id="apply-template"
+                                        className="w-full"
+                                        aria-label="Apply template"
+                                    >
+                                        <SelectValue placeholder="Choose a template…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {templates.map((template) => (
+                                            <SelectItem
+                                                key={template.id}
+                                                value={String(template.id)}
+                                            >
+                                                {template.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ) : null}
+
+                        <div className="grid gap-1.5">
+                            <FormLabel htmlFor="subject">Subject</FormLabel>
+                            <Input
+                                id="subject"
+                                name="subject"
+                                value={subject}
+                                onChange={(event) =>
+                                    setSubject(event.target.value)
+                                }
+                                placeholder="Quick question"
+                                readOnly={readOnly}
+                                required
+                            />
+                            <InputError message={errors.subject} />
+                        </div>
+
+                        <div className="grid gap-1.5">
+                            <FormLabel id="step-body-label">Body</FormLabel>
+                            <RichTextEditor
+                                name="body"
+                                value={body}
+                                onChange={setBody}
+                                insertRef={insertRef}
+                                onCanonical={(html) => {
+                                    setSavedBody(html);
+                                    setBody(html);
+                                }}
+                                labelledBy="step-body-label"
+                                toolbar="board"
+                                minHeightClass="min-h-[220px]"
+                                readOnly={readOnly}
+                                actions={
+                                    readOnly ? null : (
+                                        <>
+                                            {placeholders.length > 0 ? (
+                                                <PlaceholderMenu
+                                                    placeholders={placeholders}
+                                                    onInsert={insertPlaceholder}
+                                                />
+                                            ) : null}
+                                            <SignatureMenu
+                                                signatures={signatures}
+                                                onInsert={insertSignature}
+                                            />
+                                        </>
+                                    )
+                                }
+                            />
+                            <InputError message={errors.body} />
+                        </div>
+
+                        {!readOnly && placeholders.length > 0 ? (
+                            <div className="grid gap-1.5">
+                                <p className="text-label leading-4 font-medium text-muted-foreground">
+                                    Placeholders
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {placeholders.map((placeholder) => (
+                                        <button
+                                            key={placeholder.name}
+                                            type="button"
+                                            onClick={() =>
+                                                insertPlaceholder(
+                                                    placeholder.name,
+                                                )
+                                            }
+                                            className="inline-flex items-center rounded-md border border-badge-info-border bg-accent px-1.5 py-0.5 font-mono text-label leading-4 text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary-border max-lg:min-h-11"
+                                            aria-label={`Insert ${placeholder.label}`}
+                                        >
+                                            {`{{${placeholder.name}}}`}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-1.5">
+                                <FormLabel htmlFor="day">Day</FormLabel>
+                                <Input
+                                    id="day"
+                                    name="day"
+                                    type="number"
+                                    min={0}
+                                    max={365}
+                                    value={day}
+                                    onChange={(event) =>
+                                        setDay(event.target.value)
+                                    }
+                                    aria-describedby="day-hint"
+                                    readOnly={readOnly}
+                                    required
+                                />
+                                <p
+                                    id="day-hint"
+                                    className="text-xs text-muted-foreground"
+                                >
+                                    From campaign start, or from when the
+                                    recipient joins if later.
+                                </p>
+                                <InputError message={errors.day} />
+                            </div>
+
+                            <div className="grid gap-1.5">
+                                <FormLabel htmlFor="time">
+                                    Time (optional)
+                                </FormLabel>
+                                <Input
+                                    id="time"
+                                    name="time"
+                                    type="time"
+                                    readOnly={readOnly}
+                                    value={time}
+                                    onChange={(event) =>
+                                        setTime(event.target.value)
+                                    }
+                                />
+                                <InputError message={errors.time} />
+                            </div>
+                        </div>
+
+                        {/* Native label activation forwards the click to the
+                                    checkbox, so the label must not toggle it as well. */}
+                        <label className="flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11">
+                            <span className="flex shrink-0 items-center justify-center max-lg:size-11">
+                                <Checkbox
+                                    name="is_threaded"
+                                    value="1"
+                                    checked={isThreaded}
+                                    disabled={readOnly}
+                                    onCheckedChange={(checked) =>
+                                        setIsThreaded(checked === true)
+                                    }
+                                />
+                            </span>
+                            Send as a reply in the same thread
+                        </label>
+                    </div>
+                ),
+            })}
+        </>
+    );
+
+    // A read-only view is not the live PATCH form: it has no action, and a
+    // submit (Enter in a field, or a control added later) is swallowed here
+    // instead of relying on the server 403.
+    if (readOnly) {
+        return (
+            <form
+                className={formClassName}
+                onSubmit={(event) => event.preventDefault()}
+            >
+                {render({}, false)}
+            </form>
+        );
+    }
+
     return (
         <Form {...formProps} className={formClassName} onSuccess={onSuccess}>
-            {({ errors, processing }) => (
-                <>
-                    {children({
-                        errors,
-                        processing,
-                        isDirty,
-                        fields: (
-                            <div className={fieldsClassName}>
-                                {!readOnly && templates.length > 0 ? (
-                                    <div className="grid gap-1.5">
-                                        <FormLabel htmlFor="apply-template">
-                                            Apply template
-                                        </FormLabel>
-                                        <Select
-                                            // Controlled with the reset value: an
-                                            // uncontrolled Select keeps its last pick and
-                                            // cannot re-apply the same template. Radix
-                                            // shows the placeholder for an empty value.
-                                            value={templateId}
-                                            onValueChange={applyTemplate}
-                                        >
-                                            <SelectTrigger
-                                                id="apply-template"
-                                                className="w-full"
-                                                aria-label="Apply template"
-                                            >
-                                                <SelectValue placeholder="Choose a template…" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {templates.map((template) => (
-                                                    <SelectItem
-                                                        key={template.id}
-                                                        value={String(
-                                                            template.id,
-                                                        )}
-                                                    >
-                                                        {template.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                ) : null}
-
-                                <div className="grid gap-1.5">
-                                    <FormLabel htmlFor="subject">
-                                        Subject
-                                    </FormLabel>
-                                    <Input
-                                        id="subject"
-                                        name="subject"
-                                        value={subject}
-                                        onChange={(event) =>
-                                            setSubject(event.target.value)
-                                        }
-                                        placeholder="Quick question"
-                                        readOnly={readOnly}
-                                        required
-                                    />
-                                    <InputError message={errors.subject} />
-                                </div>
-
-                                <div className="grid gap-1.5">
-                                    <FormLabel id="step-body-label">
-                                        Body
-                                    </FormLabel>
-                                    <RichTextEditor
-                                        name="body"
-                                        value={body}
-                                        onChange={setBody}
-                                        insertRef={insertRef}
-                                        onCanonical={(html) => {
-                                            setSavedBody(html);
-                                            setBody(html);
-                                        }}
-                                        labelledBy="step-body-label"
-                                        toolbar="board"
-                                        minHeightClass="min-h-[220px]"
-                                        readOnly={readOnly}
-                                        actions={
-                                            readOnly ? null : (
-                                                <>
-                                                    {placeholders.length > 0 ? (
-                                                        <PlaceholderMenu
-                                                            placeholders={
-                                                                placeholders
-                                                            }
-                                                            onInsert={
-                                                                insertPlaceholder
-                                                            }
-                                                        />
-                                                    ) : null}
-                                                    <SignatureMenu
-                                                        signatures={signatures}
-                                                        onInsert={
-                                                            insertSignature
-                                                        }
-                                                    />
-                                                </>
-                                            )
-                                        }
-                                    />
-                                    <InputError message={errors.body} />
-                                </div>
-
-                                {!readOnly && placeholders.length > 0 ? (
-                                    <div className="grid gap-1.5">
-                                        <p className="text-label leading-4 font-medium text-muted-foreground">
-                                            Placeholders
-                                        </p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {placeholders.map((placeholder) => (
-                                                <button
-                                                    key={placeholder.name}
-                                                    type="button"
-                                                    onClick={() =>
-                                                        insertPlaceholder(
-                                                            placeholder.name,
-                                                        )
-                                                    }
-                                                    className="inline-flex items-center rounded-md border border-badge-info-border bg-accent px-1.5 py-0.5 font-mono text-label leading-4 text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary-border max-lg:min-h-11"
-                                                    aria-label={`Insert ${placeholder.label}`}
-                                                >
-                                                    {`{{${placeholder.name}}}`}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ) : null}
-
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <div className="grid gap-1.5">
-                                        <FormLabel htmlFor="day">Day</FormLabel>
-                                        <Input
-                                            id="day"
-                                            name="day"
-                                            type="number"
-                                            min={0}
-                                            max={365}
-                                            value={day}
-                                            onChange={(event) =>
-                                                setDay(event.target.value)
-                                            }
-                                            aria-describedby="day-hint"
-                                            readOnly={readOnly}
-                                            required
-                                        />
-                                        <p
-                                            id="day-hint"
-                                            className="text-xs text-muted-foreground"
-                                        >
-                                            From campaign start, or from when
-                                            the recipient joins if later.
-                                        </p>
-                                        <InputError message={errors.day} />
-                                    </div>
-
-                                    <div className="grid gap-1.5">
-                                        <FormLabel htmlFor="time">
-                                            Time (optional)
-                                        </FormLabel>
-                                        <Input
-                                            id="time"
-                                            name="time"
-                                            type="time"
-                                            readOnly={readOnly}
-                                            value={time}
-                                            onChange={(event) =>
-                                                setTime(event.target.value)
-                                            }
-                                        />
-                                        <InputError message={errors.time} />
-                                    </div>
-                                </div>
-
-                                {/* Native label activation forwards the click to the
-                                    checkbox, so the label must not toggle it as well. */}
-                                <label className="flex cursor-pointer items-center gap-2 text-body leading-5 max-lg:min-h-11">
-                                    <span className="flex shrink-0 items-center justify-center max-lg:size-11">
-                                        <Checkbox
-                                            name="is_threaded"
-                                            value="1"
-                                            checked={isThreaded}
-                                            disabled={readOnly}
-                                            onCheckedChange={(checked) =>
-                                                setIsThreaded(checked === true)
-                                            }
-                                        />
-                                    </span>
-                                    Send as a reply in the same thread
-                                </label>
-                            </div>
-                        ),
-                    })}
-                </>
-            )}
+            {({ errors, processing }) => render(errors, processing)}
         </Form>
     );
 }
