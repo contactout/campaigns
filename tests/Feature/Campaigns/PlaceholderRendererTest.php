@@ -76,6 +76,13 @@ test('resolves custom fields whose names contain spaces', function () {
 test('resolves a body placeholder whose field name the editor stored HTML-escaped', function () {
     $contact = Contact::factory()->create();
     $field = ContactField::factory()->forTeam($contact->team)->create(['name' => 'R&D']);
+    $price = ContactField::factory()->forTeam($contact->team)->create(['name' => 'Price <USD>']);
+
+    ContactProperty::factory()->create([
+        'contact_id' => $contact->id,
+        'contact_field_id' => $price->id,
+        'value' => '9',
+    ]);
 
     ContactProperty::factory()->create([
         'contact_id' => $contact->id,
@@ -89,7 +96,7 @@ test('resolves a body placeholder whose field name the editor stored HTML-escape
     ]);
     $renderer = app(PlaceholderRenderer::class);
 
-    expect($renderer->render('<p>{{R&amp;D}}</p>', $recipient))->toBe('<p>Lab &lt;1&gt;</p>')
+    expect($renderer->render('<p>{{R&amp;D}} {{Price &lt;USD&gt;}}</p>', $recipient))->toBe('<p>Lab &lt;1&gt; 9</p>')
         ->and($renderer->renderText('{{R&D}}', $recipient))->toBe('Lab <1>');
 });
 
