@@ -37,7 +37,8 @@ type Props = {
     minHeightClass?: string;
     /**
      * Receives a function that inserts text at the cursor, so a page can offer
-     * its own placeholder chips outside the toolbar.
+     * its own placeholder chips outside the toolbar. It inserts at the cursor,
+     * or at the end of the body when the editor was never focused.
      */
     insertRef?: { current: ((text: string) => void) | null };
 };
@@ -105,11 +106,31 @@ export default function RichTextEditor({
             return;
         }
 
+        // An editor the user never focused still holds ProseMirror's default
+        // selection at the start of the document, so a chip would land before
+        // the body. Until the user has placed a cursor, insert at the end; once
+        // they have, the retained selection (even after a blur) is honoured.
+        let touched = editor?.view.hasFocus() ?? false;
+        const markTouched = () => {
+            touched = true;
+        };
+
+        editor?.on('focus', markTouched);
+
         insertRef.current = (text: string) => {
-            editor?.chain().focus().insertContent({ type: 'text', text }).run();
+            const chain = editor?.chain();
+
+            if (!touched) {
+                chain?.focus('end');
+            } else {
+                chain?.focus();
+            }
+
+            chain?.insertContent({ type: 'text', text }).run();
         };
 
         return () => {
+            editor?.off('focus', markTouched);
             insertRef.current = null;
         };
     }, [editor, insertRef]);
