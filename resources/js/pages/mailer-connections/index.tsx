@@ -23,9 +23,15 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { index, verify } from '@/routes/mailer-connections';
+import { update as updateSignature } from '@/routes/mailer-connections/signature';
 import { redirect as oauthRedirect } from '@/routes/mailer-connections/oauth';
 import type {
     MailerConnection,
@@ -103,9 +109,15 @@ function ConnectionMenu({
     canCreate,
     onEdit,
     onDelete,
+    signatures,
 }: {
     connection: MailerConnection;
     canCreate: boolean;
+    /**
+     * Set only by the table: it hides the Signature column below xl, so the
+     * menu carries the signature setting there. The cards have their own select.
+     */
+    signatures?: MailerConnectionSignatureOption[];
     onEdit: (connection: MailerConnection) => void;
     onDelete: (connection: MailerConnection) => void;
 }) {
@@ -154,6 +166,58 @@ function ConnectionMenu({
                     <DropdownMenuItem onSelect={() => onEdit(connection)}>
                         <Pencil /> Edit
                     </DropdownMenuItem>
+                ) : null}
+                {canCreate && signatures ? (
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger
+                            className="xl:hidden"
+                            data-test="connection-menu-signature"
+                        >
+                            Signature
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuRadioGroup
+                                value={
+                                    connection.signature_id === null
+                                        ? 'default'
+                                        : String(connection.signature_id)
+                                }
+                                onValueChange={(next) =>
+                                    router.put(
+                                        updateSignature.url([
+                                            slug,
+                                            connection.id,
+                                        ]),
+                                        {
+                                            signature_id:
+                                                next === 'default'
+                                                    ? null
+                                                    : Number(next),
+                                        },
+                                        {
+                                            preserveScroll: true,
+                                            preserveState: true,
+                                        },
+                                    )
+                                }
+                            >
+                                <DropdownMenuRadioItem value="default">
+                                    Team default
+                                </DropdownMenuRadioItem>
+                                {signatures.map((signature) => (
+                                    <DropdownMenuRadioItem
+                                        key={signature.id}
+                                        value={String(signature.id)}
+                                    >
+                                        {signature.name}
+                                        {signature.is_default
+                                            ? ' — default'
+                                            : ''}
+                                    </DropdownMenuRadioItem>
+                                ))}
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                 ) : null}
                 {canCreate ? (
                     <DropdownMenuItem
@@ -550,6 +614,7 @@ export default function MailerConnectionsIndex({
                                                 <ConnectionMenu
                                                     connection={connection}
                                                     canCreate={can.create}
+                                                    signatures={signatures}
                                                     onEdit={openEdit}
                                                     onDelete={setDeleting}
                                                 />
