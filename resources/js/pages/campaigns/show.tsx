@@ -212,7 +212,7 @@ export default function CampaignShow({
             openerSelector.current =
                 editor.opener === 'add'
                     ? '[data-test="campaign-add-step-button"]'
-                    : `[data-test="campaign-step-row"] button[aria-label="Actions for step ${editor.sequence ?? ''}"]`;
+                    : `[data-test="campaign-step-row"] button[aria-label="Actions for step ${editor.sequence ?? ''}"], [data-test="campaign-step-row"] button[aria-label="View step ${editor.sequence ?? ''}"]`;
         }
 
         setEditor(null);
@@ -524,7 +524,7 @@ export default function CampaignShow({
                         aria-labelledby="campaign-tab-steps"
                         className="flex flex-col gap-4"
                     >
-                        {editor && can.update ? (
+                        {editor && (can.update || editor.stepId !== null) ? (
                             <SequenceEditor
                                 campaignId={campaign.id}
                                 campaignName={campaign.name}

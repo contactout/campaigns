@@ -3,6 +3,7 @@ import {
     GripVertical,
     Mail,
     MoreVertical,
+    Eye,
     Pencil,
     Plus,
     Trash2,
@@ -416,7 +417,19 @@ export default function CampaignStepsTab({
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             ) : (
-                                                <span className="w-7" />
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-7 shrink-0 text-muted-foreground"
+                                                    aria-label={`View step ${step.sequence}`}
+                                                    onClick={() =>
+                                                        onEditStep(step)
+                                                    }
+                                                    data-test="campaign-view-step-button"
+                                                >
+                                                    <Eye className="size-4" />
+                                                </Button>
                                             )}
                                         </div>
                                     );

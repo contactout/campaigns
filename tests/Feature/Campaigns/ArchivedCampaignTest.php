@@ -88,3 +88,27 @@ test('archived campaigns refuse changes to settings recipients and steps', funct
     'remove step',
     'reorder steps',
 ]);
+
+test('archived campaigns still expose each step body day and threading for read only viewing', function () {
+    $user = User::factory()->create();
+    $team = Team::factory()->create();
+    $team->members()->attach($user, ['role' => TeamRole::Member->value]);
+    $campaign = Campaign::factory()->forTeam($team)->create(['status' => CampaignStatus::Archived]);
+    CampaignStep::factory()->forCampaign($campaign)->create([
+        'sequence' => 1,
+        'subject' => 'Sent subject',
+        'body' => '<p>The body that was sent</p>',
+        'day' => 3,
+        'is_threaded' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('campaigns.show', ['current_team' => $team->slug, 'campaign' => $campaign]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('can.update', false)
+            ->where('steps.0.subject', 'Sent subject')
+            ->where('steps.0.body', '<p>The body that was sent</p>')
+            ->where('steps.0.day', 3)
+            ->where('steps.0.is_threaded', true));
+});

@@ -51,6 +51,8 @@ type Props = {
     fieldsClassName?: string;
     /** Reports dirtiness so a caller can confirm before discarding a draft. */
     onDirtyChange?: (isDirty: boolean) => void;
+    /** Shows the step without editing controls, for campaigns that cannot be updated. */
+    readOnly?: boolean;
     children: (state: StepFormState) => ReactNode;
 };
 
@@ -71,6 +73,7 @@ export default function StepForm({
     formClassName,
     fieldsClassName = 'flex flex-col gap-4',
     onDirtyChange,
+    readOnly = false,
     children,
 }: Props) {
     const { currentTeam } = usePage().props;
@@ -166,7 +169,7 @@ export default function StepForm({
                         isDirty,
                         fields: (
                             <div className={fieldsClassName}>
-                                {templates.length > 0 ? (
+                                {!readOnly && templates.length > 0 ? (
                                     <div className="grid gap-1.5">
                                         <FormLabel htmlFor="apply-template">
                                             Apply template
@@ -214,6 +217,7 @@ export default function StepForm({
                                             setSubject(event.target.value)
                                         }
                                         placeholder="Quick question"
+                                        readOnly={readOnly}
                                         required
                                     />
                                     <InputError message={errors.subject} />
@@ -235,29 +239,34 @@ export default function StepForm({
                                         labelledBy="step-body-label"
                                         toolbar="board"
                                         minHeightClass="min-h-[220px]"
+                                        readOnly={readOnly}
                                         actions={
-                                            <>
-                                                {placeholders.length > 0 ? (
-                                                    <PlaceholderMenu
-                                                        placeholders={
-                                                            placeholders
-                                                        }
+                                            readOnly ? null : (
+                                                <>
+                                                    {placeholders.length > 0 ? (
+                                                        <PlaceholderMenu
+                                                            placeholders={
+                                                                placeholders
+                                                            }
+                                                            onInsert={
+                                                                insertPlaceholder
+                                                            }
+                                                        />
+                                                    ) : null}
+                                                    <SignatureMenu
+                                                        signatures={signatures}
                                                         onInsert={
-                                                            insertPlaceholder
+                                                            insertSignature
                                                         }
                                                     />
-                                                ) : null}
-                                                <SignatureMenu
-                                                    signatures={signatures}
-                                                    onInsert={insertSignature}
-                                                />
-                                            </>
+                                                </>
+                                            )
                                         }
                                     />
                                     <InputError message={errors.body} />
                                 </div>
 
-                                {placeholders.length > 0 ? (
+                                {!readOnly && placeholders.length > 0 ? (
                                     <div className="grid gap-1.5">
                                         <p className="text-label leading-4 font-medium text-muted-foreground">
                                             Placeholders
@@ -296,6 +305,7 @@ export default function StepForm({
                                                 setDay(event.target.value)
                                             }
                                             aria-describedby="day-hint"
+                                            readOnly={readOnly}
                                             required
                                         />
                                         <p
@@ -316,6 +326,7 @@ export default function StepForm({
                                             id="time"
                                             name="time"
                                             type="time"
+                                            readOnly={readOnly}
                                             value={time}
                                             onChange={(event) =>
                                                 setTime(event.target.value)
@@ -333,6 +344,7 @@ export default function StepForm({
                                             name="is_threaded"
                                             value="1"
                                             checked={isThreaded}
+                                            disabled={readOnly}
                                             onCheckedChange={(checked) =>
                                                 setIsThreaded(checked === true)
                                             }

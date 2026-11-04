@@ -141,7 +141,7 @@ export default function SequenceEditor({
     };
 
     const editorTitle = activeStep
-        ? `Edit step · Day ${activeStep.day ?? 0}`
+        ? `${canUpdate ? 'Edit' : 'View'} step · Day ${activeStep.day ?? 0}`
         : 'New step';
 
     /**
@@ -172,9 +172,7 @@ export default function SequenceEditor({
                         tabIndex={-1}
                         className="text-h3 leading-6 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary-border"
                     >
-                        {activeStep
-                            ? `Edit step · Day ${activeStep.day ?? 0}`
-                            : 'New step'}
+                        {editorTitle}
                     </h2>
                     <p className="text-body leading-5 text-muted-foreground">
                         {campaignName}
@@ -193,6 +191,7 @@ export default function SequenceEditor({
                 signatures={signatures}
                 placeholders={placeholders}
                 onSuccess={onClose}
+                readOnly={!canUpdate}
                 formClassName="flex min-h-0 flex-1 flex-col"
                 onDirtyChange={(dirty) => {
                     setIsDirty(dirty);
@@ -210,7 +209,7 @@ export default function SequenceEditor({
                                 className="px-2 text-muted-foreground"
                                 onClick={() => requestAction(onClose)}
                             >
-                                Cancel
+                                {canUpdate ? 'Cancel' : 'Close'}
                             </Button>
                             <div className="min-w-0 flex-1 text-center">
                                 <h2
@@ -218,23 +217,25 @@ export default function SequenceEditor({
                                     tabIndex={-1}
                                     className="truncate text-body leading-5 font-semibold outline-none"
                                 >
-                                    {activeStep
-                                        ? `Edit step · Day ${activeStep.day ?? 0}`
-                                        : 'New step'}
+                                    {editorTitle}
                                 </h2>
                                 <p className="truncate text-label leading-4 text-muted-foreground">
                                     {campaignName}
                                 </p>
                             </div>
-                            <Button
-                                type="submit"
-                                variant="ghost"
-                                disabled={processing}
-                                data-test="campaign-save-step-button-mobile"
-                                className="px-2 text-primary"
-                            >
-                                Save
-                            </Button>
+                            {canUpdate ? (
+                                <Button
+                                    type="submit"
+                                    variant="ghost"
+                                    disabled={processing}
+                                    data-test="campaign-save-step-button-mobile"
+                                    className="px-2 text-primary"
+                                >
+                                    Save
+                                </Button>
+                            ) : (
+                                <span className="w-14" />
+                            )}
                         </div>
 
                         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:flex-none lg:overflow-visible lg:border-t">
@@ -321,15 +322,17 @@ export default function SequenceEditor({
                                     variant="outline"
                                     onClick={() => requestAction(onClose)}
                                 >
-                                    Cancel
+                                    {canUpdate ? 'Cancel' : 'Close'}
                                 </Button>
-                                <Button
-                                    type="submit"
-                                    disabled={processing}
-                                    data-test="campaign-save-step-button"
-                                >
-                                    {activeStep ? 'Save step' : 'Add step'}
-                                </Button>
+                                {canUpdate ? (
+                                    <Button
+                                        type="submit"
+                                        disabled={processing}
+                                        data-test="campaign-save-step-button"
+                                    >
+                                        {activeStep ? 'Save step' : 'Add step'}
+                                    </Button>
+                                ) : null}
                             </div>
                         </div>
                     </>
