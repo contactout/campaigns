@@ -26,7 +26,7 @@ class StoreTemplateRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'subject' => ['nullable', 'string', 'max:255', new KnownPlaceholders($fields)],
-            'body' => ['required', 'string', new KnownPlaceholders($fields, allowSignature: true)],
+            'body' => ['required', 'string', new KnownPlaceholders($fields, allowSignature: true, html: true)],
             'folder_id' => [
                 'nullable',
                 'integer',

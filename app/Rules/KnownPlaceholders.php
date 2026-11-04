@@ -10,7 +10,7 @@ class KnownPlaceholders implements ValidationRule
     /**
      * @param  array<int, array{name: string, label: string}>  $fields
      */
-    public function __construct(private array $fields, private bool $allowSignature = false) {}
+    public function __construct(private array $fields, private bool $allowSignature = false, private bool $html = false) {}
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
@@ -28,9 +28,15 @@ class KnownPlaceholders implements ValidationRule
         // cannot match (`{{first name}}`) would otherwise be sent as literal braces.
         preg_match_all('/\{\{\s*(.*?)\s*\}\}/s', $value, $matches);
 
+        // An HTML body stores `{{R&D}}` as `{{R&amp;D}}`, so the name is decoded
+        // before lookup, matching what PlaceholderRenderer does when sending.
+        $decode = fn (string $name): string => $this->html
+            ? html_entity_decode($name, ENT_QUOTES | ENT_HTML5)
+            : $name;
+
         $unknown = array_values(array_unique(array_filter(
             $matches[1],
-            static fn (string $name): bool => ! in_array(strtolower($name), $known, true),
+            fn (string $name): bool => ! in_array(strtolower($decode($name)), $known, true),
         )));
 
         if ($unknown !== []) {

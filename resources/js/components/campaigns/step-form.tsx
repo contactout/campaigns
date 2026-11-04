@@ -1,6 +1,6 @@
 import { Form, usePage } from '@inertiajs/react';
 import { PenLine, Plus } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import FormLabel from '@/components/form-label';
 import InputError from '@/components/input-error';
 import RichTextEditor from '@/components/templates/rich-text-editor';
@@ -78,6 +78,9 @@ export default function StepForm({
 
     const [subject, setSubject] = useState(step?.subject ?? '');
     const [body, setBody] = useState(step?.body ?? '');
+    // Inserts text at the editor's cursor, as a literal text node, so a field
+    // name such as `Price <USD>` is never parsed as HTML.
+    const insertRef = useRef<((text: string) => void) | null>(null);
     // What the editor actually holds for the saved body. TipTap normalises the
     // stored HTML on open (`<br />` -> `<br>`), so comparing against the raw
     // prop would report every freshly opened step as edited and prompt to
@@ -150,7 +153,7 @@ export default function StepForm({
             return;
         }
 
-        setBody((current) => `${current}<p>{{${name}}}</p>`);
+        insertRef.current?.(`{{${name}}}`);
     };
 
     return (
@@ -224,6 +227,7 @@ export default function StepForm({
                                         name="body"
                                         value={body}
                                         onChange={setBody}
+                                        insertRef={insertRef}
                                         onCanonical={(html) => {
                                             setSavedBody(html);
                                             setBody(html);
