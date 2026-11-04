@@ -15,7 +15,12 @@ import PageHead from '@/components/page-head';
 import CapMeter, { capText } from '@/components/mailer-connections/cap-meter';
 import ConnectionFormModal from '@/components/mailer-connections/connection-form-modal';
 import DeleteConnectionModal from '@/components/mailer-connections/delete-connection-modal';
-import SignatureSelect from '@/components/mailer-connections/signature-select';
+import SignatureSelect, {
+    assignSignature,
+    TEAM_DEFAULT,
+    signatureOptionLabel,
+    signatureValue,
+} from '@/components/mailer-connections/signature-select';
 import MailerConnectionStatusBadge from '@/components/mailer-connections/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +28,11 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { index, verify } from '@/routes/mailer-connections';
@@ -103,9 +113,15 @@ function ConnectionMenu({
     canCreate,
     onEdit,
     onDelete,
+    signatures,
 }: {
     connection: MailerConnection;
     canCreate: boolean;
+    /**
+     * Set only by the table: it hides the Signature column below xl, so the
+     * menu carries the signature setting there. The cards have their own select.
+     */
+    signatures?: MailerConnectionSignatureOption[];
     onEdit: (connection: MailerConnection) => void;
     onDelete: (connection: MailerConnection) => void;
 }) {
@@ -154,6 +170,36 @@ function ConnectionMenu({
                     <DropdownMenuItem onSelect={() => onEdit(connection)}>
                         <Pencil /> Edit
                     </DropdownMenuItem>
+                ) : null}
+                {canCreate && signatures ? (
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger
+                            className="xl:hidden"
+                            data-test="connection-menu-signature"
+                        >
+                            Signature
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuRadioGroup
+                                value={signatureValue(connection)}
+                                onValueChange={(next) =>
+                                    assignSignature(slug, connection, next)
+                                }
+                            >
+                                <DropdownMenuRadioItem value={TEAM_DEFAULT}>
+                                    Team default
+                                </DropdownMenuRadioItem>
+                                {signatures.map((signature) => (
+                                    <DropdownMenuRadioItem
+                                        key={signature.id}
+                                        value={String(signature.id)}
+                                    >
+                                        {signatureOptionLabel(signature)}
+                                    </DropdownMenuRadioItem>
+                                ))}
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                 ) : null}
                 {canCreate ? (
                     <DropdownMenuItem
@@ -426,10 +472,10 @@ export default function MailerConnectionsIndex({
                             <table className="w-full table-fixed text-body">
                                 <colgroup>
                                     <col className="w-[140px]" />
-                                    <col className="w-[91px]" />
+                                    <col className="hidden w-[91px] xl:table-column" />
                                     <col />
                                     <col className="w-[150px]" />
-                                    <col className="w-[109px]" />
+                                    <col className="hidden w-[109px] xl:table-column" />
                                     <col className="w-[132px]" />
                                     <col className="w-[120px]" />
                                     <col className="w-[72px]" />
@@ -439,7 +485,7 @@ export default function MailerConnectionsIndex({
                                         <th className="h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground">
                                             Name
                                         </th>
-                                        <th className="h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground">
+                                        <th className="hidden h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground xl:table-cell">
                                             Type
                                         </th>
                                         <th className="h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground">
@@ -448,7 +494,7 @@ export default function MailerConnectionsIndex({
                                         <th className="h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground">
                                             From
                                         </th>
-                                        <th className="h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground">
+                                        <th className="hidden h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground xl:table-cell">
                                             Signature
                                         </th>
                                         <th className="h-[33px] px-4 text-label leading-4 font-medium text-muted-foreground">
@@ -479,7 +525,7 @@ export default function MailerConnectionsIndex({
                                                     {connection.name}
                                                 </span>
                                             </td>
-                                            <td className="px-4">
+                                            <td className="hidden px-4 xl:table-cell">
                                                 <Badge variant="neutral">
                                                     {
                                                         connection.mailer_type_label
@@ -508,7 +554,7 @@ export default function MailerConnectionsIndex({
                                                         '—'}
                                                 </span>
                                             </td>
-                                            <td className="py-0 pr-0 pl-4">
+                                            <td className="hidden py-0 pr-0 pl-4 xl:table-cell">
                                                 <SignatureSelect
                                                     connection={connection}
                                                     signatures={signatures}
@@ -550,6 +596,7 @@ export default function MailerConnectionsIndex({
                                                 <ConnectionMenu
                                                     connection={connection}
                                                     canCreate={can.create}
+                                                    signatures={signatures}
                                                     onEdit={openEdit}
                                                     onDelete={setDeleting}
                                                 />

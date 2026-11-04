@@ -13,7 +13,36 @@ import type {
     MailerConnectionSignatureOption,
 } from '@/types';
 
-const TEAM_DEFAULT = 'default';
+export const TEAM_DEFAULT = 'default';
+
+/** The select/radio value for a connection's signature. */
+export function signatureValue(connection: MailerConnection): string {
+    return connection.signature_id === null
+        ? TEAM_DEFAULT
+        : String(connection.signature_id);
+}
+
+/** An option's name, with the team default marked. */
+export function signatureOptionLabel(
+    signature: MailerConnectionSignatureOption,
+): string {
+    return signature.is_default
+        ? `${signature.name} — default`
+        : signature.name;
+}
+
+/** Assign a signature (or the team default) from a select/radio value. */
+export function assignSignature(
+    slug: string,
+    connection: MailerConnection,
+    next: string,
+): void {
+    router.put(
+        update.url([slug, connection.id]),
+        { signature_id: next === TEAM_DEFAULT ? null : Number(next) },
+        { preserveScroll: true, preserveState: true },
+    );
+}
 
 type Props = {
     connection: MailerConnection;
@@ -40,10 +69,7 @@ export default function SignatureSelect({
     const { currentTeam } = usePage().props;
     const slug = currentTeam?.slug ?? '';
 
-    const value =
-        connection.signature_id === null
-            ? TEAM_DEFAULT
-            : String(connection.signature_id);
+    const value = signatureValue(connection);
 
     const selected = signatures.find(
         (signature) => String(signature.id) === value,
@@ -52,20 +78,14 @@ export default function SignatureSelect({
     const label =
         selected === undefined
             ? 'Team default'
-            : selected.is_default
-              ? `${selected.name} — default`
-              : selected.name;
+            : signatureOptionLabel(selected);
 
     const change = (next: string) => {
         if (next === value) {
             return;
         }
 
-        router.put(
-            update.url([slug, connection.id]),
-            { signature_id: next === TEAM_DEFAULT ? null : Number(next) },
-            { preserveScroll: true, preserveState: true },
-        );
+        assignSignature(slug, connection, next);
     };
 
     return (
@@ -88,8 +108,7 @@ export default function SignatureSelect({
                 <SelectItem value={TEAM_DEFAULT}>Team default</SelectItem>
                 {signatures.map((signature) => (
                     <SelectItem key={signature.id} value={String(signature.id)}>
-                        {signature.name}
-                        {signature.is_default ? ' — default' : ''}
+                        {signatureOptionLabel(signature)}
                     </SelectItem>
                 ))}
             </SelectContent>
