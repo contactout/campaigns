@@ -120,3 +120,28 @@ test('saves reject tags that match no field while accepting names with spaces', 
     $this->get(route('templates.show', ['current_team' => $this->team->slug, 'template' => $this->template]))
         ->assertInertia(fn (Assert $page) => $page->where('availablePlaceholders', fn ($list) => collect($list)->pluck('name')->contains('Job Title')));
 })->with(['create template', 'update template', 'create step', 'update step']);
+
+test('saves accept a body placeholder for a field with special characters stored HTML-escaped', function (string $target) {
+    ContactField::factory()->forTeam($this->team)->create(['name' => 'R&D']);
+    ContactField::factory()->forTeam($this->team)->create(['name' => 'P&L Owner']);
+    [$method, $url] = placeholderSaveTarget($target, $this->team, $this->template, $this->campaign, $this->step);
+
+    $this->{$method}($url, [
+        'name' => 'Intro',
+        'subject' => 'Hi {{R&D}}',
+        'body' => '<p>{{R&amp;D}} {{ p&amp;l owner }}</p>',
+        'day' => 0,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+})->with(['create template', 'update template', 'create step', 'update step']);
+
+test('a body still rejects an escaped name that matches no field', function () {
+    ContactField::factory()->forTeam($this->team)->create(['name' => 'R&D']);
+    [$method, $url] = placeholderSaveTarget('create template', $this->team, $this->template, $this->campaign, $this->step);
+
+    $this->{$method}($url, [
+        'name' => 'Intro',
+        'subject' => 'Hi',
+        'body' => '<p>{{S&amp;D}}</p>',
+        'day' => 0,
+    ])->assertSessionHasErrors('body');
+});

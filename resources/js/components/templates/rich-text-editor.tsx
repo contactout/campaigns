@@ -106,7 +106,7 @@ export default function RichTextEditor({
         }
 
         insertRef.current = (text: string) => {
-            editor?.chain().focus().insertContent(text).run();
+            editor?.chain().focus().insertContent({ type: 'text', text }).run();
         };
 
         return () => {

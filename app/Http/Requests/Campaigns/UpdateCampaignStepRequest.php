@@ -23,7 +23,7 @@ class UpdateCampaignStepRequest extends FormRequest
 
         return [
             'subject' => ['required', 'string', 'max:255', new KnownPlaceholders($fields)],
-            'body' => ['required', 'string', new KnownPlaceholders($fields, allowSignature: true)],
+            'body' => ['required', 'string', new KnownPlaceholders($fields, allowSignature: true, html: true)],
             'day' => ['required', 'integer', 'min:0', 'max:365'],
             'time' => ['nullable', 'date_format:H:i'],
             'is_threaded' => ['sometimes', 'boolean'],

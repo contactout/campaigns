@@ -45,12 +45,12 @@ class PlaceholderRenderer
         $values = array_map(e(...), $this->valuesFor($recipient));
 
         if ($connection === null) {
-            return $this->replace($html, $values);
+            return $this->replace($html, $values, decodeNames: true);
         }
 
         $values['signature'] = nl2br(e((string) $connection->resolveSignature()?->body));
 
-        return $this->replace($html, $values);
+        return $this->replace($html, $values, decodeNames: true);
     }
 
     /**
@@ -64,13 +64,18 @@ class PlaceholderRenderer
     /**
      * Replace every placeholder in the content with its value.
      *
+     * HTML content stores `{{R&D}}` as `{{R&amp;D}}`, so with `$decodeNames`
+     * the captured name is entity-decoded before lookup.
+     *
      * @param  array<string, string>  $values
      */
-    private function replace(string $content, array $values): string
+    private function replace(string $content, array $values, bool $decodeNames = false): string
     {
         return (string) preg_replace_callback(
             '/'.MergeFields::PATTERN.'/',
-            static fn (array $matches): string => $values[strtolower($matches[1])] ?? '',
+            static fn (array $matches): string => $values[strtolower(
+                $decodeNames ? html_entity_decode($matches[1], ENT_QUOTES | ENT_HTML5) : $matches[1],
+            )] ?? '',
             $content,
         );
     }

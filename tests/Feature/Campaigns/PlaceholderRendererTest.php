@@ -73,6 +73,26 @@ test('resolves custom fields whose names contain spaces', function () {
         ->toBe('Role: Engineer / Engineer');
 });
 
+test('resolves a body placeholder whose field name the editor stored HTML-escaped', function () {
+    $contact = Contact::factory()->create();
+    $field = ContactField::factory()->forTeam($contact->team)->create(['name' => 'R&D']);
+
+    ContactProperty::factory()->create([
+        'contact_id' => $contact->id,
+        'contact_field_id' => $field->id,
+        'value' => 'Lab <1>',
+    ]);
+
+    $recipient = Recipient::factory()->create([
+        'campaign_id' => Campaign::factory()->create()->id,
+        'contact_id' => $contact->id,
+    ]);
+    $renderer = app(PlaceholderRenderer::class);
+
+    expect($renderer->render('<p>{{R&amp;D}}</p>', $recipient))->toBe('<p>Lab &lt;1&gt;</p>')
+        ->and($renderer->renderText('{{R&D}}', $recipient))->toBe('Lab <1>');
+});
+
 test('resolves unknown placeholders to an empty string', function () {
     $contact = Contact::factory()->create();
     $recipient = Recipient::factory()->create([
